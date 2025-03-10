@@ -1,1 +1,1 @@
-# This only exists to make this folder a package
+# This only exists to make this a package
