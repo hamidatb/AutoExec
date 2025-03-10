@@ -29,7 +29,6 @@ def get_file() -> str:
     creds = get_credentials()
     service = get_drive_service(creds)
 
-    print("Searching for the most recent file matching filter...")
 
     files = get_latest_matching_file(service, FOLDER_ID, FILE_NAME_FILTER)
     file = files[0]
@@ -38,7 +37,6 @@ def get_file() -> str:
         print("No matching files found.")
         return
 
-    print(f"\nFound latest file: {file['name']} ({file['id']})")
     file_content = download_file(service, file)
 
     # return the string of the file content here
