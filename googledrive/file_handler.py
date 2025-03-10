@@ -1,7 +1,17 @@
 import io
 from googleapiclient.http import MediaIoBaseDownload
 
-def download_file(service, file):
+def download_file(service, file) -> str:
+    """
+    Downloads the file that was found.
+    Handles either google sheets or Google docs files.
+
+    Args:   
+        service: The Google drive instance
+        file: The file that matched a query, that we want to download
+    Returns:
+        file_content: A string of the text content of the aformentioned file
+    """
    # Process the latest file
     file_id = file["id"]
     file_name = file["name"]
@@ -11,8 +21,11 @@ def download_file(service, file):
     if mime_type == "application/vnd.google-apps.document":
         print("Google Docs file detected. Exporting as plain text...")
         request_media = service.files().export_media(fileId=file_id, mimeType="text/plain")
+    elif mime_type == "application/vnd.google-apps.spreadsheet":
+        print("Google Sheets file detected")
+        request_media = service.files().export_media(fileId=file_id, mimeType="text/csv")
     else:
-        print("AutoExec is intented to work with Google Docs specifically.")
+        print("AutoExec is intended to work with Google Sheets and Google Docs.\nPlease try again with the appropriate file format.")
         return -1
 
     # Read the file content
