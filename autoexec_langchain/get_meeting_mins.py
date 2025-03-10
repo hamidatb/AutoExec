@@ -45,27 +45,37 @@ def create_langchain_prompt() -> ChatPromptTemplate:
     """
     # TODO figure out the prompt refinement needed here 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a chatbot who is resposible for summarizing the meeting minutes content, and writing the summary of action tasks in a friendly way"),
+        ("system", "You are a chatbot who is resposible for summarizing the meeting minutes content, and writing the summary of action tasks in a friendly way, add emojiis to your response. Make it discord @everyone style"),
         ("user", "{input}")
     ])
     return prompt
 
-def init_langchain_model() -> tuple :
-    """"""
+
+def get_model_response(meetingMinStr:str) -> str :
+    """
+    Get a response on a string from the model that's been initialized
+
+    Args:
+        meetingMinStr (string): The string representation of the meeting minutes document to be summarized.
+    Returns:
+        modelResponseStr (string): The models summary response
+    """
     # TODO figure out the prompt refinement needed here 
     prompt = create_langchain_prompt()
     llm = create_langchain_llm()
-
+    outputParser = StrOutputParser() # for making the output an easy to work with string
+    
     # omg lets make the langchain itself!
-    chain = prompt | llm
+    chain = prompt | llm | outputParser
 
-    chain.invoke({"input": "explain Hamidat Bello to me"})
-    response = llm.invoke("Explain Hamidat Bello to me")
-    print(response)  # Ensure the output is printed
-
-    return (prompt, llm)
+    modelResponse = chain.invoke({"input": f"{meetingMinStr}"})
+    return modelResponse
 
 
+def main():
+    file_content = get_file()
+    modelResponse = get_model_response(file_content)
+    print(modelResponse)
 
-file_content = get_file()
-print(file_content)
+if __name__ == "__main__":
+    main()

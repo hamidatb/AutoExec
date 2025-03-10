@@ -1,7 +1,7 @@
 import getpass
 import os
 import time
-import langchain
+import autoexec_langchain
 
 from dotenv import load_dotenv
 
