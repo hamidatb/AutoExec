@@ -89,11 +89,13 @@ def get_model_response(meetingMinStr:str) -> str :
 
 
 def main():
-    #file_content = get_file()
-    #modelResponse = get_model_response(file_content)
-    modelResponse = get_model_response("Intro to UAIS meeting")
+    file_content = get_file()
+    modelResponse = get_model_response(file_content)
 
-    print(modelResponse)
+    # for testing when I don't want to retrieve an actual file
+    #modelResponse = get_model_response("Intro to UAIS meeting")
+
+    # the model response is a Json string to be parsed later by the discord bot of the autoExec agent 
     print_json(data=modelResponse)
 
 
