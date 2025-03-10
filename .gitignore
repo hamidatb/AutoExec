@@ -12,3 +12,6 @@ credentials.json
 
 # the google drive authentification information that gets stored on the computer
 token.json
+
+# my personal notes
+quickstart.txt
