@@ -6,12 +6,16 @@ import langchain
 from dotenv import load_dotenv
 
 from pinecone import Pinecone, ServerlessSpec
-from langchain_openai import ChatOpenAI # type: ignore
+from langchain_openai import ChatOpenAI 
 
-# get the Pinecone and openAI api kets
-if not load_dotenv():
-    raise EnvironmentError("Failed to load .env file")
-    
+# get the Pinecone and openAI api keys
+load_dotenv()
+
+# if the api key is outdated, run unset OPENAI_API_KEY in terminal
+if not os.getenv("OPENAI_API_KEY"):
+    raise EnvironmentError("API Key not found. Check your .env file!")
+
+
 llm = ChatOpenAI(
     model="gpt-3.5-turbo",
     temperature=0,
@@ -20,4 +24,5 @@ llm = ChatOpenAI(
     max_retries=2,
 )
 
-llm("Explain Hamidat Bello to me")
+response = llm.invoke("Explain Hamidat Bello to me")
+print(response)  # Ensure the output is printed

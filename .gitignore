@@ -5,3 +5,9 @@ venv/
 __pycache__/
 logs/
 .envrc
+
+# google cloud credentials
+credentials.json
+
+# the google drive authentification information that gets stored on the computer
+token.json
