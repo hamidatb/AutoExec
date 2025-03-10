@@ -5,6 +5,9 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 # if modyfying these scopes, delete the old token.json
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+# these are in my .env 
+# these must be recreated if someone wants to run this project on their own environment
 TOKEN_PATH = "token.json"
 CREDENTIALS_PATH = "credentials.json"
 
