@@ -1,3 +1,5 @@
+# this file is from the Google Dev API documentation to just help me get started
+
 import os.path
 
 from google.auth.transport.requests import Request
