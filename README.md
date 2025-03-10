@@ -1,2 +1,2 @@
 # AutoExec
-I've decided to automate my responsibilities :)
+automating myself :)
