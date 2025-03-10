@@ -2,12 +2,6 @@ import os
 import time
 import io
 from dotenv import load_dotenv
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaIoBaseDownload
 from auth import get_credentials
 from drive_service import get_drive_service, get_latest_matching_file
 from file_handler import download_file
