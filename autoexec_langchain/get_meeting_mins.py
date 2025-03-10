@@ -1,10 +1,12 @@
 import os
 
 from dotenv import load_dotenv
+from rich import print_json
+import json
 
 from langchain_openai import ChatOpenAI 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser # to work with strings from a chat model output
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser # to work with strings from a chat model output
 from googledrive.main import get_file
 
 # get all of my API keys as needed
@@ -45,7 +47,21 @@ def create_langchain_prompt() -> ChatPromptTemplate:
     """
     # TODO figure out the prompt refinement needed here 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a chatbot who is resposible for summarizing the meeting minutes content, and writing the summary of action tasks in a friendly way, add emojiis to your response. Make it discord @everyone style"),
+        ("system", "You are a chatbot responsible for summarizing meeting minutes. Your responses must be structured in JSON."),
+        ("system", """FORMAT: 
+        Respond ONLY in the following JSON format:
+        {{
+            "header": "🚀 Meeting Recap!",
+            "meeting_link": "URL to full minutes",
+            "key_updates": [
+                "✅ Key Update 1",
+                "✅ Key Update 2"
+            ],
+            "action_items": {{
+                "Person A": ["Task 1", "Task 2"],
+                "Person B": ["Task 1"]
+            }}
+        }}"""),
         ("user", "{input}")
     ])
     return prompt
@@ -63,7 +79,7 @@ def get_model_response(meetingMinStr:str) -> str :
     # TODO figure out the prompt refinement needed here 
     prompt = create_langchain_prompt()
     llm = create_langchain_llm()
-    outputParser = StrOutputParser() # for making the output an easy to work with string
+    outputParser = JsonOutputParser() # for making the output an easy to work with string
     
     # omg lets make the langchain itself!
     chain = prompt | llm | outputParser
@@ -73,9 +89,13 @@ def get_model_response(meetingMinStr:str) -> str :
 
 
 def main():
-    file_content = get_file()
-    modelResponse = get_model_response(file_content)
+    #file_content = get_file()
+    #modelResponse = get_model_response(file_content)
+    modelResponse = get_model_response("Intro to UAIS meeting")
+
     print(modelResponse)
+    print_json(data=modelResponse)
+
 
 if __name__ == "__main__":
     main()
