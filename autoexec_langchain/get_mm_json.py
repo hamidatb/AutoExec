@@ -59,7 +59,7 @@ def create_langchain_prompt() -> ChatPromptTemplate:
         ("system", """FORMAT: 
         Respond ONLY in the following JSON format:
         {{
-            "header": "🚀 Meeting Recap!",
+            "header": "🚀 Hi @everyone. Meeting Recap!",
             "meeting_link": "URL to full minutes",
             "key_updates": [
                 "✅ Key Update 1",
@@ -97,7 +97,7 @@ def get_model_response(meetingMinStr:str) -> str :
 
 
 def main():
-    file_content = get_file()
+    file_content = get_file(1)
     modelResponse = get_model_response(file_content)
 
     # for testing when I don't want to retrieve an actual file

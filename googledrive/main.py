@@ -15,32 +15,37 @@ SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 load_dotenv()
 
 FOLDER_ID = os.getenv("DRIVE_FOLDER_ID") # the folder the meeting mins are stored in
-FILE_NAME_FILTER = os.getenv("DRIVE_FILE_NAME_FILTER") # the name format to look for 
+EVENTS_SHEET_FILENAME = os.getenv("EVENTS_SHEET_FILENAME")
+MEETING_MINS_FILENMAME = os.getenv("MEETING_MINS_FILENMAME") # the name format to look for 
 
-def get_file() -> str:
+def get_file(filetype:int) -> str:
     """
     Function to get the file content from the meeting minutes
     
     Args:
-        None
+        Filetype flag to know what type of file to find.
+        0 -> Looking for a google sheets file
+        1 -> Looking got a meeting minutes file
     Returns:
         A string of the file content
     """
     creds = get_credentials()
     service = get_drive_service(creds)
 
-
-    files = get_latest_matching_file(service, FOLDER_ID, FILE_NAME_FILTER)
-    file = files[0]
+    if filetype == 1:
+        files = get_latest_matching_file(service, FOLDER_ID, MEETING_MINS_FILENMAME)
+        file = files[0]
     
-    if not file:
-        print("No matching files found.")
-        return
+        if not file:
+            print("No matching files found.")
+            return
 
-    file_content = download_file(service, file)
+        file_content = download_file(service, file)
 
-    # return the string of the file content here
-    return file_content
+        # return the string of the file content here
+        return file_content
+    else:
+        return None
 
 def main():
     """
@@ -51,7 +56,7 @@ def main():
 
     print("Searching for the most recent file matching filter...")
 
-    files = get_latest_matching_file(service, FOLDER_ID, FILE_NAME_FILTER)
+    files = get_latest_matching_file(service, FOLDER_ID, MEETING_MINS_FILENMAME)
     file = files[0]
     
     if not file:
