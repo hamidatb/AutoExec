@@ -5,7 +5,47 @@ import json
 from dotenv import load_dotenv
 from autoexec_langchain.get_mm_json import get_meeting_mins_json
 
+def get_meeting_min_reponse() -> str:
+    """ 
+    Gets the formatted string response when a user asks for the meeting minutes.
+
+    Args:
+        None
+    Returns:
+        response_str (str): The meeting minute response
+    """
+    meeting_mins_dict = get_meeting_mins_json()
+
+    # format all of the key updates
+    formatted_key_updates = ""
+    for update in meeting_mins_dict["key_updates"]:
+        formatted_key_updates += f"\n - {update}"
+
+    # format each persons action items
+    formatted_action_items = "\n"
+    for person, tasks in meeting_mins_dict["action_items"].items():
+        formatted_action_items += f"**{person}**\n"  # Add person's name in bold
+        for task in tasks:
+            formatted_action_items += f"- {task}\n"  # Append each task with a bullet point
+        formatted_action_items += "\n"  # Add a blank line between different people
+
+    message_to_send =    f"""
+    \nHeader: {meeting_mins_dict["header"]}
+    \nMeeting Link: {meeting_mins_dict["meeting_link"]}
+    \nKey Updates:
+        {formatted_key_updates}
+    \nAction Items:
+        {formatted_action_items}
+    """
+
+    return message_to_send
+
+
 def get_autoexec_client() -> discord.Client:
+    """
+    Creates the AutoExec client returns it.
+    Does not run the client, rather sets up its parameters.
+    """
     # Get the environment variables
     load_dotenv()
 
@@ -32,32 +72,13 @@ def get_autoexec_client() -> discord.Client:
         # Avoiding listening to messages from ourself
         if message.author == client.user:
             return
-
+        
+        # handle the user asking for the most recent meeting minutes
         if message.content.startswith('$AEmm'):
-            meeting_mins_dict = get_meeting_mins_json()
-
-            # format all of the key updates
-            formatted_key_updates = ""
-            for update in meeting_mins_dict["key_updates"]:
-                formatted_key_updates += f"\n - {update}"
-
-            # format each persons action items
-            formatted_action_items = "\n"
-            for person, tasks in meeting_mins_dict["action_items"].items():
-                formatted_action_items += f"**{person}**\n"  # Add person's name in bold
-                for task in tasks:
-                    formatted_action_items += f"- {task}\n"  # Append each task with a bullet point
-                formatted_action_items += "\n"  # Add a blank line between different people
-
-            message_to_send =    f"""
-            \nHeader: {meeting_mins_dict["header"]}
-            \nMeeting Link: {meeting_mins_dict["meeting_link"]}
-            \nKey Updates:
-                {formatted_key_updates}
-            \nAction Items:
-                {formatted_action_items}
-            """
-            await message.channel.send(f'{message_to_send}')
-
+            formatted_response = get_meeting_min_reponse()
+            await message.channel.send(f'{formatted_response}')
+        
+        # TODO: Handle asking for the action item status of everyone and saying what still has to be completed
+                
 
     return client
