@@ -59,8 +59,8 @@ def create_langchain_prompt() -> ChatPromptTemplate:
         ("system", """FORMAT: 
         Respond ONLY in the following JSON format:
         {{
-            "header": "🚀 Hi @everyone. Meeting Recap!",
-            "meeting_link": "URL to full minutes",
+            "header": "🚀 Hi @everyone. Here's our meeting recap!",
+            "meeting_link": "URL to full minutes: _url_here_",
             "key_updates": [
                 "✅ Key Update 1",
                 "✅ Key Update 2"
@@ -89,28 +89,21 @@ def get_model_response(meetingMinStr:str) -> str :
     llm = create_langchain_llm()
     outputParser = JsonOutputParser() # for making the output an easy to work with string
     
-    # omg lets make the langchain itself!
+    # omg lets make the langchain itself! Lol this is chain being used inside of a chain. May refactor this eventually
     chain = prompt | llm | outputParser
 
     modelResponse = chain.invoke({"input": f"{meetingMinStr}"})
     return modelResponse
 
-
-
-def get_meeting_mins_json() -> json:
+def get_meeting_mins_json():
+    """
+    This gets the json representation of the meeting minutes that were just parsed
+    """
     file_content = get_file(1)
     modelResponse = get_model_response(file_content)
 
-    # for testing when I don't want to retrieve an actual file
-    #modelResponse = get_model_response("Intro to UAIS meeting")
-
     # the model response is a Json string to be parsed later by the discord bot of the autoExec agent 
-    print_json(data=modelResponse)
-    print(type(modelResponse))
-    print(modelResponse)
-
     return modelResponse
-
 
 if __name__ == "__main__":
     get_meeting_mins_json()

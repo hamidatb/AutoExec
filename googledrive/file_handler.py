@@ -19,10 +19,10 @@ def download_file(service, file) -> str:
     
     # If the file is a Google Docs file, export it
     if mime_type == "application/vnd.google-apps.document":
-        print("Google Docs file detected. Exporting as plain text...")
+        #print("Google Docs file detected. Exporting as plain text...")
         request_media = service.files().export_media(fileId=file_id, mimeType="text/plain")
     elif mime_type == "application/vnd.google-apps.spreadsheet":
-        print("Google Sheets file detected")
+        #print("Google Sheets file detected")
         request_media = service.files().export_media(fileId=file_id, mimeType="text/csv")
     else:
         print("AutoExec is intended to work with Google Sheets and Google Docs.\nPlease try again with the appropriate file format.")
@@ -34,8 +34,8 @@ def download_file(service, file) -> str:
     done = False
     while not done:
         status, done = downloader.next_chunk()
-        if status:
-            print(f"Download {int(status.progress() * 100)}% complete.")
+        # if status:
+            # print(f"Download {int(status.progress() * 100)}% complete.")
 
     # Decode file content as UTF-8
     file_content = fh.getvalue().decode("utf-8")

@@ -21,32 +21,9 @@ load_dotenv()
 if not os.getenv("OPENAI_API_KEY"):
     raise EnvironmentError("API Key not found. Check your .env file!")
 
-
-
+# The tools that the agent has access to are all here
 @tool
-def add(a: int, b:int) -> int:
-    """
-    Adds a and b
-
-    Args:
-        a: int a
-        b: int b
-    """
-    return a + b
-
-@tool 
-def magic_function(a: int, b:int) -> int:
-    """
-    Multiplies a and b
-
-    Args:
-        a: int a
-        b: int b
-    """
-    return a * b
-
-@tool
-def send_discord_meeting_mins():
+def start_discord_bot():
     """
     Starts the Discord bot, which is then live to handle questions.
 
@@ -57,17 +34,18 @@ def send_discord_meeting_mins():
     """
     run_bot()
 
+
+# These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
     """
-    Creates the base llm for the chatting
+    Creates the base agentic AI model
 
     Args:
         None
     Returns:
         The langchain ChatOpenAI model
     """
-    
-    # init a basic langchain OpenAi model 
+    # I dont wanna use an expensive model, use the cheapest gpt LOL
     llm = ChatOpenAI(
         model="gpt-3.5-turbo",
         temperature=0,
@@ -76,12 +54,10 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [add, magic_function, send_discord_meeting_mins]
-    
+    tools = [start_discord_bot]
+    prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
-    prompt = create_langchain_prompt()
-    #llm_with_tools = llm.bind_tools(tools)
     agent = create_tool_calling_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
@@ -108,15 +84,15 @@ def create_langchain_prompt() -> ChatPromptTemplate:
 
 
 def run_agent(query: str):
+    """
+    This takes in a query and then runs the AutoExec agent on top of that query
+    """
     agent_executor = create_llm_with_tools()
     modelResponse = agent_executor.invoke({"input": f"{query}"})
     return modelResponse
 
 
-# make a basic query
-#query = "Whats 8*2 and the output 113 of 4 if I used a magic function?"
 query = "Can you start the discord bot?"
 result = run_agent(query)
 
-print("\n\n\n\n")  # Ensure the output is printed
 print(result["output"])  # Ensure the output is printed
