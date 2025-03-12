@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 from langchain_openai import ChatOpenAI 
 
+from discordbot.main_bot import run_bot
+
 # Load environment variables
 load_dotenv()
 
@@ -43,6 +45,17 @@ def magic_function(a: int, b:int) -> int:
     """
     return a * b
 
+@tool
+def send_discord_meeting_mins():
+    """
+    Starts the Discord bot, which is then live to handle questions.
+
+    Args:
+        None
+    Returns:
+        None
+    """
+    run_bot()
 
 def create_llm_with_tools() -> ChatOpenAI:
     """
@@ -63,7 +76,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [add, magic_function]
+    tools = [add, magic_function, send_discord_meeting_mins]
     
 
     # give the llm access to the tool functions 
@@ -101,7 +114,8 @@ def run_agent(query: str):
 
 
 # make a basic query
-query = "Whats 8*2 and the output 113 of 4 if I used a magic function?"
+#query = "Whats 8*2 and the output 113 of 4 if I used a magic function?"
+query = "Can you start the discord bot?"
 result = run_agent(query)
 
 print("\n\n\n\n")  # Ensure the output is printed
