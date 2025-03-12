@@ -17,25 +17,23 @@ def get_meeting_min_reponse() -> str:
     meeting_mins_dict = get_meeting_mins_json()
 
     # format all of the key updates
-    formatted_key_updates = ""
+    formatted_key_updates = "**Key Updates**:\n"
     for update in meeting_mins_dict["key_updates"]:
-        formatted_key_updates += f"\n - {update}"
+        formatted_key_updates += f"- {update}\n"
 
     # format each persons action items
-    formatted_action_items = "\n"
+    formatted_action_items = "**Action Items**:\n"
     for person, tasks in meeting_mins_dict["action_items"].items():
         formatted_action_items += f"**{person}**\n"  # Add person's name in bold
         for task in tasks:
             formatted_action_items += f"- {task}\n"  # Append each task with a bullet point
-        formatted_action_items += "\n"  # Add a blank line between different people
+        #formatted_action_items += "\n"  # Add a blank line between different people
 
     message_to_send =    f"""
-    \nHeader: {meeting_mins_dict["header"]}
-    \nMeeting Link: {meeting_mins_dict["meeting_link"]}
-    \nKey Updates:
-        {formatted_key_updates}
-    \nAction Items:
-        {formatted_action_items}
+    \n{meeting_mins_dict["header"]}
+    \n{meeting_mins_dict["meeting_link"]}
+    \n{formatted_key_updates.rstrip()}
+    \n\n{formatted_action_items}
     """
 
     return message_to_send
