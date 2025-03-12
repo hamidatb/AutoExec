@@ -109,24 +109,6 @@ def get_meeting_mins_json() -> json:
     print(type(modelResponse))
     print(modelResponse)
 
-    """
-        header = modelResponse["header"]
-        meeting_link = modelResponse["meeting_link"]
-        key_updates = modelResponse["key_updates"]
-        action_items = modelResponse["action_items"]
-
-        print(f"Header: {header}")
-        print(f"Meeting Link: {meeting_link}")
-        print("Key Updates:")
-        for update in key_updates:
-            print(f"- {update}")
-
-        print("\nAction Items:")
-        for person, tasks in action_items.items():
-            print(f"{person}:")
-            for task in tasks:
-                print(f"  - {task}")"""
-
     return modelResponse
 
 
