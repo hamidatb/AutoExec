@@ -39,28 +39,25 @@ def get_autoexec_client() -> discord.Client:
             # format all of the key updates
             formatted_key_updates = ""
             for update in meeting_mins_dict["key_updates"]:
-                formatted_key_updates.join(f" - {update}")
+                formatted_key_updates += f"\n - {update}"
 
             # format each persons action items
-            formatted_action_items = ""
-            for person in meeting_mins_dict["action_items"].keys():
-                person_tasks = ""
-                for task in person:
-                    person_tasks.join(f" - {task}\n")
-                formatted_action_items.join(person_tasks)
+            formatted_action_items = "\n"
+            for person, tasks in meeting_mins_dict["action_items"].items():
+                formatted_action_items += f"**{person}**\n"  # Add person's name in bold
+                for task in tasks:
+                    formatted_action_items += f"- {task}\n"  # Append each task with a bullet point
+                formatted_action_items += "\n"  # Add a blank line between different people
 
             message_to_send =    f"""
-                Header: {meeting_mins_dict["header"]}
-                Meeting Link: {meeting_mins_dict["meeting_link"]}
-
-                Key Updates:
+            \nHeader: {meeting_mins_dict["header"]}
+            \nMeeting Link: {meeting_mins_dict["meeting_link"]}
+            \nKey Updates:
                 {formatted_key_updates}
-
-                Action Items:
+            \nAction Items:
                 {formatted_action_items}
             """
-
-            await message.channel.send(f'Hello Im listening!\n{message_to_send}\n')
+            await message.channel.send(f'{message_to_send}')
 
 
     return client
