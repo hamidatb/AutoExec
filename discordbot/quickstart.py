@@ -34,7 +34,6 @@ async def on_message(message):
     if message.content.startswith('$hello'):
         await message.channel.send('Hello Im listening!')
 
-# get the auth token to run the client
 botToken = os.getenv("DISCORD_BOT_TOKEN")
 if botToken is None:
     raise ValueError("DISCORD_BOT_TOKEN not found! Make sure .env is set up correctly.")

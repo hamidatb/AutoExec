@@ -96,7 +96,8 @@ def get_model_response(meetingMinStr:str) -> str :
     return modelResponse
 
 
-def main():
+
+def get_meeting_mins_json() -> json:
     file_content = get_file(1)
     modelResponse = get_model_response(file_content)
 
@@ -105,7 +106,29 @@ def main():
 
     # the model response is a Json string to be parsed later by the discord bot of the autoExec agent 
     print_json(data=modelResponse)
+    print(type(modelResponse))
+    print(modelResponse)
+
+    """
+        header = modelResponse["header"]
+        meeting_link = modelResponse["meeting_link"]
+        key_updates = modelResponse["key_updates"]
+        action_items = modelResponse["action_items"]
+
+        print(f"Header: {header}")
+        print(f"Meeting Link: {meeting_link}")
+        print("Key Updates:")
+        for update in key_updates:
+            print(f"- {update}")
+
+        print("\nAction Items:")
+        for person, tasks in action_items.items():
+            print(f"{person}:")
+            for task in tasks:
+                print(f"  - {task}")"""
+
+    return modelResponse
 
 
 if __name__ == "__main__":
-    main()
+    get_meeting_mins_json()
