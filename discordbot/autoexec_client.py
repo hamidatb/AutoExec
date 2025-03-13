@@ -46,6 +46,8 @@ def get_autoexec_client() -> discord.Client:
     """
     # Get the environment variables
     load_dotenv()
+    CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
+
 
     # intents are 
     intents = discord.Intents.default()
@@ -61,6 +63,10 @@ def get_autoexec_client() -> discord.Client:
         on_ready() is called when the bot finished logging in and setting things up.
         """
         print(f'We have logged in as {client.user}')
+        # Fetch the channel and send a message
+        channel = client.get_channel(CHANNEL_ID)
+        if channel:
+            await channel.send("✅ AutoExec Bot is now online and connected!")
 
     @client.event
     async def on_message(message):
@@ -74,6 +80,9 @@ def get_autoexec_client() -> discord.Client:
         # handle the user asking for the most recent meeting minutes
         if message.content.startswith('$AEmm'):
             formatted_response = get_meeting_min_reponse()
+            await message.channel.send(f'{formatted_response}')
+        elif message.content.startswith('$AEExplain'):
+            formatted_response = "Hi"
             await message.channel.send(f'{formatted_response}')
         
         # TODO: Handle asking for the action item status of everyone and saying what still has to be completed
