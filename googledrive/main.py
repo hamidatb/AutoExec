@@ -15,6 +15,11 @@ SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 load_dotenv()
 
 FOLDER_ID = os.getenv("DRIVE_FOLDER_ID") # the folder the meeting mins are stored in
+print(f"📂 Checking Environment Variable: DRIVE_FOLDER_ID = {FOLDER_ID}")
+if FOLDER_ID is None:
+    print("❌ ERROR: DRIVE_FOLDER_ID is missing in the environment!")
+    exit(1)
+
 EVENTS_SHEET_FILENAME = os.getenv("EVENTS_SHEET_FILENAME")
 MEETING_MINS_FILENMAME = os.getenv("MEETING_MINS_FILENMAME") # the name format to look for 
 

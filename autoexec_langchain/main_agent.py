@@ -1,6 +1,7 @@
 import discord
 import os
 import asyncio
+import threading
 from dotenv import load_dotenv
 from autoexec_langchain.get_mm_json import get_meeting_mins_json
 
@@ -21,18 +22,30 @@ load_dotenv()
 if not os.getenv("OPENAI_API_KEY"):
     raise EnvironmentError("API Key not found. Check your .env file!")
 
-# The tools that the agent has access to are all here
+# needs a seperate thread so the agent can continute listening to other things too
+def start_discord_bot_thread():
+    """
+    Runs the Discord bot in a separate thread so that it does not block the main LangChain agent.
+    """
+    thread = threading.Thread(target=run_bot, daemon=True)
+    thread.start()
+    
+
+    # while True: print("bot alive")
+    return "Discord bot started!"
+
 @tool
 def start_discord_bot():
     """
-    Starts the Discord bot, which is then live to handle questions.
+    Starts the Discord bot asynchronously, allowing the LangChain agent to remain active.
 
     Args:
         None
     Returns:
-        None
+        str: Confirmation message that the bot was started.
     """
-    run_bot()
+    return start_discord_bot_thread()
+
 
 
 # These are agent helper functions for instantiation
@@ -85,14 +98,22 @@ def create_langchain_prompt() -> ChatPromptTemplate:
 
 def run_agent(query: str):
     """
-    This takes in a query and then runs the AutoExec agent on top of that query
+    Runs the LangChain agent with the given query.
+
+    Args:
+        query (str): The input query.
+
+    Returns:
+        dict: The response from the agent.
     """
     agent_executor = create_llm_with_tools()
-    modelResponse = agent_executor.invoke({"input": f"{query}"})
-    return modelResponse
+    response = agent_executor.invoke({"input": f"{query}"})
+    return response
+
+# run the agent to start the bot
+if __name__ == "__main__":
+    query = "Can you start the discord bot?"
+    result = run_agent(query)
 
 
-query = "Can you start the discord bot?"
-result = run_agent(query)
-
-print(result["output"])  # Ensure the output is printed
+    print(result["output"])  # Ensure output is displayed
