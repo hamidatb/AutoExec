@@ -22,19 +22,7 @@ load_dotenv()
 if not os.getenv("OPENAI_API_KEY"):
     raise EnvironmentError("API Key not found. Check your .env file!")
 
-# needs a seperate thread so the agent can continute listening to other things too
-def start_discord_bot_thread():
-    """
-    Runs the Discord bot in a separate thread so that it does not block the main LangChain agent.
-    """
-    thread = threading.Thread(target=run_bot, daemon=True)
-    thread.start()
-    
-
-    # while True: print("bot alive")
-    return "Discord bot started!"
-
-@tool
+@tool 
 def start_discord_bot():
     """
     Starts the Discord bot asynchronously, allowing the LangChain agent to remain active.
@@ -44,7 +32,26 @@ def start_discord_bot():
     Returns:
         str: Confirmation message that the bot was started.
     """
-    return start_discord_bot_thread()
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        loop.create_task(run_bot())  # Run bot as async task in existing event loop
+    else:
+        asyncio.run(run_bot())  # Run bot in a new event loop if none is running
+
+    return "✅ Discord bot has been started and is now running!"
+
+@tool
+def send_meeting_mins_summary():
+    """
+    Gets a summary of the meeting mins
+
+    Args:
+        None
+    Returns:
+        str: Confirmation message that the bot was started.
+    """
+    meeting_min_formatted_str = "Got them! Returning now"
+    return meeting_min_formatted_str
 
 
 
@@ -67,7 +74,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [start_discord_bot]
+    tools = [send_meeting_mins_summary, start_discord_bot]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
@@ -112,8 +119,7 @@ def run_agent(query: str):
 
 # run the agent to start the bot
 if __name__ == "__main__":
-    query = "Can you start the discord bot?"
+    query = "Start the discord bot"
     result = run_agent(query)
-
 
     print(result["output"])  # Ensure output is displayed
