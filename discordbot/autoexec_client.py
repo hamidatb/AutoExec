@@ -4,6 +4,7 @@ import json
 
 from dotenv import load_dotenv
 from autoexec_langchain.get_mm_json import get_meeting_mins_json
+from autoexec_langchain.main_agent import run_agent
 
 def get_meeting_min_reponse() -> str:
     """ 
@@ -48,7 +49,6 @@ def get_autoexec_client() -> discord.Client:
     load_dotenv()
     CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
 
-
     # intents are 
     intents = discord.Intents.default()
     intents.message_content = True
@@ -81,9 +81,9 @@ def get_autoexec_client() -> discord.Client:
         if message.content.startswith('$AEmm'):
             formatted_response = get_meeting_min_reponse()
             await message.channel.send(f'{formatted_response}')
-        elif message.content.startswith('$AEExplain'):
-            formatted_response = "Hi"
-            await message.channel.send(f'{formatted_response}')
+        elif message.content.startswith('$AE'):
+            result = run_agent(message.content)
+            await message.channel.send(f'{result["output"]}')
         
         # TODO: Handle asking for the action item status of everyone and saying what still has to be completed
                 
