@@ -70,22 +70,44 @@ def get_autoexec_client() -> discord.Client:
 
     @client.event
     async def on_message(message):
-        """
-        on_message() is called when the bot has recieved a message.
-        """
-        # Avoiding listening to messages from ourself
+        """ Handles incoming messages (both DMs and server messages). """
         if message.author == client.user:
             return
-        
-        # handle the user asking for the most recent meeting minutes
+
+        try:
+            # Fetch the correct server channel
+            server_channel = await client.fetch_channel(CHANNEL_ID)
+        except Exception as e:
+            print(f"❌ Error fetching server channel: {e}")
+            return
+
+        # Check if message is a DM
+        is_dm = isinstance(message.channel, discord.DMChannel)
+
+        # Handle Meeting Minutes Request ($AEmm)
         if message.content.startswith('$AEmm'):
             formatted_response = get_meeting_min_reponse()
-            await message.channel.send(f'{formatted_response}')
+
+            if is_dm:
+                # Send response to DM sender
+                await message.channel.send("✅ Your request has been sent to the server!")
+                # Forward response to the server
+                #await server_channel.send(f'📌 **Meeting Minutes Requested by {message.author}:**')
+
+                await server_channel.send(f'{formatted_response}')
+            else:
+                # Send response directly in server chat
+                await message.channel.send(f'{formatted_response}')
+        
+        # Handle Agent Request ($AE)
         elif message.content.startswith('$AE'):
             result = run_agent(message.content)
-            await message.channel.send(f'{result["output"]}')
-        
-        # TODO: Handle asking for the action item status of everyone and saying what still has to be completed
-                
+            response = result.get("output", "⚠️ Error processing request.")
+
+            if is_dm:
+                await message.channel.send("✅ Your request has been processed and sent to the server!")
+                await server_channel.send(f'🔍 **Agent Response for {message.author}:**\n{response}')
+            else:
+                await message.channel.send(response)
 
     return client
