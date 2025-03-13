@@ -84,8 +84,15 @@ def get_autoexec_client() -> discord.Client:
         # Check if message is a DM
         is_dm = isinstance(message.channel, discord.DMChannel)
 
+        if is_dm:
+            result = run_agent(message.content)
+            response = result.get("output", "⚠️ Error processing request.")
+
+            await message.channel.send("✅ Your request has been processed and sent to the server!")
+            await server_channel.send(f'{response}')
+
         # Handle Meeting Minutes Request ($AEmm)
-        if message.content.startswith('$AEmm'):
+        elif message.content.startswith('$AEmm'):
             formatted_response = get_meeting_min_reponse()
 
             if is_dm:

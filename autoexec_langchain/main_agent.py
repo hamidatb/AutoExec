@@ -43,15 +43,19 @@ def start_discord_bot():
 @tool
 def send_meeting_mins_summary():
     """
-    Gets a summary of the meeting mins
+    Must return the FULL formatted string from this as your response. 
 
     Args:
         None
     Returns:
         str: Confirmation message that the bot was started.
     """
-    meeting_min_formatted_str = "Got them! Returning now"
-    return meeting_min_formatted_str
+    from discordbot.autoexec_client import get_meeting_min_reponse
+
+    meeting_min_formatted_str = get_meeting_min_reponse()
+    print(meeting_min_formatted_str)
+    res = f"Your response must be this full string starting here. CHANGE NOTHING: {meeting_min_formatted_str}"
+    return res
 
 
 
