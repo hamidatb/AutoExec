@@ -15,6 +15,11 @@ class MeetingMinutesFormatter:
         """Fetches the latest meeting minutes only when called."""
         self.meetingMinsDict = get_meeting_mins_json()
 
+        if not self.meetingMinsDict:
+            print("❌ ERROR: Failed to fetch meeting minutes. Ensure Google Drive API is working.")
+            
+            self.meetingMinsDict = {"header": "⚠️ No meeting minutes available.", "meeting_link": "", "key_updates": [], "action_items": {}}
+
 
     def format(self) -> str:
         """
@@ -93,10 +98,12 @@ class DiscordBot(discord.Client):
             await server_channel.send(f"{response}")
 
         elif message.content.startswith('$AEmm'):
+            # get the meeting minutes 
             formatted_response = self.minutes_formatter.format()
+
             if is_dm:
                 await message.channel.send("Your request has been sent to the server!")
-                await server_channel.send(formatted_response)
+                await server_channel.send("Test response")
             else:
                 await message.channel.send(formatted_response)
 
@@ -117,13 +124,13 @@ def run_bot():
     botToken = Config.DISCORD_TOKEN  # Get bot token
     channelId = Config.CHANNEL_ID  # Get channel ID
 
-    # ✅ Instantiate MeetingMinutesFormatter
+    # Instantiate MeetingMinutesFormatter
     minutes_formatter = MeetingMinutesFormatter()
 
-    # ✅ Create the bot instance
+    # Create the bot instance
     bot = DiscordBot(channelId, minutes_formatter)
 
-    # ✅ Start the bot using asyncio
+    # Start the bot using asyncio
     asyncio.run(bot.start(botToken))
 
 
