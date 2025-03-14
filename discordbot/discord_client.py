@@ -72,6 +72,7 @@ class DiscordBot(discord.Client):
         channel = self.get_channel(self.channel_id)
         if channel:
             await channel.send("✅ AutoExec Bot is now online and connected!")
+    
 
     async def on_message(self, message: discord.Message):
         """
@@ -99,13 +100,18 @@ class DiscordBot(discord.Client):
 
         elif message.content.startswith('$AEmm'):
             # get the meeting minutes 
-            formatted_response = self.minutes_formatter.format()
+            res = run_agent(message.content)
+            result = res['output']
+            print(res)
+            print(result)
+
+            
 
             if is_dm:
                 await message.channel.send("Your request has been sent to the server!")
                 await server_channel.send("Test response")
             else:
-                await message.channel.send(formatted_response)
+                await message.channel.send(result)
 
         elif message.content.startswith('$AE'):
             result = run_agent(message.content)
