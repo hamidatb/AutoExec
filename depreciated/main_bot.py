@@ -6,7 +6,7 @@ def run_bot():
     """
     This function runs the AutoExec bot
     """
-    from discordbot.autoexec_client import get_autoexec_client
+    from discordbot.discord_client import get_autoexec_client
     # get the auth token to run the client
     load_dotenv()
 
