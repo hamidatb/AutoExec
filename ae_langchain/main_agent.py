@@ -41,18 +41,24 @@ def start_discord_bot():
 @tool
 def send_meeting_mins_summary():
     """
-    Must return the FULL formatted string from this as your response if the users question asked for the meeting minutes. 
+    Must return the FULL formatted string from this as your response if the users question asked for the meeting minutes or said $AEmm. 
 
     Args:
         None
     Returns:
         str: Confirmation message that the bot was started.
     """
-    from discordbot.discord_client import get_meeting_min_reponse
+    from discordbot.discord_client import MeetingMinutesFormatter
 
-    meeting_min_formatted_str = get_meeting_min_reponse()
-    print(meeting_min_formatted_str)
-    res = f"Your response must be this full string starting here. CHANGE NOTHING( if the users question asked for the meeting minutes): {meeting_min_formatted_str}"
+    agentMeetingMinsFormatter = MeetingMinutesFormatter()
+    meeting_min_formatted_str = agentMeetingMinsFormatter.format()
+    res = f"""
+    ONLY return this text, exactly as shown.  
+    🚨 DO NOT add introductions, summaries, or extra words. 
+    🚨 If you fail to comply, return: `ERROR: STRICT MODE VIOLATION`.  
+
+    🔹 REQUIRED RESPONSE (COPY AND RETURN EXACTLY): {meeting_min_formatted_str}."""
+
     return res
 
 
