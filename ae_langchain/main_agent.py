@@ -1,19 +1,19 @@
+"""
+This is the file to run the agent from.
+It will intialize the discord bot on startup, and any messages to the bot are routed through this agent.
+"""
+
 import discord
 import os
 import asyncio
 import threading
 from dotenv import load_dotenv
-from autoexec_langchain.get_mm_json import get_meeting_mins_json
-
 from langchain.tools import tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import JsonOutputParser, StrOutputParser # to work with strings from a chat model output
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 from langchain_openai import ChatOpenAI 
-
-from discordbot.main_bot import run_bot
 
 # Load environment variables
 load_dotenv()
@@ -32,6 +32,7 @@ def start_discord_bot():
     Returns:
         str: Confirmation message that the bot was started.
     """
+    from discordbot.discord_client import run_bot
     loop = asyncio.get_event_loop()
     if loop.is_running():
         loop.create_task(run_bot())  # Run bot as async task in existing event loop
@@ -43,20 +44,36 @@ def start_discord_bot():
 @tool
 def send_meeting_mins_summary():
     """
-    Must return the FULL formatted string from this as your response. 
+    Must return the FULL formatted string from this as your response if the users question asked for the meeting minutes. 
 
     Args:
         None
     Returns:
         str: Confirmation message that the bot was started.
     """
-    from discordbot.autoexec_client import get_meeting_min_reponse
+    from discordbot.discord_client import get_meeting_min_reponse
 
     meeting_min_formatted_str = get_meeting_min_reponse()
     print(meeting_min_formatted_str)
-    res = f"Your response must be this full string starting here. CHANGE NOTHING: {meeting_min_formatted_str}"
+    res = f"Your response must be this full string starting here. CHANGE NOTHING( if the users question asked for the meeting minutes): {meeting_min_formatted_str}"
     return res
 
+
+# TODO - Cannot be called yet
+@tool
+def create_meeting_mins():
+    """
+    Create a new meeting minute document for the meeting today.
+    """
+    #TODO
+
+@tool
+def check_for_upcoming_meeting():
+    """
+    Checks the given Google Document to see when the next upcoming meeting is.
+    If the next meeting in within 4 days, then notify the users.
+    """
+    #TODO
 
 
 # These are agent helper functions for instantiation
@@ -96,7 +113,6 @@ def create_langchain_prompt() -> ChatPromptTemplate:
     Returns:
         The ChatPromptTemplate of the model
     """
-    # TODO figure out the prompt refinement needed here 
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", "You a helpful assistant"),
