@@ -2,17 +2,13 @@
 This is the file to run the agent from.
 It will intialize the discord bot on startup, and any messages to the bot are routed through this agent.
 """
-
-import discord
 import os
 import asyncio
-import threading
 from dotenv import load_dotenv
 from langchain.tools import tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from dotenv import load_dotenv
-from pinecone import Pinecone, ServerlessSpec
 from langchain_openai import ChatOpenAI 
 
 # Load environment variables
@@ -33,6 +29,7 @@ def start_discord_bot():
         str: Confirmation message that the bot was started.
     """
     from discordbot.discord_client import run_bot
+
     loop = asyncio.get_event_loop()
     if loop.is_running():
         loop.create_task(run_bot())  # Run bot as async task in existing event loop

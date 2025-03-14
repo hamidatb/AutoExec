@@ -119,4 +119,4 @@ if __name__ == "__main__":
     formattedMeetingMins = MeetingMinsFormatter(meetingMinsJson)
 
     # Print formatted result for debugging
-    print(formattedMeetingMins.format())
+    # print(formattedMeetingMins.format())

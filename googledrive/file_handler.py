@@ -137,12 +137,7 @@ def getFileContentStr(filetype:int) -> str:
 
     # make a drive helper instance to use the credentials
     driverHelperInstance = GoogleDriveHelper(creds)
-    service = driverHelperInstance.get_drive_service()
-
-    print("Searching for the most recent file matching filter...")
-
-    files = driverHelperInstance.get_latest_matching_file(service, FOLDER_ID, MEETING_MINS_FILENMAME)
-    file = files[0]
+    file = driverHelperInstance.get_latest_matching_file(FOLDER_ID, MEETING_MINS_FILENMAME)
     
     if not file:
         print("No matching files found.")
