@@ -110,12 +110,14 @@ class DiscordBot(discord.Client):
 
         elif message.content.startswith('$AE'):
             result = run_agent(message.content)
-            response = result.get("output", "Error processing request.")
+            #response = result.get("output", "Error processing request.")
+            print(response)
             if is_dm:
                 await message.channel.send("Your request has been processed and sent to the server!")
-                await server_channel.send(f'{response}')
+                #await server_channel.send(f'{response}')
             else:
-                await message.channel.send(response)
+                #await message.channel.send(response)
+                print("The agent was called and handled the request.")
 
     async def send_meeting_minutes(self):
         """
@@ -130,6 +132,15 @@ class DiscordBot(discord.Client):
         else:
             print("❌ ERROR: Could not find the Discord channel.")
         #print("✅ Leaving send_meeting_minutes()")  # Ensure function exits
+
+    async def send_any_message(self, message:str):
+        server_channel = await self.fetch_channel(self.channel_id)  
+
+        if server_channel:
+            await server_channel.send(message)
+        else:
+            print("❌ ERROR: Could not find the Discord channel to send the message to")
+
 
 def run_bot():
     """
