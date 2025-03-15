@@ -6,6 +6,7 @@ from ae_langchain.main_agent import run_agent
 from config import Config
 
 Config()
+BOT_INSTANCE = None
 
 class MeetingMinutesFormatter:
     def __init__(self):
@@ -100,18 +101,12 @@ class DiscordBot(discord.Client):
 
         elif message.content.startswith('$AEmm'):
             # get the meeting minutes 
-            res = run_agent(message.content)
-            result = res['output']
-            print(res)
-            print(result)
-
-            
+            formatted_response = self.minutes_formatter.format()
 
             if is_dm:
-                await message.channel.send("Your request has been sent to the server!")
-                await server_channel.send("Test response")
+                await message.channel.send("Your meeting minute request has been sent to the server!")
             else:
-                await message.channel.send(result)
+                await message.channel.send(formatted_response)
 
         elif message.content.startswith('$AE'):
             result = run_agent(message.content)
@@ -122,11 +117,25 @@ class DiscordBot(discord.Client):
             else:
                 await message.channel.send(response)
 
+    async def send_meeting_minutes(self):
+        """
+        Fetches and sends meeting minutes directly to the Discord channel.
+        """
+        # get the formatted meeting minutes        
+        formatted_response = self.minutes_formatter.format()
+        server_channel = await self.fetch_channel(self.channel_id)  
+
+        if server_channel:
+            await server_channel.send(formatted_response)
+        else:
+            print("❌ ERROR: Could not find the Discord channel.")
+        #print("✅ Leaving send_meeting_minutes()")  # Ensure function exits
 
 def run_bot():
     """
     Runs the AutoExec bot.
     """
+    global BOT_INSTANCE
     botToken = Config.DISCORD_TOKEN  # Get bot token
     channelId = Config.CHANNEL_ID  # Get channel ID
 
@@ -134,10 +143,10 @@ def run_bot():
     minutes_formatter = MeetingMinutesFormatter()
 
     # Create the bot instance
-    bot = DiscordBot(channelId, minutes_formatter)
+    BOT_INSTANCE = DiscordBot(channelId, minutes_formatter)
 
     # Start the bot using asyncio
-    asyncio.run(bot.start(botToken))
+    asyncio.run(BOT_INSTANCE.start(botToken))
 
 
 if __name__ == "__main__":

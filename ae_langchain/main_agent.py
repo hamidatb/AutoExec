@@ -4,6 +4,7 @@ It will intialize the discord bot on startup, and any messages to the bot are ro
 """
 import os
 import asyncio
+from asyncio import create_task
 from dotenv import load_dotenv
 from langchain.tools import tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
@@ -48,18 +49,21 @@ def send_meeting_mins_summary():
     Returns:
         str: Confirmation message that the bot was started.
     """
-    from discordbot.discord_client import MeetingMinutesFormatter
+    from discordbot.discord_client import     BOT_INSTANCE
 
-    agentMeetingMinsFormatter = MeetingMinutesFormatter()
-    meeting_min_formatted_str = agentMeetingMinsFormatter.format()
-    res = f"""
-    ONLY return this text, exactly as shown.  
-    🚨 DO NOT add introductions, summaries, or extra words. 
-    🚨 If you fail to comply, return: `ERROR: STRICT MODE VIOLATION`.  
 
-    🔹 REQUIRED RESPONSE (COPY AND RETURN EXACTLY): {meeting_min_formatted_str}."""
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
 
-    return res
+    # Run the message-sending function inside the bot event loop
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        #print("The loop is already running")
+        loop.create_task(BOT_INSTANCE.send_meeting_minutes())  # Use existing bot instance
+    else:
+        asyncio.run(BOT_INSTANCE.send_meeting_minutes())  # Create new loop if needed
+
+    return "✅ Meeting minutes have been sent via Discord."
 
 
 # TODO - Cannot be called yet

@@ -59,8 +59,8 @@ class GoogleDriveHelper:
         if filename_filter.strip():
             query += f" and name contains '{filename_filter.strip()}'"
 
-        print(f"🔍 Searching for latest matching file: {query}")
-        print(f"📂 Searching in Google Drive folder: {folder_id}")
+        #print(f"🔍 Searching for latest matching file: {query}")
+        #print(f"📂 Searching in Google Drive folder: {folder_id}")
 
         try:
             results = self.service.files().list(
@@ -81,7 +81,7 @@ class GoogleDriveHelper:
             print("❌ No matching files found.")
             return None  # Return None if no files match
         
-        print(f"✅ Found file: {files[0]}")
+        #print(f"✅ Found file: {files[0]}")
         return files[0]  # Return the first (latest) file found
 
     def download_file(self, file: dict) -> str:
@@ -143,10 +143,10 @@ def getFileContentStr(filetype:int) -> str:
         print("No matching files found.")
         return
 
-    print(f"\nFound latest file: {file['name']} ({file['id']})")
+    #print(f"\nFound latest file: {file['name']} ({file['id']})")
     file_content = driverHelperInstance.download_file(file)
 
-    print("\nFile content:\n")
-    print(f"{file_content}")
+    #print("\nFile content:\n")
+    #print(f"{file_content}")
 
     return file_content
