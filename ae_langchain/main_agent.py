@@ -51,7 +51,6 @@ def send_meeting_mins_summary():
     """
     from discordbot.discord_client import     BOT_INSTANCE
 
-
     if BOT_INSTANCE is None:
         return "❌ ERROR: The bot instance is not running."
 
@@ -82,7 +81,38 @@ def check_for_upcoming_meeting():
     """
     #TODO
 
+@tool
+def send_output_to_discord(messageToSend:str) -> str:
+    """
+    Sends a message directly to the Discord chat on behalf of the bot.
 
+    **MANDATORY USAGE**: 
+    - If a user asks the AI a direct question that doesn't trigger another tool, this function MUST be used.
+    - Always call this function when responding to general questions in Discord.
+    - NEVER answer in plain text without using this function when interacting in Discord.
+
+    Args:
+        messageToSend (str): The response message to send.
+
+    Returns:
+        str: A confirmation that the message was sent.
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+
+    # Run the message-sending function inside the bot event loop
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        loop.create_task(BOT_INSTANCE.send_any_message(messageToSend))  # Use existing bot instance
+    else:
+        asyncio.run(BOT_INSTANCE.send_any_message(messageToSend))  # Create new loop if needed
+
+    return "✅ Message has been sent to Discord."
+
+
+    
 # These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
     """
@@ -102,7 +132,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
@@ -122,7 +152,7 @@ def create_langchain_prompt() -> ChatPromptTemplate:
     """
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", "You a helpful assistant"),
+            ("system", "You are a helpful assistant. ALWAYS use the `send_output_to_discord` tool to send responses to Discord unless another tool already sends the message."),
             ("user", "{input}"),
             MessagesPlaceholder("agent_scratchpad")
         ]
