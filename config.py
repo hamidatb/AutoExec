@@ -14,7 +14,7 @@ class Config:
     DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID")  
     EVENTS_SHEET_FILENAME = os.getenv("EVENTS_SHEET_FILENAME") 
     MEETING_MINS_FILENMAME = os.getenv("MEETING_MINS_FILENMAME") 
-    
+    MEETING_MINS_TEMPLATE_FILENMAME = os.getenv("MEETING_MINS_TEMPLATE_FILENMAME")
     
     @staticmethod
     def validate():
