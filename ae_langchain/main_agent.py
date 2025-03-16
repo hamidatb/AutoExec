@@ -10,7 +10,7 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI 
-from googledrive.file_handler import create_meeting_mins_for_today, get_meeting_day
+from googledrive.file_handler import create_meeting_mins_for_today, get_next_meeting
 from config import Config
 import datetime
 
@@ -94,7 +94,7 @@ def check_for_upcoming_meeting():
     tmw = today + datetime.timedelta(days=1)
 
     # get the meeting dates
-    meeting_dates = get_meeting_dates()
+    meeting_dates = get_next_meeting()
     if not meeting_dates:
         return "No meetings in the next day"
 
