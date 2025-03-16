@@ -17,6 +17,7 @@ FOLDER_ID = Config.DRIVE_FOLDER_ID # the folder the meeting mins are stored in
 EVENTS_SHEET_FILENAME = Config.EVENTS_SHEET_FILENAME
 MEETING_MINS_FILENMAME = Config.MEETING_MINS_FILENMAME
 MEETING_MIN_TEMPLATE_FILENAME = Config.MEETING_MINS_TEMPLATE_FILENMAME
+MEETING_SCHEDULE_FILENAME = Config.MEETING_SCHEDULE_FILENAME
 
 class GoogleDriveHelper:
     """
@@ -236,7 +237,6 @@ def create_meeting_mins_for_today():
     Returns:
         meetingMinLink (str): The link to the meeting minutes
     """
-    Config()
     creds = get_credentials()
 
     # make a drive helper instance to use the credentials
@@ -248,3 +248,20 @@ def create_meeting_mins_for_today():
         return
 
     return meetingMinsForTodayLink
+
+
+def get_next_meeting():
+    """
+    Returns the date of the next meeting, and None if there is no next meeting.
+
+    Args:
+        None
+    Returns:
+        nextMeetingDict (dict) -> The dictionary of the meeting minutes.
+    """
+    creds = get_credentials()
+
+    driveHelperInstance = GoogleDriveHelper(creds)
+    nextMeetingDict = driveHelperInstance.getNextMeeting(FOLDER_ID, MEETING_SCHEDULE_FILENAME)
+
+    return nextMeetingDict

@@ -5,16 +5,17 @@ It will intialize the discord bot on startup, and any messages to the bot are ro
 import os
 import asyncio
 from asyncio import create_task
-from dotenv import load_dotenv
 from langchain.tools import tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI 
-from googledrive.file_handler import create_meeting_mins_for_today
+from googledrive.file_handler import create_meeting_mins_for_today, get_meeting_day
+from config import Config
+import datetime
 
 # Load environment variables
-load_dotenv()
+Config().validate()
 
 # if the api key is outdated, run unset OPENAI_API_KEY in terminal
 if not os.getenv("OPENAI_API_KEY"):
@@ -65,8 +66,6 @@ def send_meeting_mins_summary():
 
     return "✅ Meeting minutes have been sent via Discord."
 
-
-# TODO - Cannot be called yet
 @tool
 def create_meeting_mins() -> str:
     """
@@ -90,7 +89,29 @@ def check_for_upcoming_meeting():
     Checks the given Google Document to see when the next upcoming meeting is.
     If the next meeting in within 4 days, then notify the users.
     """
-    #TODO
+    # get the current date
+    today = datetime.date.today()
+    tmw = today + datetime.timedelta(days=1)
+
+    # get the meeting dates
+    meeting_dates = get_meeting_dates()
+    if not meeting_dates:
+        return "No meetings in the next day"
+
+    # get the upcoming meeetings within the next day
+    upcoming_meetings = [date for date in meeting_dates if today <= date <= tmw]
+
+    if upcoming_meetings:
+        closest_meeting = min(upcoming_meetings)
+        # format the messages
+        meeting_date_str = closest_meeting.strftime("%A, %B %d, %Y")
+        message = f"📅 **Upcoming Meeting Alert!**\nWe have a meeting on **{meeting_date_str}**."
+
+        # Send alert to Discord
+        send_output_to_discord(message)
+        return f"✅ Notification sent to Discord: {message}"
+    
+    return "ℹ️ No meetings scheduled in the next day."
 
 @tool
 def send_output_to_discord(messageToSend:str) -> str:
@@ -186,7 +207,21 @@ def run_agent(query: str):
 
 # run the agent to start the bot
 if __name__ == "__main__":
-    query = "Start the discord bot"
-    result = run_agent(query)
+    async def scheduled_meeting_check():
+        while True:
+            # Call the tool to check for an upcoming meeting
+            check_for_upcoming_meeting()
+            # Wait for 60 seconds before checking again
+            await asyncio.sleep(60)
 
-    print(result["output"])  # Ensure output is displayed
+    async def main():
+        # Start the scheduled meeting check as a background task
+        asyncio.create_task(scheduled_meeting_check())
+
+        # Start the Discord bot by running your agent with the "Start the discord bot" query
+        query = "Start the discord bot"
+        result = run_agent(query)
+        print(result["output"])  # Print confirmation that the bot has started
+
+    # Run both tasks concurrently
+    asyncio.run(main())
