@@ -33,6 +33,16 @@ class GoogleDriveHelper:
         """
         self.service = self.get_drive_service(creds)
 
+    def validate_drive_fields(**options) -> bool:
+        """
+        Validates the fields passed into it
+        """
+        for field in options:
+            if field == None:
+                print(f"ERROR: Missing field in GoogleDrive Handler")
+                return False
+        return True
+
     def get_drive_service(self, creds):
         """
         Returns an authenticated Google Drive service instance.
@@ -196,6 +206,9 @@ class GoogleDriveHelper:
         except Exception as e:
             print(f"❌ ERROR: Failed to copy the template document. {e}")
             return None
+
+    def getNextMeeting(self, folder_id:str, meeting_schedule_filename:str):
+
 
 def getFileContentStr(filetype:int) -> str:
     """
