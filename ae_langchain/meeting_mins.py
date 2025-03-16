@@ -30,7 +30,7 @@ class MeetingMinutesLangchainModel:
             max_retries=2,
         )
 
-        # Tell this llm that all it does is handle the meeting mins and json activities
+        # Tell this llm that all it does is handle the retrieving meeting mins and json activities
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", "You are a chatbot responsible for summarizing meeting minutes. Your responses must be structured in JSON."),
             ("system", """FORMAT: 

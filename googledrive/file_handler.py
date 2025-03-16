@@ -1,6 +1,7 @@
 import io
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.discovery import build
+from datetime import datetime
 
 from googledrive.drive_auth import get_credentials
 
@@ -15,6 +16,7 @@ Config()
 FOLDER_ID = Config.DRIVE_FOLDER_ID # the folder the meeting mins are stored in
 EVENTS_SHEET_FILENAME = Config.EVENTS_SHEET_FILENAME
 MEETING_MINS_FILENMAME = Config.MEETING_MINS_FILENMAME
+MEETING_MIN_TEMPLATE_FILENAME = Config.MEETING_MINS_TEMPLATE_FILENMAME
 
 class GoogleDriveHelper:
     """
@@ -121,6 +123,78 @@ class GoogleDriveHelper:
         file_content = fh.getvalue().decode("utf-8")
         return file_content
     
+    def make_meeting_mins(self, folder_id:str, template_filename:str):
+        """
+        Makes a meeting minute document for the current date, through copying the template document, and updating the name of the file.
+
+        Args:
+            folder_id (str): Google Drive folder ID.
+            template_filename (str): Partial file name to match.
+
+        Returns:
+            dict | None: Copied file metadata if successful, else None.
+        """
+        if not folder_id:
+            print("❌ ERROR: folder_id is None. Check environment variables.")
+            return None
+
+        if not template_filename.strip():
+            print("❌ ERROR: The template document is empty or None.")
+            return None
+
+        # Query for the latest file that matches the template filename
+        query = f"'{folder_id}' in parents"
+        if template_filename.strip():
+            query += f" and name contains '{template_filename.strip()}'"
+
+        try:
+            results = self.service.files().list(
+                q=query,
+                fields="files(id, name, mimeType, createdTime)",
+                orderBy="createdTime desc",  # Sort by creation date, newest first
+                pageSize=1,  # Get only the latest file
+                includeItemsFromAllDrives=True,
+                supportsAllDrives=True
+            ).execute()
+
+            # get the remplate file
+            files = results.get("files", None)
+            if not files:
+                print("❌ No matching meeting minute templates found.")
+                return None  
+
+            template_file = files[0]
+            template_id = template_file["id"]
+
+        except Exception as e:
+            print(f"❌ ERROR: Failed to fetch the meeting minute template from Drive. {e}")
+            return None
+
+        # make a new filename with the curr date
+        newFilename = f"Meeting Minutes - {datetime.today().strftime('%Y-%m-%d')}"
+
+        # try copying the file
+        try:
+            copied_file = self.service.files().copy(
+                fileId=template_id,
+                body={
+                    "name": newFilename,
+                    "parents": [folder_id]  # ensuring the copied file remains in the same folder
+                },
+                supportsAllDrives=True
+            ).execute()
+            
+            copied_file_id = copied_file["id"]
+            file_link = f"https://drive.google.com/file/d/{copied_file_id}/view"
+
+            print(f"✅ Successfully copied and renamed file: {copied_file['name']}")
+            print(f"🔗 File Link: {file_link}")
+
+            return file_link  # Return the shareable Google Drive link
+
+        except Exception as e:
+            print(f"❌ ERROR: Failed to copy the template document. {e}")
+            return None
 
 def getFileContentStr(filetype:int) -> str:
     """
@@ -150,3 +224,27 @@ def getFileContentStr(filetype:int) -> str:
     #print(f"{file_content}")
 
     return file_content
+
+
+def create_meeting_mins_for_today():
+    """
+    A function to create the meeting minutes for today in the Google drive folder, and then send back the link to that file.
+
+    Args:
+        None
+
+    Returns:
+        meetingMinLink (str): The link to the meeting minutes
+    """
+    Config()
+    creds = get_credentials()
+
+    # make a drive helper instance to use the credentials
+    driverHelperInstance = GoogleDriveHelper(creds)
+    meetingMinsForTodayLink = driverHelperInstance.make_meeting_mins(FOLDER_ID, MEETING_MIN_TEMPLATE_FILENAME)
+    
+    if not meetingMinsForTodayLink:
+        print("No matching files found.")
+        return
+
+    return meetingMinsForTodayLink

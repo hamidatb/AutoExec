@@ -11,6 +11,7 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI 
+from googledrive.file_handler import create_meeting_mins_for_today
 
 # Load environment variables
 load_dotenv()
@@ -67,11 +68,21 @@ def send_meeting_mins_summary():
 
 # TODO - Cannot be called yet
 @tool
-def create_meeting_mins():
+def create_meeting_mins() -> str:
     """
-    Create a new meeting minute document for the meeting today.
+    Creates the meeting minute document for today 
+    and returns the link the minutes, which should be sent to Discord afterwards using send_output_to_discord()
+
+    Args:
+        None
+    Returns:
+        The meeting minute link (str)
     """
-    #TODO
+    meetingMinsLink = create_meeting_mins_for_today()
+    if not meetingMinsLink:
+        return "There was an error in creating the meeting minutes"
+    else:
+        return meetingMinsLink
 
 @tool
 def check_for_upcoming_meeting():
@@ -111,7 +122,6 @@ def send_output_to_discord(messageToSend:str) -> str:
 
     return "✅ Message has been sent to Discord."
 
-
     
 # These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
@@ -132,7 +142,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
