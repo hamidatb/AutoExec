@@ -15,10 +15,12 @@ class Config:
     EVENTS_SHEET_FILENAME = os.getenv("EVENTS_SHEET_FILENAME") 
     MEETING_MINS_FILENMAME = os.getenv("MEETING_MINS_FILENMAME") 
     MEETING_MINS_TEMPLATE_FILENMAME = os.getenv("MEETING_MINS_TEMPLATE_FILENMAME")
+    MEETING_SCHEDULE_FILENAME = os.getenv("MEETING_SCHEDULE_FILENAME")
     
     @staticmethod
     def validate():
         if not Config.DISCORD_TOKEN:
             raise ValueError("DISCORD_BOT_TOKEN is missing in .env")
         if not Config.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY is missing in .env")
+            # if the api key is outdated, run unset OPENAI_API_KEY in terminal
+            raise EnvironmentError("OPENAI_API_KEY is missing in .env")
