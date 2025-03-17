@@ -33,6 +33,7 @@ class GoogleDriveHelper:
         services = self.get_drive_service(creds)
         self.drive_service = services[0]
         self.sheets_service = services[1]
+        self.helperConfig = Config()
 
     def validate_drive_fields(**options) -> bool:
         """
@@ -53,7 +54,7 @@ class GoogleDriveHelper:
 
         return [drive_service, sheets_service]
 
-    def get_latest_matching_file(self, folder_id: str, filename_filter: str):
+    def get_latest_matching_file(self):
         """
         Finds the most recent file matching the name filter in the given folder.
 
@@ -64,6 +65,9 @@ class GoogleDriveHelper:
         Returns:
             dict or None: File metadata if found, otherwise None.
         """
+        folder_id = self.helperConfig.DRIVE_FOLDER_ID
+        filename_filter = self.helperConfig.MEETING_MINS_FILENMAME
+
         if not folder_id:
             print("❌ ERROR: folder_id is None. Check environment variables.")
             return None
@@ -138,7 +142,7 @@ class GoogleDriveHelper:
         file_content = fh.getvalue().decode("utf-8")
         return file_content
     
-    def make_meeting_mins(self, folder_id:str, template_filename:str):
+    def make_meeting_mins(self):
         """
         Makes a meeting minute document for the current date, through copying the template document, and updating the name of the file.
 
@@ -149,6 +153,9 @@ class GoogleDriveHelper:
         Returns:
             dict | None: Copied file metadata if successful, else None.
         """
+        folder_id = self.helperConfig.DRIVE_FOLDER_ID
+        template_filename = self.helperConfig.MEETING_MINS_TEMPLATE_FILENMAME
+
         if not folder_id:
             print("❌ ERROR: folder_id is None. Check environment variables.")
             return None
@@ -211,7 +218,7 @@ class GoogleDriveHelper:
             print(f"❌ ERROR: Failed to copy the template document. {e}")
             return None
 
-    def getNextMeeting(self, folder_id:str, meeting_schedule_filename:str):
+    def getNextMeeting(self):
         #TODO
         return None
 
@@ -232,7 +239,7 @@ def getFileContentStr(filetype:int) -> str:
 
     # make a drive helper instance to use the credentials
     driverHelperInstance = GoogleDriveHelper(creds)
-    file = driverHelperInstance.get_latest_matching_file(FOLDER_ID, MEETING_MINS_FILENMAME)
+    file = driverHelperInstance.get_latest_matching_file()
     
     if not file:
         print("No matching files found.")
