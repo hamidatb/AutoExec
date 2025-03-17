@@ -217,7 +217,7 @@ class GoogleDriveHelper:
             print(f"❌ ERROR: Failed to copy the template document. {e}")
             return None
 
-    def readMeetingSchedule(self):
+    def get_meeting_schedule_list(self, amount_to_return:int):
         """
         Gets the file content of the meeting schedule file, and returns the string
 
@@ -225,7 +225,6 @@ class GoogleDriveHelper:
             None
         Returns
             meetingScheduleContent (str): The string representation of the meeting schedule.
-            TODO : Should probably be the most recent 3 upcoming meetings
         """
         MEETING_MINS_SCHEDULE_RANGE = self.helperConfig. MEETING_MINS_SCHEDULE_RANGE
         
@@ -243,14 +242,39 @@ class GoogleDriveHelper:
                 print("No data found.")
                 return
 
+            all_meetings_list = []
+
             for row in values:
-                print(f"{row[0]}, {row[1]}, {row[2]}, {row[3]}")
+                try:
+                    # convert date to a standard format (assuming the format is "Month Day")
+                    meeting_date = datetime.strptime(row[0], "%B %d")  # Example: "March 20"
+                    meeting_date = meeting_date.replace(year=datetime.today().year)  # Add current year
+
+                    meeting_details = {
+                        "date": meeting_date,  # storing as datetime for sorting l8r
+                        "time": row[1],
+                        "title": row[2],
+                        "location": row[3],
+                        "minutes": row[4]
+                    }
+                    all_meetings_list.append(meeting_details)
+
+                except ValueError as val_err:
+                    print(f"⚠️ Skipping invalid date format: {row[0]}. Error: {val_err}")
+
+        
+
+            # Sort meetings by date ( the nearest date comes first)
+            all_meetings_list.sort(key=lambda x: x["date"])
+
+            all_meetings_list = all_meetings_list[:amount_to_return]
+
 
         except Exception as e:
             print(f"❌ ERROR: Failed to fetch files from Drive. {e}")
             return None
 
-        return values  
+        return all_meetings_list  
 
 # ---------------- Functions that use the drive helper class ----------------------
 def getFileContentStr(filetype:int) -> str:
@@ -301,7 +325,7 @@ def create_meeting_mins_for_today():
 
     return meetingMinsForTodayLink
 
-def get_all_meetings():
+def get_recent_meetings(amount_of_meetings_to_get:int=3):
     """
     Gets the string represnetation of all of the meetings of this group
 
@@ -312,9 +336,27 @@ def get_all_meetings():
         list: A list of all of the upcoming meetings.
     """
     driveHelperInstance = GoogleDriveHelper()
-    meetingsList = driveHelperInstance.readMeetingSchedule()
+    meetingsList = driveHelperInstance.get_meeting_schedule_list(amount_of_meetings_to_get)
 
     return meetingsList
 
+def format_meeting_schedule(meeting_list:list) -> str:
+    """
+    Formats the list of meetings
+    """
+    formatted_meetings = "**📅 Upcoming Meetings:**\n"
+
+    for meeting in meeting_list:
+        meeting["date"] = meeting["date"].strftime("%B %d")  # Convert back to string
+
+        formatted_meetings += (
+            f"\n• **Date:** {meeting['date']} | **Time:** {meeting['time']} "
+            f"\n    **Reason:** {meeting['title']}"
+            f"\n    **Where:** {meeting['location']}"
+            f"\n    **Minutes Link:** {meeting['minutes']}"
+        )
+    return formatted_meetings
+
 if __name__ == "__main__":
-    get_all_meetings()
+    meetings = get_recent_meetings()
+    print(format_meeting_schedule(meetings))

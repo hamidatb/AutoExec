@@ -10,7 +10,7 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI 
-from googledrive.file_handler import create_meeting_mins_for_today, get_all_meetings
+from googledrive.file_handler import create_meeting_mins_for_today, get_recent_meetings, format_meeting_schedule
 from config import Config
 import datetime
 
@@ -114,21 +114,54 @@ def send_output_to_discord(messageToSend:str) -> str:
     return "✅ Message has been sent to Discord."
 
 @tool
-def getAllMeetings() -> list:
+def send_meeting_schedule(amount_of_meetings_to_return: int):
     """
-    Retrives a list representation of the meetings for the group.
+    Retrieves a formatted string representation of the upcoming few meetings, 
+    and automatically sends it to Discord. 
+
+    **This function REQUIRES an argument. It will raise an error if none is provided.**
 
     Args:
-        None
+        amount_of_meetings_to_return (int): The number of meetings to return (REQUIRED).
         
     Returns:
-        list: All of the meetings of the group, in list format.
+        str: Confirmation that the schedule was sent.
     """
-    upcomingMeetingsList = get_all_meetings()
-    return upcomingMeetingsList
+    # Ensure an argument is provided
+    if amount_of_meetings_to_return is None:
+        raise ValueError("❌ ERROR: 'amount_of_meetings_to_return' is REQUIRED but was not provided.")
+
+    upcoming_meeting_list = get_recent_meetings(amount_of_meetings_to_return)
+    formatted_meeting_schedule_str = format_meeting_schedule(upcoming_meeting_list)
+
+    send_output_to_discord(formatted_meeting_schedule_str)
+
+    return "The meeting schedule has been sent to Discord now"
     
 @tool
-def miscQuestions() -> str:
+def send_reminder_for_next_meeting():
+    """
+    Send a message in Discord reminding everyone about the upcoming meeting.
+    """
+
+    # get the details of the most recent meeting
+    upcoming_meeting = get_recent_meetings(1)
+
+    upcoming_meeting[0]["date"] = upcoming_meeting[0]["date"].strftime("%B %d")  # Convert back to string
+
+    formatted_meeting_reminder = f"""
+        Hi @everyone! Reminder that we have an upcoming meeting:
+            **Date:**: {upcoming_meeting[0]["date"]} | **Time:** {upcoming_meeting[0]["time"]}
+            **Reason:**: {upcoming_meeting[0]["title"]}
+            **Where**: {upcoming_meeting[0]["location"]}
+            **Meeting Mins**: {upcoming_meeting[0]["minutes"]}
+    """
+
+    send_output_to_discord(formatted_meeting_reminder)
+
+    return "The reminder for our nearest meeting has now been sent to Discord"
+@tool
+def handle_misc_questions() -> str:
     """
     Tells the agent how to handle misclaneous questions that don't perfectly match to the other tools avalible.
 
@@ -140,6 +173,7 @@ def miscQuestions() -> str:
     """
 
     return "Respond IN DISCORD based on your knowledge as an LLM, so long as it is a work appropriate question. Invoke send_output_to_discord after this."
+
 # These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
     """
@@ -159,7 +193,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, getAllMeetings,miscQuestions]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule,handle_misc_questions, send_reminder_for_next_meeting]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 

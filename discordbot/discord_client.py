@@ -131,8 +131,20 @@ class DiscordBot(discord.Client):
             await server_channel.send(formatted_response)
         else:
             print("❌ ERROR: Could not find the Discord channel.")
-        #print("✅ Leaving send_meeting_minutes()")  # Ensure function exits
 
+    async def send_meeting_schedule(self):
+        """
+        Fetches and sends the upcoming meeting schedule directly to Discord.
+        """
+        # get the formatted meeting minutes        
+        formatted_response = self.minutes_formatter.format()
+        server_channel = await self.fetch_channel(self.channel_id)  
+
+        if server_channel:
+            await server_channel.send(formatted_response)
+        else:
+            print("❌ ERROR: Could not find the Discord channel.")
+        
     async def send_any_message(self, message:str):
         server_channel = await self.fetch_channel(self.channel_id)  
 
@@ -152,7 +164,6 @@ def run_bot():
 
     # Instantiate MeetingMinutesFormatter
     minutes_formatter = MeetingMinutesFormatter()
-
     # Create the bot instance
     BOT_INSTANCE = DiscordBot(channelId, minutes_formatter)
 
