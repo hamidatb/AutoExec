@@ -7,8 +7,6 @@ from googledrive.drive_auth import get_credentials
 
 from config import Config
 
-# If modifying these scopes, delete the file token.json.
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 # get the environment vars from the configuration
 Config()
@@ -31,7 +29,10 @@ class GoogleDriveHelper:
         Args:
             creds: Google API credentials object.
         """
-        self.service = self.get_drive_service(creds)
+        # Uses the scopes from googledrive.drive_auth
+        services = self.get_drive_service(creds)
+        self.drive_service = services[0]
+        self.sheets_service = services[1]
 
     def validate_drive_fields(**options) -> bool:
         """
@@ -45,9 +46,12 @@ class GoogleDriveHelper:
 
     def get_drive_service(self, creds):
         """
-        Returns an authenticated Google Drive service instance.
+        Returns an authenticated Google Drive, and Google Sheets service instance.
         """
-        return build("drive", "v3", credentials=creds)
+        drive_service = build("drive", "v3", credentials=creds)
+        sheets_service = build("sheets", "v3", credentials=creds)
+
+        return [drive_service, sheets_service]
 
     def get_latest_matching_file(self, folder_id: str, filename_filter: str):
         """
@@ -76,7 +80,7 @@ class GoogleDriveHelper:
         #print(f"📂 Searching in Google Drive folder: {folder_id}")
 
         try:
-            results = self.service.files().list(
+            results = self.drive_service.files().list(
                 q=query,
                 fields="files(id, name, mimeType, createdTime)",
                 orderBy="createdTime desc",  # Sort by creation date, newest first
@@ -116,9 +120,9 @@ class GoogleDriveHelper:
         mime_type = file["mimeType"]
 
         if mime_type == "application/vnd.google-apps.document":
-            request_media = self.service.files().export_media(fileId=file_id, mimeType="text/plain")
+            request_media = self.drive_service.files().export_media(fileId=file_id, mimeType="text/plain")
         elif mime_type == "application/vnd.google-apps.spreadsheet":
-            request_media = self.service.files().export_media(fileId=file_id, mimeType="text/csv")
+            request_media = self.drive_service.files().export_media(fileId=file_id, mimeType="text/csv")
         else:
             print("AutoExec is designed to work with Google Sheets and Google Docs only.\nPlease try again with an appropriate file format.")
             return None
@@ -159,7 +163,7 @@ class GoogleDriveHelper:
             query += f" and name contains '{template_filename.strip()}'"
 
         try:
-            results = self.service.files().list(
+            results = self.drive_service.files().list(
                 q=query,
                 fields="files(id, name, mimeType, createdTime)",
                 orderBy="createdTime desc",  # Sort by creation date, newest first
@@ -186,7 +190,7 @@ class GoogleDriveHelper:
 
         # try copying the file
         try:
-            copied_file = self.service.files().copy(
+            copied_file = self.drive_service.files().copy(
                 fileId=template_id,
                 body={
                     "name": newFilename,
