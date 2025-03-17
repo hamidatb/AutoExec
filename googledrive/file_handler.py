@@ -208,8 +208,11 @@ class GoogleDriveHelper:
             return None
 
     def getNextMeeting(self, folder_id:str, meeting_schedule_filename:str):
+        #TODO
+        return None
 
 
+# ---------------- Functions that use the drive helper class ----------------------
 def getFileContentStr(filetype:int) -> str:
     """
     Function to get the file content from the meeting minutes
