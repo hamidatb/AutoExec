@@ -244,7 +244,6 @@ class GoogleDriveHelper:
                 print("No data found.")
                 return
 
-            print("Date, Time, Meeting Title, Reason")
             for row in values:
                 print(f"{row[0]}, {row[1]}, {row[2]}, {row[3]}")
 
@@ -306,7 +305,6 @@ def create_meeting_mins_for_today():
         return
 
     return meetingMinsForTodayLink
-
 
 def get_next_meeting():
     """
