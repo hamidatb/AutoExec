@@ -218,10 +218,41 @@ class GoogleDriveHelper:
             print(f"❌ ERROR: Failed to copy the template document. {e}")
             return None
 
-    def getNextMeeting(self):
-        #TODO
-        return None
+    def readMeetingSchedule(self):
+        """
+        Gets the file content of the meeting schedule file, and returns the string
 
+        Args:
+            None
+        Returns
+            meetingScheduleContent (str): The string representation of the meeting schedule.
+            TODO : Should probably be the most recent 3 upcoming meetings
+        """
+        MEETING_MINS_SCHEDULE_RANGE = self.helperConfig. MEETING_MINS_SCHEDULE_RANGE
+        
+        try:
+            # Call the Sheets API
+            sheet = self.sheets_service.spreadsheets()
+            result = (
+                sheet.values()
+                .get(spreadsheetId=self.helperConfig.MEETING_SCHEDULE_SPREADSHEET_ID, range=self.helperConfig.MEETING_MINS_SCHEDULE_RANGE)
+                .execute()
+            )
+            values = result.get("values", [])
+
+            if not values:
+                print("No data found.")
+                return
+
+            print("Date, Time, Meeting Title, Reason")
+            for row in values:
+                print(f"{row[0]}, {row[1]}, {row[2]}, {row[3]}")
+
+        except Exception as e:
+            print(f"❌ ERROR: Failed to fetch files from Drive. {e}")
+            return None
+
+        return values  
 
 # ---------------- Functions that use the drive helper class ----------------------
 def getFileContentStr(filetype:int) -> str:
