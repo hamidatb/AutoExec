@@ -4,7 +4,10 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 # if modyfying these scopes, delete the old token.json
-SCOPES = ["https://www.googleapis.com/auth/drive"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",  # Full access to Google Sheets
+    "https://www.googleapis.com/auth/drive"         # Full access to Google Drive (all files)
+]
 
 # these are in my .env 
 # these must be recreated if someone wants to run this project on their own environment
@@ -13,7 +16,8 @@ CREDENTIALS_PATH = "credentials.json"
 
 def get_credentials():
     """ 
-        Handles authentication and returns a Google Drive API service instance.
+        Handles authentication and returns a Google Drive API service instance.'
+        The scopes it uses are drive (for docs) and the sheets scope.
 
         Args:
             None
@@ -42,6 +46,7 @@ def get_credentials():
 
     # return the valid creds
     return creds
+
 def main():
     get_credentials()
     
