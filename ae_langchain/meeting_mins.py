@@ -115,8 +115,5 @@ class MeetingMinsFormatter:
 
 if __name__ == "__main__":
     # Fetch latest meeting minutes and format them
-    meetingMinsJson = get_meeting_mins_json()
-    formattedMeetingMins = MeetingMinsFormatter(meetingMinsJson)
-
-    # Print formatted result for debugging
-    # print(formattedMeetingMins.format())
+    meeting_mins_dict = get_meeting_mins_json()
+    formatted_meeting_mins = MeetingMinsFormatter(meeting_mins_dict)
