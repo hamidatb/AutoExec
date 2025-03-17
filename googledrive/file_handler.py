@@ -7,11 +7,7 @@ from googledrive.drive_auth import get_credentials
 
 from config import Config
 
-
-# get the environment vars from the configuration
-Config()
-
-FOLDER_ID = Config.DRIVE_FOLDER_ID # the folder the meeting mins are stored in
+FOLDER_ID = Config.DRIVE_FOLDER_ID 
 EVENTS_SHEET_FILENAME = Config.EVENTS_SHEET_FILENAME
 MEETING_MINS_FILENMAME = Config.MEETING_MINS_FILENMAME
 MEETING_MIN_TEMPLATE_FILENAME = Config.MEETING_MINS_TEMPLATE_FILENMAME
@@ -19,20 +15,23 @@ MEETING_SCHEDULE_FILENAME = Config.MEETING_SCHEDULE_FILENAME
 
 class GoogleDriveHelper:
     """
-    A helper class to interact with Google Drive API.
+    A helper class to interact with Google Drive and Google Sheets APIs.
     Provides methods to authenticate, find, and download files.
     """
-    def __init__(self, creds):
+    def __init__(self):
         """
         Initializes the Google Drive service using provided credentials.
         
         Args:
-            creds: Google API credentials object.
+            None
         """
+        creds = get_credentials()
+
         # Uses the scopes from googledrive.drive_auth
         services = self.get_drive_service(creds)
         self.drive_service = services[0]
         self.sheets_service = services[1]
+
         self.helperConfig = Config()
 
     def validate_drive_fields(**options) -> bool:
@@ -265,18 +264,16 @@ def getFileContentStr(filetype:int) -> str:
     Returns:
         A string of the file content
     """
-    creds = get_credentials()
-
     # make a drive helper instance to use the credentials
-    driverHelperInstance = GoogleDriveHelper(creds)
-    file = driverHelperInstance.get_latest_matching_file()
+    driveHelperInstance = GoogleDriveHelper()
+    file = driveHelperInstance.get_latest_matching_file()
     
     if not file:
         print("No matching files found.")
         return
 
     #print(f"\nFound latest file: {file['name']} ({file['id']})")
-    file_content = driverHelperInstance.download_file(file)
+    file_content = driveHelperInstance.download_file(file)
 
     #print("\nFile content:\n")
     #print(f"{file_content}")
@@ -294,11 +291,9 @@ def create_meeting_mins_for_today():
     Returns:
         meetingMinLink (str): The link to the meeting minutes
     """
-    creds = get_credentials()
-
     # make a drive helper instance to use the credentials
-    driverHelperInstance = GoogleDriveHelper(creds)
-    meetingMinsForTodayLink = driverHelperInstance.make_meeting_mins(FOLDER_ID, MEETING_MIN_TEMPLATE_FILENAME)
+    driveHelperInstance = GoogleDriveHelper()
+    meetingMinsForTodayLink = driveHelperInstance.make_meeting_mins(FOLDER_ID, MEETING_MIN_TEMPLATE_FILENAME)
     
     if not meetingMinsForTodayLink:
         print("No matching files found.")
@@ -306,21 +301,20 @@ def create_meeting_mins_for_today():
 
     return meetingMinsForTodayLink
 
-def get_next_meeting():
+def get_all_meetings():
     """
-    Returns the date of the next meeting, and None if there is no next meeting.
+    Gets the string represnetation of all of the meetings of this group
 
     Args:
         None
+
     Returns:
-        nextMeetingDict (dict) -> The dictionary of the meeting minutes.
+        list: A list of all of the upcoming meetings.
     """
-    creds = get_credentials()
+    driveHelperInstance = GoogleDriveHelper()
+    meetingsList = driveHelperInstance.readMeetingSchedule()
 
-    driveHelperInstance = GoogleDriveHelper(creds)
-    driveHelperInstance.readMeetingSchedule()
-
-    return None
+    return meetingsList
 
 if __name__ == "__main__":
-    get_next_meeting()
+    get_all_meetings()

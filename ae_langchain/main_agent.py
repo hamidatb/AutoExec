@@ -10,7 +10,7 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI 
-from googledrive.file_handler import create_meeting_mins_for_today, get_next_meeting
+from googledrive.file_handler import create_meeting_mins_for_today, get_all_meetings
 from config import Config
 import datetime
 
@@ -51,7 +51,7 @@ def send_meeting_mins_summary():
     Returns:
         str: Confirmation message that the bot was started.
     """
-    from discordbot.discord_client import     BOT_INSTANCE
+    from discordbot.discord_client import BOT_INSTANCE
 
     if BOT_INSTANCE is None:
         return "❌ ERROR: The bot instance is not running."
@@ -84,36 +84,6 @@ def create_meeting_mins() -> str:
         return meetingMinsLink
 
 @tool
-def check_for_upcoming_meeting():
-    """
-    Checks the given Google Document to see when the next upcoming meeting is.
-    If the next meeting in within 4 days, then notify the users.
-    """
-    # get the current date
-    today = datetime.date.today()
-    tmw = today + datetime.timedelta(days=1)
-
-    # get the meeting dates
-    meeting_dates = get_next_meeting()
-    if not meeting_dates:
-        return "No meetings in the next day"
-
-    # get the upcoming meeetings within the next day
-    upcoming_meetings = [date for date in meeting_dates if today <= date <= tmw]
-
-    if upcoming_meetings:
-        closest_meeting = min(upcoming_meetings)
-        # format the messages
-        meeting_date_str = closest_meeting.strftime("%A, %B %d, %Y")
-        message = f"📅 **Upcoming Meeting Alert!**\nWe have a meeting on **{meeting_date_str}**."
-
-        # Send alert to Discord
-        send_output_to_discord(message)
-        return f"✅ Notification sent to Discord: {message}"
-    
-    return "ℹ️ No meetings scheduled in the next day."
-
-@tool
 def send_output_to_discord(messageToSend:str) -> str:
     """
     Sends a message directly to the Discord chat on behalf of the bot.
@@ -143,7 +113,33 @@ def send_output_to_discord(messageToSend:str) -> str:
 
     return "✅ Message has been sent to Discord."
 
+@tool
+def getAllMeetings() -> list:
+    """
+    Retrives a list representation of the meetings for the group.
+
+    Args:
+        None
+        
+    Returns:
+        list: All of the meetings of the group, in list format.
+    """
+    upcomingMeetingsList = get_all_meetings()
+    return upcomingMeetingsList
     
+@tool
+def miscQuestions() -> str:
+    """
+    Tells the agent how to handle misclaneous questions that don't perfectly match to the other tools avalible.
+
+    Args:
+        None
+
+    Returns:
+        string: What to do
+    """
+
+    return "Respond IN DISCORD based on your knowledge as an LLM, so long as it is a work appropriate question. Invoke send_output_to_discord after this."
 # These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
     """
@@ -163,7 +159,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, getAllMeetings,miscQuestions]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
@@ -205,23 +201,24 @@ def run_agent(query: str):
     response = agent_executor.invoke({"input": f"{query}"})
     return response
 
-# run the agent to start the bot
+
+async def run_tasks():
+    # Start the Discord bot by running the agent with the "Start the discord bot" query
+    query = "Start the discord bot"
+    result = await run_agent(query)  # Ensure `run_agent` is async
+    print(result["output"])  # Print confirmation that the bot has started
+
+    # Add any other async tasks if needed
+    
+
+# Works
 if __name__ == "__main__":
-    async def scheduled_meeting_check():
-        while True:
-            # Call the tool to check for an upcoming meeting
-            check_for_upcoming_meeting()
-            # Wait for 60 seconds before checking again
-            await asyncio.sleep(60)
+    query = "Start the discord bot"
+    asyncio.run(run_agent(query))  # Run the async function
 
-    async def main():
-        # Start the scheduled meeting check as a background task
-        asyncio.create_task(scheduled_meeting_check())
-
-        # Start the Discord bot by running your agent with the "Start the discord bot" query
-        query = "Start the discord bot"
-        result = run_agent(query)
-        print(result["output"])  # Print confirmation that the bot has started
-
-    # Run both tasks concurrently
-    asyncio.run(main())
+# Does not work, causes error RuntimeError: asyncio.run() cannot be called from a running event loop
+"""
+if __name__ == "__main__":
+    
+    asyncio.run(run_tasks())  # Run the async function
+"""
