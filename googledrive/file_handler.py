@@ -50,7 +50,7 @@ class GoogleDriveHelper:
         Returns an authenticated Google Drive, and Google Sheets service instance.
         """
         drive_service = build("drive", "v3", credentials=creds)
-        sheets_service = build("sheets", "v3", credentials=creds)
+        sheets_service = build("sheets", "v4", credentials=creds)
 
         return [drive_service, sheets_service]
 
@@ -320,6 +320,9 @@ def get_next_meeting():
     creds = get_credentials()
 
     driveHelperInstance = GoogleDriveHelper(creds)
-    nextMeetingDict = driveHelperInstance.getNextMeeting(FOLDER_ID, MEETING_SCHEDULE_FILENAME)
+    driveHelperInstance.readMeetingSchedule()
 
-    return nextMeetingDict
+    return None
+
+if __name__ == "__main__":
+    get_next_meeting()
