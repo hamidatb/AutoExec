@@ -317,7 +317,7 @@ def create_meeting_mins_for_today():
     """
     # make a drive helper instance to use the credentials
     driveHelperInstance = GoogleDriveHelper()
-    meetingMinsForTodayLink = driveHelperInstance.make_meeting_mins(FOLDER_ID, MEETING_MIN_TEMPLATE_FILENAME)
+    meetingMinsForTodayLink = driveHelperInstance.make_meeting_mins()
     
     if not meetingMinsForTodayLink:
         print("No matching files found.")
@@ -325,38 +325,3 @@ def create_meeting_mins_for_today():
 
     return meetingMinsForTodayLink
 
-def get_recent_meetings(amount_of_meetings_to_get:int=3):
-    """
-    Gets the string represnetation of all of the meetings of this group
-
-    Args:
-        None
-
-    Returns:
-        list: A list of all of the upcoming meetings.
-    """
-    driveHelperInstance = GoogleDriveHelper()
-    meetingsList = driveHelperInstance.get_meeting_schedule_list(amount_of_meetings_to_get)
-
-    return meetingsList
-
-def format_meeting_schedule(meeting_list:list) -> str:
-    """
-    Formats the list of meetings
-    """
-    formatted_meetings = "**📅 Upcoming Meetings:**\n"
-
-    for meeting in meeting_list:
-        meeting["date"] = meeting["date"].strftime("%B %d")  # Convert back to string
-
-        formatted_meetings += (
-            f"\n• **Date:** {meeting['date']} | **Time:** {meeting['time']} "
-            f"\n    **Reason:** {meeting['title']}"
-            f"\n    **Where:** {meeting['location']}"
-            f"\n    **Minutes Link:** {meeting['minutes']}"
-        )
-    return formatted_meetings
-
-if __name__ == "__main__":
-    meetings = get_recent_meetings()
-    print(format_meeting_schedule(meetings))

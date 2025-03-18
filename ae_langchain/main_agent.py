@@ -10,7 +10,10 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI 
-from googledrive.file_handler import create_meeting_mins_for_today, get_recent_meetings, format_meeting_schedule
+
+from googledrive.file_handler import create_meeting_mins_for_today
+from googledrive.calendar import get_upcoming_meetings_list, get_formatted_meeting_schedule
+
 from config import Config
 import datetime
 
@@ -79,6 +82,7 @@ def create_meeting_mins() -> str:
     """
     meetingMinsLink = create_meeting_mins_for_today()
     if not meetingMinsLink:
+        print("There was an error in creating the meeting minutes")
         return "There was an error in creating the meeting minutes"
     else:
         return meetingMinsLink
@@ -129,12 +133,12 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
     """
     # Ensure an argument is provided
     if amount_of_meetings_to_return is None:
-        raise ValueError("❌ ERROR: 'amount_of_meetings_to_return' is REQUIRED but was not provided.")
+        raise ValueError("❌ ERROR: 'amount_of_meetings_to_return' is REQUIRED but was not provided. Please try again")
 
-    upcoming_meeting_list = get_recent_meetings(amount_of_meetings_to_return)
-    formatted_meeting_schedule_str = format_meeting_schedule(upcoming_meeting_list)
-
-    send_output_to_discord(formatted_meeting_schedule_str)
+    # error handling is done within each of these respective functions
+    meetings = get_upcoming_meetings_list(amount_of_meetings_to_return)
+    res = get_formatted_meeting_schedule(meetings)
+    send_output_to_discord(res)
 
     return "The meeting schedule has been sent to Discord now"
     
@@ -145,16 +149,14 @@ def send_reminder_for_next_meeting():
     """
 
     # get the details of the most recent meeting
-    upcoming_meeting = get_recent_meetings(1)
-
-    upcoming_meeting[0]["date"] = upcoming_meeting[0]["date"].strftime("%B %d")  # Convert back to string
+    upcoming_meeting = get_upcoming_meetings_list(1)
 
     formatted_meeting_reminder = f"""
         Hi @everyone! Reminder that we have an upcoming meeting:
-            **Date:**: {upcoming_meeting[0]["date"]} | **Time:** {upcoming_meeting[0]["time"]}
-            **Reason:**: {upcoming_meeting[0]["title"]}
-            **Where**: {upcoming_meeting[0]["location"]}
-            **Meeting Mins**: {upcoming_meeting[0]["minutes"]}
+
+        **Date:**: {upcoming_meeting[0]["date"]} | **Time:** {upcoming_meeting[0]["start_time"]}
+        **Reason:**: {upcoming_meeting[0]["title"]}
+        **Where**: {upcoming_meeting[0]["location"]}
     """
 
     send_output_to_discord(formatted_meeting_reminder)
@@ -244,15 +246,28 @@ async def run_tasks():
 
     # Add any other async tasks if needed
     
+async def send_hourly_message():
+    """
+    Sends a message to Discord every hour.
+    """
+    while True:
+        query = "Send a message saying 'hi'"
+        result = await run_agent(query)
+        print(result["output"])  # Confirm message sent
+        await asyncio.sleep(3600)  # Wait for 1 hour (3600 seconds)
 
 # Works
 if __name__ == "__main__":
     query = "Start the discord bot"
-    asyncio.run(run_agent(query))  # Run the async function
+    asyncio.run(run_agent(query))  # Run the async function"""
 
 # Does not work, causes error RuntimeError: asyncio.run() cannot be called from a running event loop
-"""
-if __name__ == "__main__":
-    
-    asyncio.run(run_tasks())  # Run the async function
-"""
+"""if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+
+    try:
+        loop.run_until_complete(run_tasks())  # Run the async function without creating a new event loop
+    except KeyboardInterrupt:
+        print("Shutting down...")
+    finally:
+        loop.close()"""
