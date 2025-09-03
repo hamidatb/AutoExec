@@ -292,7 +292,7 @@ class TaskManager:
                     message += f"Due: {task.get('due_at')}\n"
                     message += f"Status: {task.get('status')}"
                     
-                    await bot_instance.send_any_message(message)
+                    await bot_instance.send_any_message(message, reminder_channel_id)
             
             # Get tasks due in next 24 hours
             # This would check for upcoming deadlines and send reminders

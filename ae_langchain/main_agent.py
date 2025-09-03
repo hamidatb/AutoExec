@@ -111,9 +111,11 @@ def send_output_to_discord(messageToSend:str) -> str:
     # Run the message-sending function inside the bot event loop
     loop = asyncio.get_event_loop()
     if loop.is_running():
-        loop.create_task(BOT_INSTANCE.send_any_message(messageToSend))  # Use existing bot instance
+        # Call send_any_message with the message parameter
+        loop.create_task(BOT_INSTANCE.send_any_message(str(messageToSend)))
     else:
-        asyncio.run(BOT_INSTANCE.send_any_message(messageToSend))  # Create new loop if needed
+        # Call send_any_message with the message parameter
+        asyncio.run(BOT_INSTANCE.send_any_message(str(messageToSend)))
 
     return "✅ Message has been sent to Discord."
 

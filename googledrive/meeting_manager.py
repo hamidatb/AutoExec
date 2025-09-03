@@ -257,7 +257,7 @@ class MeetingManager:
                         message += f"Time: {meeting.get('start_at_local', meeting['start_at_utc'])}\n"
                         message += f"Channel: <#{meeting.get('channel_id', '')}>"
                         
-                        await bot_instance.send_any_message(message)
+                        await bot_instance.send_any_message(message, reminder_channel_id)
                     
                     elif timedelta(minutes=-5) <= time_until <= timedelta(minutes=5):
                         # T0 reminder
@@ -268,7 +268,7 @@ class MeetingManager:
                         else:
                             message += "No minutes document linked yet"
                         
-                        await bot_instance.send_any_message(message)
+                        await bot_instance.send_any_message(message, reminder_channel_id)
                         
                         # Schedule minutes parsing in 30 minutes
                         asyncio.create_task(self._schedule_minutes_parsing(meeting, 30))
