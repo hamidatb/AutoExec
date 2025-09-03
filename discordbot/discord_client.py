@@ -10,6 +10,7 @@ from googledrive.meeting_manager import MeetingManager
 from googledrive.task_manager import TaskManager
 from googledrive.setup_manager import SetupManager
 from googledrive.minutes_parser import MinutesParser
+from ae_langchain.main_agent import run_agent
 from config import Config
 
 Config()
@@ -17,7 +18,7 @@ Config()
 class ClubExecBot(discord.Client):
     """
     Club Exec Task Manager Bot - Discord client implementation.
-    Handles slash commands, setup process, and user interactions.
+    Handles slash commands, setup process, user interactions, and natural language processing.
     """
     
     def __init__(self):
@@ -45,6 +46,9 @@ class ClubExecBot(discord.Client):
         
         # Bot configuration
         self.club_configs = {}  # Store club configurations in memory
+        
+        # LangChain agent for natural language processing
+        self.langchain_agent = None
         
     async def setup_hook(self):
         """Set up slash commands when the bot starts."""
@@ -78,9 +82,110 @@ class ClubExecBot(discord.Client):
             await self.handle_dm_setup(message)
             return
             
+        # Handle natural language commands and queries
+        await self.handle_natural_language(message)
+            
         # Handle task replies in public channels
         if message.mentions and self.user in message.mentions:
             await self.handle_task_reply(message)
+            
+    async def handle_natural_language(self, message: discord.Message):
+        """Handle natural language messages using LangChain agent."""
+        content = message.content.strip()
+        
+        # Check for AutoExec commands
+        if content.startswith('$AE'):
+            await self.handle_autoexec_command(message)
+            return
+            
+        # Check for meeting minutes request
+        if content.startswith('$AEmm'):
+            await self.handle_meeting_minutes_request(message)
+            return
+            
+        # Check for general natural language queries
+        if self.should_use_langchain(content):
+            await self.handle_langchain_query(message)
+            return
+            
+    async def handle_autoexec_command(self, message: discord.Message):
+        """Handle $AE commands using LangChain agent."""
+        try:
+            # Remove the $AE prefix
+            query = message.content[4:].strip()
+            
+            if not query:
+                await message.channel.send("🤖 I'm here! What would you like me to help you with?")
+                return
+                
+            # Use LangChain agent to process the query
+            result = run_agent(query)
+            response = result.get("output", "I'm sorry, I couldn't process that request.")
+            
+            # Send response
+            await message.channel.send(f"🤖 **AutoExec Response:**\n{response}")
+            
+        except Exception as e:
+            print(f"Error in AutoExec command: {e}")
+            await message.channel.send("❌ Sorry, I encountered an error processing your request.")
+            
+    async def handle_meeting_minutes_request(self, message: discord.Message):
+        """Handle $AEmm meeting minutes requests."""
+        try:
+            # This would integrate with the meeting minutes system
+            # For now, send a helpful response
+            response = "📋 **Meeting Minutes Request**\n\n"
+            response += "I can help you with meeting minutes! Here are your options:\n\n"
+            response += "• Use `/meeting upcoming` to see scheduled meetings\n"
+            response += "• Use `/meeting linkminutes <url>` to link minutes documents\n"
+            response += "• I'll automatically parse action items from linked minutes\n\n"
+            response += "Need help? Use `/help` to see all available commands!"
+            
+            await message.channel.send(response)
+            
+        except Exception as e:
+            print(f"Error in meeting minutes request: {e}")
+            await message.channel.send("❌ Sorry, I encountered an error processing your request.")
+            
+    async def handle_langchain_query(self, message: discord.Message):
+        """Handle general natural language queries using LangChain."""
+        try:
+            # Use LangChain agent for natural language understanding
+            result = run_agent(message.content)
+            response = result.get("output", "I'm sorry, I couldn't understand that request.")
+            
+            # Send response
+            await message.channel.send(f"🤖 **AI Assistant:**\n{response}")
+            
+        except Exception as e:
+            print(f"Error in LangChain query: {e}")
+            await message.channel.send("❌ Sorry, I encountered an error processing your request.")
+            
+    def should_use_langchain(self, content: str) -> bool:
+        """Determine if a message should be processed by LangChain."""
+        # Check for natural language patterns
+        natural_language_indicators = [
+            'can you', 'could you', 'please', 'help me', 'how do i',
+            'what is', 'when is', 'where is', 'why', 'how',
+            'i need', 'i want', 'i would like', 'tell me', 'show me'
+        ]
+        
+        content_lower = content.lower()
+        
+        # Check for natural language patterns
+        for indicator in natural_language_indicators:
+            if indicator in content_lower:
+                return True
+                
+        # Check for question marks
+        if '?' in content:
+            return True
+            
+        # Check for longer, conversational messages
+        if len(content.split()) > 5:
+            return True
+            
+        return False
             
     async def handle_dm_setup(self, message: discord.Message):
         """Handle setup process in DMs."""
@@ -705,6 +810,12 @@ async def help_command(interaction: discord.Interaction):
 **User Preferences:**
 • `/subscribe` - Subscribe to private reminders
 
+**Natural Language Commands:**
+• `$AE <query>` - Use AI agent for general queries
+• `$AEmm` - Request meeting minutes
+• Natural language: "Can you help me schedule a meeting?"
+• Questions: "What meetings do I have today?"
+
 **Natural Language Responses:**
 Reply to task reminders with:
 • "done" - Mark task complete
@@ -726,6 +837,7 @@ def run_bot():
         
     try:
         print("🚀 Starting Club Exec Task Manager Bot...")
+        print("🤖 Bot now supports natural language and LangChain integration!")
         bot.run(bot_token)
     except Exception as e:
         print(f"❌ Error starting bot: {e}")
