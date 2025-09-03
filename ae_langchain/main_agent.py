@@ -164,6 +164,37 @@ def send_reminder_for_next_meeting():
     send_output_to_discord(formatted_meeting_reminder)
 
     return "The reminder for our nearest meeting has now been sent to Discord"
+
+@tool
+def get_meeting_reminder_info():
+    """
+    Get information about the next upcoming meeting for display purposes.
+    Use this when users ask about meeting reminders or upcoming meetings.
+    """
+
+    try:
+        # get the details of the most recent meeting
+        upcoming_meeting = get_upcoming_meetings_list(1)
+        
+        if not upcoming_meeting:
+            return "No upcoming meetings scheduled at the moment."
+            
+        meeting = upcoming_meeting[0]
+        reminder_info = f"""
+**Next Upcoming Meeting:**
+
+**Date:** {meeting.get('date', 'Not specified')}
+**Time:** {meeting.get('start_time', 'Not specified')}
+**Title:** {meeting.get('title', 'No title')}
+**Location:** {meeting.get('location', 'Not specified')}
+
+This meeting is coming up soon! Would you like me to send a reminder to everyone?
+        """
+        
+        return reminder_info
+        
+    except Exception as e:
+        return f"I encountered an error getting meeting information: {str(e)}"
 @tool
 def handle_misc_questions() -> str:
     """
@@ -255,7 +286,24 @@ def run_agent_text_only(query: str):
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a helpful assistant. Provide direct, helpful responses to user questions. Do not mention sending messages to Discord or using any Discord tools."),
+        ("system", """You are AutoExec, an AI-powered club executive task manager. You have access to tools that can help with meetings, tasks, and scheduling.
+
+IMPORTANT: When users ask about meetings, tasks, or scheduling, ALWAYS use the appropriate tools to provide accurate, up-to-date information. Don't just give generic responses.
+
+Available tools:
+- create_meeting_mins: Create meeting minutes for today
+- send_meeting_schedule: Get and format upcoming meeting schedules  
+- get_meeting_reminder_info: Get information about upcoming meetings and reminders
+
+Use these tools to provide helpful, actionable responses. 
+
+SPECIFIC EXAMPLES:
+- If someone asks "Are you set up yet?" → Use handle_misc_questions or respond directly
+- If someone asks about meeting reminders → Use get_meeting_reminder_info to show meeting details
+- If someone asks about upcoming meetings → Use send_meeting_schedule to get the schedule
+- If someone asks about meeting minutes → Use create_meeting_mins
+
+Always try to use the appropriate tool first before giving generic responses."""),
         ("user", "{input}"),
         MessagesPlaceholder("agent_scratchpad")
     ])
@@ -272,8 +320,13 @@ def run_agent_text_only(query: str):
     # Create a simple agent without Discord tools
     from langchain.agents import AgentExecutor, create_tool_calling_agent
     
-    # Only include non-Discord tools
-    safe_tools = [create_meeting_mins, send_meeting_schedule, handle_misc_questions]
+    # Include tools that don't require Discord sending but are useful for queries
+    safe_tools = [
+        create_meeting_mins, 
+        send_meeting_schedule, 
+        handle_misc_questions, 
+        get_meeting_reminder_info
+    ]
     
     agent = create_tool_calling_agent(llm, safe_tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=safe_tools, verbose=True)
