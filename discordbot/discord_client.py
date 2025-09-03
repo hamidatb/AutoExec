@@ -50,6 +50,9 @@ class ClubExecBot(discord.Client):
         # LangChain agent for natural language processing
         self.langchain_agent = None
         
+        # Store last channel context for LangChain responses
+        self.last_channel_id = None
+        
     async def setup_hook(self):
         """Set up slash commands when the bot starts."""
         await self.tree.sync()
@@ -93,6 +96,9 @@ class ClubExecBot(discord.Client):
         """Handle natural language messages using LangChain agent."""
         content = message.content.strip()
         
+        # Store channel context for LangChain responses
+        self.last_channel_id = message.channel.id
+        
         # Check for AutoExec commands
         if content.startswith('$AE'):
             await self.handle_autoexec_command(message)
@@ -111,6 +117,9 @@ class ClubExecBot(discord.Client):
     async def handle_autoexec_command(self, message: discord.Message):
         """Handle $AE commands using LangChain agent."""
         try:
+            # Store channel context for LangChain responses
+            self.last_channel_id = message.channel.id
+            
             # Remove the $AE prefix
             query = message.content[4:].strip()
             
@@ -132,6 +141,9 @@ class ClubExecBot(discord.Client):
     async def handle_meeting_minutes_request(self, message: discord.Message):
         """Handle $AEmm meeting minutes requests."""
         try:
+            # Store channel context for LangChain responses
+            self.last_channel_id = message.channel.id
+            
             # This would integrate with the meeting minutes system
             # For now, send a helpful response
             response = "📋 **Meeting Minutes Request**\n\n"
@@ -150,6 +162,9 @@ class ClubExecBot(discord.Client):
     async def handle_langchain_query(self, message: discord.Message):
         """Handle general natural language queries using LangChain."""
         try:
+            # Store channel context for LangChain responses
+            self.last_channel_id = message.channel.id
+            
             # Use LangChain agent for natural language understanding
             result = run_agent(message.content)
             response = result.get("output", "I'm sorry, I couldn't understand that request.")
@@ -287,6 +302,10 @@ class ClubExecBot(discord.Client):
                 
     async def send_any_message(self, message: str, channel_id: int = None):
         """Send a message to a specific channel."""
+        # Use last_channel_id as default if no channel_id provided
+        if not channel_id and self.last_channel_id:
+            channel_id = self.last_channel_id
+            
         if channel_id:
             channel = self.get_channel(channel_id)
             if channel:
