@@ -7,17 +7,29 @@ echo "🤖 Launching AutoExec Bot..."
 
 # Check if virtual environment exists
 if [ ! -d "venv" ]; then
-    echo "❌ Virtual environment not found. Please run setup_env.sh first."
-    exit 1
+    echo "❌ Virtual environment not found. Running setup first..."
+    source ./setup_env.sh
 fi
 
 # Activate virtual environment
 source venv/bin/activate
 
-# Load environment variables
+# Load environment variables using the improved setup script
 if [ -f ".env" ]; then
     echo "🔑 Loading environment variables..."
-    export $(cat .env | grep -v '^#' | xargs)
+    
+    # Read .env file and export variables properly
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
+            # Remove quotes and handle spaces around equals sign
+            if [[ "$line" =~ ^[[:space:]]*([^[:space:]]+)[[:space:]]*=[[:space:]]*\"?([^\"]*)\"?[[:space:]]*$ ]]; then
+                var_name="${BASH_REMATCH[1]}"
+                var_value="${BASH_REMATCH[2]}"
+                export "$var_name"="$var_value"
+            fi
+        fi
+    done < .env
 else
     echo "❌ .env file not found!"
     exit 1
