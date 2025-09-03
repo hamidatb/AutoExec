@@ -1,39 +1,47 @@
 # Club Exec Task Manager Bot
 
-A comprehensive Discord bot that automates executive task management for clubs and organizations. The bot integrates with Google Docs and Google Sheets to manage executive tasks, meetings, and deadlines automatically.
+A powerful Discord bot that automates executive task management by integrating with Google Docs and Google Sheets. Perfect for clubs, organizations, and teams that need to track action items from meetings and manage deadlines effectively.
 
-## 🎯 Features
+## 🚀 Features
 
-### **Meeting Management**
-- **Schedule meetings** with `/meeting set` command
-- **Automatic reminders** at T-2h and T0
-- **Minutes parsing** from Google Docs with automatic task extraction
-- **Agenda templates** for structured meetings
-- **Meeting cancellation** and rescheduling
+### **Core Functionality**
+- **Automated Meeting Management** - Schedule, track, and manage meetings with automatic reminders
+- **Smart Task Tracking** - Parse action items from meeting minutes and create tracked tasks
+- **Deadline Management** - Automated reminders and escalation for overdue tasks
+- **Google Integration** - Seamless integration with Google Docs and Google Sheets
+- **Discord Integration** - Full Discord bot with slash commands and natural language responses
+
+### **Meeting Features**
+- Schedule meetings with `/meeting set`
+- View upcoming meetings with `/meeting upcoming`
+- Create agenda templates with `/meeting agenda`
+- Link minutes documents and automatically parse action items
+- Automatic reminders at T-2h, T-0, and T+30m
 
 ### **Task Management**
-- **Automatic task creation** from meeting minutes
-- **Manual task assignment** with `/assign` command
-- **Deadline tracking** with automated reminders
-- **Status updates** via natural language responses
-- **Task rescheduling** and completion tracking
+- Assign tasks to team members with `/assign`
+- View task summaries with `/summary`
+- Check individual status with `/status @user`
+- Mark tasks complete with `/done`
+- Reschedule deadlines with `/reschedule`
+- Natural language responses: "done", "not yet", "reschedule to [date]"
 
-### **Smart Automation**
-- **Minutes parsing** from structured Google Docs tables
-- **Action item extraction** with automatic task creation
-- **Deadline reminders** at T-24h, T-2h, T+0h (overdue)
-- **Escalation system** for missed deadlines
-- **Background monitoring** for continuous operation
+### **Automation & Reminders**
+- **Task Reminders**: T-24h, T-2h, overdue, and escalation after 48h
+- **Meeting Reminders**: T-2h, T-0, and automatic minutes processing
+- **Smart Escalation**: Automatic admin notifications for overdue tasks
+- **Background Processing**: Persistent reminders across bot restarts
 
-### **User Interaction**
-- **Natural language responses** ("done", "not yet", "reschedule to...")
-- **Private DM setup** for admins
-- **Public channel commands** for general use
-- **Role-based permissions** (admin vs. regular users)
+## 🛠️ Setup Instructions
 
-## 🚀 Quick Start
+### **1. Prerequisites**
+- Python 3.8 or higher
+- Discord Bot Token
+- Google Cloud Project with APIs enabled
+- Google Service Account credentials
 
-### 1. **Environment Setup**
+### **2. Installation**
+
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -47,223 +55,294 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. **Google API Configuration**
-1. Create a Google Cloud Project
-2. Enable Google Drive and Google Sheets APIs
-3. Create service account credentials
-4. Download `servicekey.json` to the `googledrive/` folder
-5. Share your Google Drive folders with the service account email
+### **3. Google Cloud Setup**
 
-### 3. **Environment Variables**
-Create a `.env` file in the root directory:
-```env
-# Discord Bot Configuration
-DISCORD_BOT_TOKEN=your_discord_bot_token
-DISCORD_CHANNEL_ID=your_default_channel_id
+1. **Create a Google Cloud Project**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select existing one
 
-# Google Drive Configuration
-DRIVE_FOLDER_ID=your_google_drive_folder_id
+2. **Enable Required APIs**
+   - Google Drive API
+   - Google Sheets API
+   - Google Docs API
+   - Google Calendar API (optional)
 
-# Club Configuration (optional - can be set during setup)
-CLUB_NAME=Your Club Name
-TIMEZONE=America/Edmonton
-TASK_REMINDER_CHANNEL_ID=your_task_channel_id
-MEETING_REMINDER_CHANNEL_ID=your_meeting_channel_id
-ESCALATION_CHANNEL_ID=your_escalation_channel_id
+3. **Create Service Account**
+   - Go to IAM & Admin > Service Accounts
+   - Create new service account
+   - Download JSON key file
+   - Place in `googledrive/servicekey.json`
+
+4. **Share Google Drive Folder**
+   - Create a folder for your club's documents
+   - Share with service account email (read/write access)
+
+### **4. Discord Bot Setup**
+
+1. **Create Discord Application**
+   - Go to [Discord Developer Portal](https://discord.com/developers/applications)
+   - Create new application
+   - Go to Bot section and create bot
+   - Copy bot token
+
+2. **Invite Bot to Server**
+   - Use OAuth2 > URL Generator
+   - Select scopes: `bot`, `applications.commands`
+   - Select permissions: `Send Messages`, `Read Message History`, `Use Slash Commands`
+   - Use generated URL to invite bot
+
+### **5. Environment Configuration**
+
+```bash
+# Copy environment template
+cp env.example .env
+
+# Edit .env with your values
+nano .env
 ```
 
-### 4. **Run the Bot**
+**Required Environment Variables:**
+```env
+DISCORD_BOT_TOKEN=your_bot_token_here
+CLUB_NAME=Your Club Name
+TIMEZONE=America/Edmonton
+```
+
+**Optional Environment Variables:**
+```env
+TASK_REMINDER_CHANNEL_ID=channel_id_for_task_reminders
+MEETING_REMINDER_CHANNEL_ID=channel_id_for_meeting_reminders
+ESCALATION_CHANNEL_ID=channel_id_for_escalations
+```
+
+### **6. Run the Bot**
+
 ```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Run the bot
 python discordbot/discord_client.py
 ```
 
-## 📋 Setup Process
+## 📋 Bot Setup Process
 
-### **First-Time Club Setup**
-1. **Invite the bot** to your Discord server
-2. **Start setup** by sending `/setup` in a private DM with the bot
-3. **Follow the guided setup**:
-   - Club name
-   - Admin selection (@mention)
-   - Google Sheets creation
-   - Channel configuration
+### **First-Time Setup**
+1. **Invite bot to your Discord server**
+2. **Start private DM with the bot**
+3. **Run `/setup` command**
+4. **Follow the setup wizard:**
+   - Enter club name
+   - @mention the admin user
+   - Bot creates Google Sheets automatically
+   - Configure Discord channels
 
 ### **Setup Steps**
-1. **Club Name**: Provide your club or organization name
-2. **Admin Selection**: @mention the person who should have admin privileges
-3. **Google Sheets Creation**: Bot automatically creates:
+1. **Club Name** - Sets the name for your organization
+2. **Admin Selection** - Choose who has full bot control
+3. **Google Sheets Creation** - Bot creates:
    - `{Club Name} Task Manager Config` - Main configuration
    - `{Club Name} Tasks - {Month Year}` - Task tracking
    - `{Club Name} Meetings - {Month Year}` - Meeting management
-4. **Channel Configuration**: Set channels for reminders and escalations
+4. **Channel Configuration** - Set channels for reminders and escalations
 
-## 🎮 Commands
+## 🎯 Usage Examples
 
-### **Admin Commands (DM Only)**
-- `/setup` - Start club configuration
-- `/meeting set title:"Title" start:"YYYY-MM-DD HH:MM" [end:"YYYY-MM-DD HH:MM"]` - Schedule meeting
-- `/meeting cancel <meeting_id>` - Cancel meeting
-- `/meeting linkminutes <meeting_id> <url>` - Link minutes document
-- `/assign @user "Task title" [due:YYYY-MM-DD HH:MM]` - Assign task
+### **Meeting Management**
 
-### **General Commands**
-- `/meeting upcoming` - Show upcoming meetings
-- `/meeting agenda [title]` - Create agenda template
-- `/summary [month]` - Show all open tasks
-- `/status @user` - Show user's open tasks
-- `/done <task_id>` - Mark task complete
-- `/reschedule <task_id> <new_date>` - Reschedule task
-- `/subscribe` - Subscribe to private DMs
+```bash
+# Schedule a meeting
+/meeting set title:"Weekly Exec Meeting" start:"2025-09-08 17:00" end:"2025-09-08 18:00"
+
+# View upcoming meetings
+/meeting upcoming
+
+# Create agenda template
+/meeting agenda title:"Project Review Meeting"
+```
+
+### **Task Management**
+
+```bash
+# Assign a task
+/assign @username "Prepare presentation slides" due:"2025-09-10 12:00"
+
+# View task summary
+/summary
+/summary September 2025
+
+# Check user status
+/status @username
+
+# Mark task complete
+/done task_id_here
+
+# Reschedule task
+/reschedule task_id_here "2025-09-12 15:00"
+```
 
 ### **Natural Language Responses**
-- Reply **"done"** to mark a task complete
-- Reply **"not yet"** to mark a task in progress
-- Reply **"reschedule to <date>"** to change deadline
+When the bot pings you about a task, simply reply:
+- **"done"** → Marks task as complete
+- **"not yet"** → Marks task as in progress
+- **"reschedule to 2025-09-15"** → Changes deadline
 
-## 📊 Google Sheets Schema
+## 🔧 Configuration
 
-### **Tasks Sheet**
+### **Bot Behavior Settings**
+```env
+# Reminder intervals
+REMINDER_CHECK_INTERVAL=3600        # Task reminders every hour
+MEETING_REMINDER_INTERVAL=300       # Meeting checks every 5 minutes
+TASK_ESCALATION_DELAY=172800        # Escalate after 48 hours
+
+# Meeting reminder times
+MEETING_REMINDER_2H=2               # 2 hours before meeting
+MEETING_REMINDER_1H=1               # 1 hour before meeting
+MEETING_REMINDER_30M=0.5            # 30 minutes before meeting
+
+# Task reminder times
+TASK_REMINDER_24H=24                # 24 hours before deadline
+TASK_REMINDER_2H=2                  # 2 hours before deadline
+```
+
+### **Google Sheets Schema**
+
+#### **Tasks Sheet**
 | Column | Description |
 |--------|-------------|
 | task_id | Unique UUID |
-| title | Action item description |
-| owner_discord_id | Discord ID of responsible exec |
-| owner_name | Name from minutes |
+| title | Task description |
+| owner_discord_id | Discord ID of responsible person |
+| owner_name | Human-readable name |
 | due_at | ISO 8601 timestamp |
 | status | open, in_progress, done, blocked |
 | priority | low, medium, high |
-| source_doc | Link to minutes doc |
+| source_doc | Link to minutes document |
 | channel_id | Reminder channel |
-| notes | Optional notes |
+| notes | Additional information |
 
-### **Meetings Sheet**
+#### **Meetings Sheet**
 | Column | Description |
 |--------|-------------|
 | meeting_id | Unique UUID |
 | title | Meeting title |
 | start_at_utc | Start time UTC |
 | end_at_utc | End time UTC |
-| start_at_local | Local readable string |
-| end_at_local | Local readable string |
+| start_at_local | Local readable time |
+| end_at_local | Local readable time |
 | channel_id | Meeting channel |
-| minutes_doc_url | Link to Google Doc |
+| minutes_doc_url | Google Docs link |
 | status | scheduled, started, ended, canceled |
-
-### **Config Sheet**
-- Club name and admin Discord ID
-- Channel configurations
-- Timezone settings
-- Allowed role IDs
+| created_by | Discord ID of creator |
 
 ## 🔄 Automation Flow
 
-### **Meeting Workflow**
-1. **Admin schedules meeting** with `/meeting set`
-2. **Bot creates meeting entry** in Google Sheets
-3. **Automatic reminders** sent at T-2h and T0
-4. **30 minutes after meeting** → Bot parses linked minutes
-5. **Action items extracted** and tasks created automatically
-6. **Task reminders** sent based on deadlines
+### **Meeting Lifecycle**
+1. **Admin schedules meeting** → Bot creates entry in Meetings sheet
+2. **T-2h reminder** → Bot sends reminder to meeting channel
+3. **T-0 reminder** → Bot announces meeting start
+4. **T+30m processing** → Bot parses linked minutes document
+5. **Task creation** → Bot extracts action items and creates tasks
 
-### **Task Workflow**
-1. **Tasks created** from meeting minutes or manual assignment
-2. **Reminders sent** at T-24h, T-2h, T+0h (overdue)
-3. **Users respond** with natural language
-4. **Bot updates** task status automatically
-5. **Escalation** to admin if tasks overdue for 48+ hours
-
-## 📝 Meeting Minutes Format
-
-The bot expects meeting minutes in Google Docs with an **Action Items** table containing:
-
-| Role | Team Member | Action Items To Be Done By Next Meeting | Deadline |
-|------|-------------|-------------------------------------------|----------|
-| President | John Doe | Prepare budget proposal | 2025-09-15 |
-| Secretary | Jane Smith | Send meeting invites | Next meeting |
-
-## 🛠️ Technical Architecture
-
-### **Core Components**
-- **Discord Client** (`discordbot/discord_client.py`) - Main bot interface
-- **Setup Manager** (`googledrive/setup_manager.py`) - Club configuration
-- **Meeting Manager** (`googledrive/meeting_manager.py`) - Meeting operations
-- **Task Manager** (`googledrive/task_manager.py`) - Task operations
-- **Sheets Manager** (`googledrive/sheets_manager.py`) - Google Sheets integration
-- **Minutes Parser** (`googledrive/minutes_parser.py`) - Document parsing
-
-### **Data Flow**
-```
-Discord Bot → Managers → Google Sheets → Google Docs
-     ↓              ↓           ↓           ↓
-User Commands → Business Logic → Data Storage → Content Parsing
-```
-
-## 🔧 Configuration
-
-### **Bot Permissions**
-The bot requires the following Discord permissions:
-- Send Messages
-- Read Message History
-- Use Slash Commands
-- Manage Messages (for cleanup)
-
-### **Google API Scopes**
-- `https://www.googleapis.com/auth/spreadsheets`
-- `https://www.googleapis.com/auth/drive`
-- `https://www.googleapis.com/auth/documents.readonly`
+### **Task Lifecycle**
+1. **Task created** → From minutes parsing or manual assignment
+2. **T-24h reminder** → Bot sends deadline reminder
+3. **T-2h reminder** → Bot sends urgent reminder
+4. **T+0 (overdue)** → Bot marks as overdue
+5. **T+48h escalation** → Bot notifies admin in escalation channel
 
 ## 🚨 Troubleshooting
 
 ### **Common Issues**
-1. **Bot not responding**: Check Discord token and permissions
-2. **Google Sheets errors**: Verify service account permissions
-3. **Setup not working**: Ensure bot has admin permissions in server
-4. **Minutes not parsing**: Check document format and table structure
+
+**Bot not responding to commands:**
+- Check bot has proper permissions
+- Verify slash commands are synced
+- Check bot is online and connected
+
+**Google Sheets errors:**
+- Verify service account has proper access
+- Check API quotas and limits
+- Ensure required APIs are enabled
+
+**Reminders not working:**
+- Check channel IDs in configuration
+- Verify bot has permission to send messages
+- Check timezone configuration
 
 ### **Debug Mode**
-Enable debug logging by setting environment variable:
+Enable debug logging by setting environment variables:
 ```env
 DEBUG=true
+LOG_LEVEL=DEBUG
 ```
 
-## 🔮 Future Enhancements
+## 🔮 Future Features
 
-### **Planned Features**
-- [ ] Attendance tracking with buttons
-- [ ] Automatic Google Doc creation for minutes
-- [ ] Web dashboard for task visualization
-- [ ] Google Calendar integration
-- [ ] Advanced reporting and analytics
-- [ ] Multi-language support
+### **Planned Enhancements**
+- **Attendance Tracking** - Button-based RSVP system
+- **Google Calendar Integration** - Automatic event creation
+- **Web Dashboard** - Task visualization and management
+- **Advanced Analytics** - Task completion metrics
+- **Multi-language Support** - Internationalization
+- **Mobile App** - Companion mobile application
 
-### **Integration Possibilities**
-- Slack integration
-- Microsoft Teams integration
-- Email notifications
-- Mobile app companion
+### **API Extensions**
+- **Slack Integration** - Cross-platform support
+- **Microsoft Teams** - Enterprise integration
+- **Email Notifications** - Fallback communication
+- **Webhook Support** - Custom integrations
+
+## 📚 API Reference
+
+### **Core Classes**
+
+#### **ClubExecBot**
+Main Discord bot class handling commands and interactions.
+
+#### **ClubSheetsManager**
+Manages Google Sheets operations for tasks, meetings, and configuration.
+
+#### **MeetingManager**
+Handles meeting scheduling, reminders, and minutes processing.
+
+#### **TaskManager**
+Manages task creation, updates, and deadline tracking.
+
+#### **SetupManager**
+Handles initial bot setup and configuration.
+
+#### **MinutesParser**
+Parses Google Docs to extract action items and deadlines.
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our contributing guidelines for:
+- Code style and standards
+- Testing requirements
+- Pull request process
+- Issue reporting
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🤝 Contributing
+## 🆘 Support
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### **Getting Help**
+- **Documentation**: Check this README and inline code comments
+- **Issues**: Report bugs and feature requests via GitHub Issues
+- **Discussions**: Join our community discussions
+- **Email**: Contact the development team
 
-### **Development Setup**
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📞 Support
-
-For support and questions:
-- Create an issue in the GitHub repository
-- Check the troubleshooting section above
-- Review the command documentation
+### **Community**
+- **Discord Server**: Join our community server
+- **GitHub Discussions**: Ask questions and share ideas
+- **Contributing**: Help improve the bot
 
 ---
 
-**Built with ❤️ for club executives everywhere**
+**Made with ❤️ for the club executive community**
+
+*Automate your administrative tasks, focus on what matters most.*
