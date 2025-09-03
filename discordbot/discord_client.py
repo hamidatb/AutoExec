@@ -128,10 +128,21 @@ class ClubExecBot(discord.Client):
                 return
                 
             # Use LangChain agent to process the query
-            result = run_agent(query)
+            # Run in a thread to avoid blocking the event loop
+            import concurrent.futures
+            loop = asyncio.get_event_loop()
+            
+            def run_agent_sync(query):
+                from ae_langchain.main_agent import run_agent
+                return run_agent(query)
+            
+            # Run the agent in a thread pool
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                result = await loop.run_in_executor(executor, run_agent_sync, query)
+            
             response = result.get("output", "I'm sorry, I couldn't process that request.")
             
-            # Send response
+            # Send response directly to the channel instead of relying on LangChain
             await message.channel.send(f"🤖 **AutoExec Response:**\n{response}")
             
         except Exception as e:
@@ -166,10 +177,21 @@ class ClubExecBot(discord.Client):
             self.last_channel_id = message.channel.id
             
             # Use LangChain agent for natural language understanding
-            result = run_agent(message.content)
+            # Run in a thread to avoid blocking the event loop
+            import concurrent.futures
+            loop = asyncio.get_event_loop()
+            
+            def run_agent_sync(query):
+                from ae_langchain.main_agent import run_agent
+                return run_agent(query)
+            
+            # Run the agent in a thread pool
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                result = await loop.run_in_executor(executor, run_agent_sync, message.content)
+            
             response = result.get("output", "I'm sorry, I couldn't understand that request.")
             
-            # Send response
+            # Send response directly to the channel instead of relying on LangChain
             await message.channel.send(f"🤖 **AI Assistant:**\n{response}")
             
         except Exception as e:
