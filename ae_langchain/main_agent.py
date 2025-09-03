@@ -305,7 +305,7 @@ async def send_hourly_message():
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    print(f"This is the main asybc==")
+    print(f"This is the main async agent")
 
     try:
         loop.run_until_complete(run_tasks())  # Run the async function without creating a new event loop
