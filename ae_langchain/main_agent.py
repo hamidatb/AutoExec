@@ -240,6 +240,50 @@ def run_agent(query: str):
     return response
 
 
+def run_agent_text_only(query: str):
+    """
+    Runs the LangChain agent in text-only mode (no Discord sending).
+    Use this when calling from the Discord bot to avoid event loop issues.
+
+    Args:
+        query (str): The input query.
+
+    Returns:
+        str: The text response from the agent.
+    """
+    # Create a modified prompt that doesn't require Discord sending
+    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a helpful assistant. Provide direct, helpful responses to user questions. Do not mention sending messages to Discord or using any Discord tools."),
+        ("user", "{input}"),
+        MessagesPlaceholder("agent_scratchpad")
+    ])
+    
+    # Create a simple LLM without the Discord tools
+    llm = ChatOpenAI(
+        model="gpt-3.5-turbo",
+        temperature=0,
+        max_tokens=None,
+        timeout=None,
+        max_retries=2,
+    )
+    
+    # Create a simple agent without Discord tools
+    from langchain.agents import AgentExecutor, create_tool_calling_agent
+    
+    # Only include non-Discord tools
+    safe_tools = [create_meeting_mins, send_meeting_schedule, handle_misc_questions]
+    
+    agent = create_tool_calling_agent(llm, safe_tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=safe_tools, verbose=False)
+    
+    try:
+        response = agent_executor.invoke({"input": f"{query}"})
+        return response.get("output", "I'm sorry, I couldn't process that request.")
+    except Exception as e:
+        return f"I'm sorry, I encountered an error: {str(e)}"
+
 async def run_tasks():
     # Start the Discord bot by running the agent with the "Start the discord bot" query
     query = "Start the discord bot"
