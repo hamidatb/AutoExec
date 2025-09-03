@@ -116,7 +116,8 @@ class ClubExecBot(discord.Client):
             await self.handle_langchain_query(message)
             return
             
-        # Special handling for DMs - respond to any message that's not a command
+        # Special handling for DMs ONLY if no other handler was used
+        # This prevents duplicate processing and welcome messages in wrong contexts
         if isinstance(message.channel, discord.DMChannel):
             await self.handle_dm_general_query(message)
             return
@@ -244,6 +245,8 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
     async def handle_langchain_query(self, message: discord.Message):
         """Handle general natural language queries using LangChain."""
         try:
+            print(f"🔍 handle_langchain_query called for message: {message.content}")
+            
             # Store channel context for LangChain responses
             self.last_channel_id = message.channel.id
             
@@ -263,8 +266,10 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 response = await loop.run_in_executor(executor, run_agent_sync, message.content)
             
+            print(f"🔍 LangChain response: {response}")
+            
             # Send response directly to the channel
-            await message.channel.send(f"🤖 **AI Assistant:**\n{response}")
+            await message.channel.send(f"🤖 **AutoExec Assistant:**\n{response}")
             
         except Exception as e:
             print(f"Error in LangChain query: {e}")
@@ -276,27 +281,12 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             # Store channel context for LangChain responses
             self.last_channel_id = message.channel.id
             
-            # Check if this is the first message from this user in DMs
-            if not hasattr(self, '_dm_users_seen'):
-                self._dm_users_seen = set()
+            print(f"🔍 handle_dm_general_query called for message: {message.content}")
+            print(f"🔍 Channel type: {type(message.channel)}")
+            print(f"🔍 Is DM: {isinstance(message.channel, discord.DMChannel)}")
             
             user_id = str(message.author.id)
-            is_first_message = user_id not in self._dm_users_seen
-            
-            if is_first_message:
-                # Send welcome message for first-time DM users
-                welcome_msg = """🤖 **Welcome to AutoExec!**
-
-I'm your AI-powered club executive task manager. You can:
-
-• **Ask me anything** - I'll help with meetings, tasks, scheduling, and organization
-• **Use commands** - Like `$AE what can you do?` or `$AEmm` for meeting minutes
-• **Natural language** - Just type your question normally
-• **Setup** - Use `/setup` to configure the bot for your server
-
-What would you like help with today?"""
-                await message.channel.send(welcome_msg)
-                self._dm_users_seen.add(user_id)
+            print(f"🔍 Processing query for user {user_id}")
             
             # Use LangChain agent for natural language understanding
             # Run in a thread to avoid blocking the event loop
