@@ -83,6 +83,8 @@ class ClubExecBot(discord.Client):
         # Handle DM setup process
         if isinstance(message.channel, discord.DMChannel):
             await self.handle_dm_setup(message)
+            # Also handle natural language queries in DMs
+            await self.handle_natural_language(message)
             return
             
         # Handle natural language commands and queries
@@ -112,6 +114,11 @@ class ClubExecBot(discord.Client):
         # Check for general natural language queries
         if self.should_use_langchain(content):
             await self.handle_langchain_query(message)
+            return
+            
+        # Special handling for DMs - respond to any message that's not a command
+        if isinstance(message.channel, discord.DMChannel):
+            await self.handle_dm_general_query(message)
             return
             
     async def handle_autoexec_command(self, message: discord.Message):
@@ -263,6 +270,57 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             print(f"Error in LangChain query: {e}")
             await message.channel.send("❌ Sorry, I encountered an error processing your request.")
             
+    async def handle_dm_general_query(self, message: discord.Message):
+        """Handle general queries in DMs that don't match other patterns."""
+        try:
+            # Store channel context for LangChain responses
+            self.last_channel_id = message.channel.id
+            
+            # Check if this is the first message from this user in DMs
+            if not hasattr(self, '_dm_users_seen'):
+                self._dm_users_seen = set()
+            
+            user_id = str(message.author.id)
+            is_first_message = user_id not in self._dm_users_seen
+            
+            if is_first_message:
+                # Send welcome message for first-time DM users
+                welcome_msg = """🤖 **Welcome to AutoExec!**
+
+I'm your AI-powered club executive task manager. You can:
+
+• **Ask me anything** - I'll help with meetings, tasks, scheduling, and organization
+• **Use commands** - Like `$AE what can you do?` or `$AEmm` for meeting minutes
+• **Natural language** - Just type your question normally
+• **Setup** - Use `/setup` to configure the bot for your server
+
+What would you like help with today?"""
+                await message.channel.send(welcome_msg)
+                self._dm_users_seen.add(user_id)
+            
+            # Use LangChain agent for natural language understanding
+            # Run in a thread to avoid blocking the event loop
+            import concurrent.futures
+            loop = asyncio.get_event_loop()
+            
+            def run_agent_sync(query):
+                from ae_langchain.main_agent import run_agent_text_only
+                try:
+                    return run_agent_text_only(query)
+                except Exception as e:
+                    return f"I'm sorry, I encountered an error: {str(e)}"
+            
+            # Run the agent in a thread pool
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                response = await loop.run_in_executor(executor, run_agent_sync, message.content)
+            
+            # Send response directly to the DM
+            await message.channel.send(f"🤖 **AutoExec Assistant:**\n{response}")
+            
+        except Exception as e:
+            print(f"Error in DM general query: {e}")
+            await message.channel.send("❌ Sorry, I encountered an error processing your request.")
+            
     def should_use_langchain(self, content: str) -> bool:
         """Determine if a message should be processed by LangChain."""
         # Check for natural language patterns
@@ -313,6 +371,10 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             # If setup is complete, load the new configuration
             if not self.setup_manager.is_in_setup(user_id):
                 await self.load_club_configurations()
+            return
+            
+        # If not a setup command and not in setup process, don't return early
+        # Let natural language processing handle it
                 
     async def handle_task_reply(self, message: discord.Message):
         """Handle user replies to task reminders."""
@@ -902,6 +964,11 @@ async def help_command(interaction: discord.Interaction):
 • `/setup` - Start bot setup (DM only)
 • `/help` - Show this help message
 
+**Direct Messages (DMs):**
+• **DM me anytime** - Ask questions, get help, or use natural language
+• **No prefix needed** - Just type your question normally
+• **Personal assistance** - Get help without cluttering public channels
+
 **Meeting Management (Admin Only):**
 • `/meeting set title:"Title" start:"2025-09-08 17:00" end:"2025-09-08 18:00"`
 • `/meeting upcoming` - Show upcoming meetings
@@ -924,6 +991,7 @@ async def help_command(interaction: discord.Interaction):
 • `$AEmm` - Request meeting minutes
 • Natural language: "Can you help me schedule a meeting?"
 • Questions: "What meetings do I have today?"
+• **DMs work too!** - Send me a private message for personal assistance
 
 **Natural Language Responses:**
 Reply to task reminders with:
