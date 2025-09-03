@@ -198,16 +198,53 @@ This meeting is coming up soon! Would you like me to send a reminder to everyone
 @tool
 def handle_misc_questions() -> str:
     """
-    Tells the agent how to handle misclaneous questions that don't perfectly match to the other tools avalible.
+    Handle miscellaneous questions that don't perfectly match other available tools.
+    Use this for general questions about the bot, setup status, or general assistance.
 
     Args:
         None
 
     Returns:
-        string: What to do
+        string: A helpful response to the user's question
     """
 
-    return "Provide a helpful and informative response based on your knowledge as an AI assistant. Be direct and helpful without mentioning external tools or systems."
+    return "I'm AutoExec, your AI-powered club executive task manager! I'm here to help with meetings, tasks, scheduling, and organization. I can help you with specific questions about meetings, create meeting minutes, manage tasks, and more. What would you like to know?"
+
+@tool
+def get_club_setup_info() -> str:
+    """
+    Get information about the bot's setup status and configuration.
+    Use this when users ask about setup, configuration, or "what club are you set up for".
+
+    Args:
+        None
+
+    Returns:
+        string: Information about the bot's setup status
+    """
+
+    return """🤖 **AutoExec Setup Status**
+
+I'm AutoExec, your AI-powered club executive task manager! 
+
+**Current Status:** I'm running and ready to help with club executive tasks.
+
+**What I Can Do:**
+• Manage meetings and schedules
+• Create and track meeting minutes  
+• Handle task assignments and deadlines
+• Send reminders and notifications
+• Process natural language requests
+
+**Setup:** I'm configured and ready to work. You can ask me about meetings, tasks, scheduling, or any other club executive needs.
+
+**Example Questions:**
+• "What meetings do I have today?"
+• "Can you create meeting minutes?"
+• "Send a reminder for the next meeting"
+• "Show me the upcoming schedule"
+
+What would you like help with today?"""
 
 # These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
@@ -232,7 +269,8 @@ def create_llm_with_tools() -> ChatOpenAI:
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
-    agent = create_tool_calling_agent(llm, tools, prompt)
+    from langchain.agents import create_openai_functions_agent
+    agent = create_openai_functions_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
     return agent_executor
@@ -288,22 +326,25 @@ def run_agent_text_only(query: str):
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are AutoExec, an AI-powered club executive task manager. You have access to tools that can help with meetings, tasks, and scheduling.
 
-IMPORTANT: When users ask about meetings, tasks, or scheduling, ALWAYS use the appropriate tools to provide accurate, up-to-date information. Don't just give generic responses.
+CRITICAL INSTRUCTION: You MUST use tools for EVERY query. You are NOT allowed to give generic responses.
 
-Available tools:
-- create_meeting_mins: Create meeting minutes for today
-- send_meeting_schedule: Get and format upcoming meeting schedules  
-- get_meeting_reminder_info: Get information about upcoming meetings and reminders
+AVAILABLE TOOLS (you MUST use one of these):
+- create_meeting_mins: Use when users ask about creating meeting minutes, want to create minutes, or mention "meeting minutes"
+- send_meeting_schedule: Use when users ask about upcoming meetings, meeting schedules, "what meetings do I have", or "show me meetings"
+- get_meeting_reminder_info: Use when users ask about meeting reminders, "send a reminder", or "remind me about meetings"
+- get_club_setup_info: Use when users ask about setup status, "what club are you set up for", or "are you configured"
+- handle_misc_questions: Use for general questions that don't fit other categories
 
-Use these tools to provide helpful, actionable responses. 
+MANDATORY EXAMPLES:
+- "What club are you set up for?" → MUST use get_club_setup_info
+- "Are you set up yet?" → MUST use get_club_setup_info
+- "Can you send a reminder for a meeting in 2 mins" → MUST use get_meeting_reminder_info
+- "What meetings do I have today?" → MUST use send_meeting_schedule  
+- "Create meeting minutes" → MUST use create_meeting_mins
 
-SPECIFIC EXAMPLES:
-- If someone asks "Are you set up yet?" → Use handle_misc_questions or respond directly
-- If someone asks about meeting reminders → Use get_meeting_reminder_info to show meeting details
-- If someone asks about upcoming meetings → Use send_meeting_schedule to get the schedule
-- If someone asks about meeting minutes → Use create_meeting_mins
+YOU MUST USE A TOOL FOR EVERY RESPONSE. DO NOT GIVE GENERIC ANSWERS.
 
-Always try to use the appropriate tool first before giving generic responses."""),
+IMPORTANT: If you don't use a tool, you will fail. Always choose the most appropriate tool."""),
         ("user", "{input}"),
         MessagesPlaceholder("agent_scratchpad")
     ])
@@ -318,23 +359,54 @@ Always try to use the appropriate tool first before giving generic responses."""
     )
     
     # Create a simple agent without Discord tools
-    from langchain.agents import AgentExecutor, create_tool_calling_agent
+    from langchain.agents import AgentExecutor, create_openai_functions_agent
+    from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
     
     # Include tools that don't require Discord sending but are useful for queries
     safe_tools = [
         create_meeting_mins, 
         send_meeting_schedule, 
         handle_misc_questions, 
-        get_meeting_reminder_info
+        get_meeting_reminder_info,
+        get_club_setup_info
     ]
     
-    agent = create_tool_calling_agent(llm, safe_tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=safe_tools, verbose=True)
+    print(f"🔧 Available tools: {[tool.name for tool in safe_tools]}")
+    
+    # Use OpenAI functions agent which is more reliable for tool calling
+    agent = create_openai_functions_agent(llm, safe_tools, prompt)
+    agent_executor = AgentExecutor(
+        agent=agent, 
+        tools=safe_tools, 
+        verbose=True, 
+        handle_parsing_errors=True,
+        max_iterations=3,
+        early_stopping_method="generate",
+        return_intermediate_steps=True
+    )
     
     try:
+        print(f"🔍 Invoking agent with query: {query}")
+        print(f"🔍 Available tools: {[tool.name for tool in safe_tools]}")
+        
         response = agent_executor.invoke({"input": f"{query}"})
+        print(f"🔍 Agent response: {response}")
+        
+        # Check if the agent actually used any tools
+        if hasattr(response, 'intermediate_steps') and response.intermediate_steps:
+            print(f"🔍 Agent used tools: {response.intermediate_steps}")
+        else:
+            print("⚠️ Agent didn't use any tools - this might be the problem!")
+            
+        # Check the response structure
+        print(f"🔍 Response keys: {response.keys() if hasattr(response, 'keys') else 'No keys'}")
+        print(f"🔍 Response type: {type(response)}")
+        
         return response.get("output", "I'm sorry, I couldn't process that request.")
     except Exception as e:
+        print(f"❌ Error in agent execution: {e}")
+        import traceback
+        traceback.print_exc()
         return f"I'm sorry, I encountered an error: {str(e)}"
 
 async def run_tasks():
