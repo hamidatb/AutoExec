@@ -126,6 +126,67 @@ class ClubExecBot(discord.Client):
             if not query:
                 await message.channel.send("🤖 I'm here! What would you like me to help you with?")
                 return
+            
+            # Handle specific system questions directly
+            query_lower = query.lower()
+            if any(keyword in query_lower for keyword in ['system architecture', 'how do you work', 'what are you', 'what can you do']):
+                if 'system architecture' in query_lower or 'how do you work' in query_lower:
+                    response = """🤖 **AutoExec System Architecture**
+
+**Core Components:**
+• **Discord Bot Interface** - Handles user commands and natural language queries
+• **LangChain AI Agent** - Processes complex requests using GPT-3.5-turbo
+• **Google Drive Integration** - Manages meetings, tasks, and documents
+• **Task Management System** - Tracks deadlines, reminders, and status updates
+
+**How It Works:**
+1. You send a message (like `$AE` commands or natural language)
+2. Bot stores channel context and processes your request
+3. LangChain agent analyzes the query and generates responses
+4. Bot sends responses back to the same Discord channel
+5. All data is stored in Google Sheets for persistence
+
+**Available Features:**
+• Meeting scheduling and reminders
+• Task assignment and tracking
+• Natural language processing
+• Google Drive document management
+• Automated deadline notifications
+
+I'm designed to help manage club executive tasks efficiently! 🎯"""
+                elif 'what can you do' in query_lower:
+                    response = """🤖 **What I Can Do**
+
+**Meeting Management:**
+• Schedule meetings with `/meeting set`
+• View upcoming meetings with `/meeting upcoming`
+• Create agenda templates
+• Link and parse meeting minutes
+
+**Task Management:**
+• Assign tasks with `/assign @user "task" due:"date"`
+• Track task status and deadlines
+• Send automated reminders
+• Handle task updates (done, reschedule, etc.)
+
+**Natural Language:**
+• Answer questions about meetings and tasks
+• Help with scheduling and organization
+• Provide information about the system
+• Process complex requests using AI
+
+**Automation:**
+• Send meeting reminders (T-2h, T-0)
+• Track overdue tasks
+• Parse action items from minutes
+• Manage Google Drive documents
+
+Just ask me anything about meetings, tasks, or how I can help! 🚀"""
+                else:
+                    response = "🤖 I'm AutoExec, your AI-powered club executive task manager! I help with meetings, tasks, scheduling, and organization. What would you like to know?"
+                
+                await message.channel.send(response)
+                return
                 
             # Use LangChain agent to process the query
             # Run in a thread to avoid blocking the event loop
@@ -142,6 +203,8 @@ class ClubExecBot(discord.Client):
             # Run the agent in a thread pool
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 response = await loop.run_in_executor(executor, run_agent_sync, query)
+            
+            print(f"🔍 LangChain response: {response}")
             
             # Send response directly to the channel
             await message.channel.send(f"🤖 **AutoExec Response:**\n{response}")
