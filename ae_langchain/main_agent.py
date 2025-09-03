@@ -256,18 +256,14 @@ async def send_hourly_message():
         print(result["output"])  # Confirm message sent
         await asyncio.sleep(3600)  # Wait for 1 hour (3600 seconds)
 
-# Works
-if __name__ == "__main__":
-    query = "Start the discord bot"
-    asyncio.run(run_agent(query))  # Run the async function"""
 
-# Does not work, causes error RuntimeError: asyncio.run() cannot be called from a running event loop
-"""if __name__ == "__main__":
+if __name__ == "__main__":
     loop = asyncio.get_event_loop()
+    print(f"This is the main asybc==")
 
     try:
         loop.run_until_complete(run_tasks())  # Run the async function without creating a new event loop
     except KeyboardInterrupt:
         print("Shutting down...")
     finally:
-        loop.close()"""
+        loop.close()

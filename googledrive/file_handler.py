@@ -3,7 +3,7 @@ from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.discovery import build
 from datetime import datetime
 
-from googledrive.drive_auth import get_credentials
+from .drive_auth import get_credentials
 
 from config import Config
 
