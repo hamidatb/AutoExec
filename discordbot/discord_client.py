@@ -299,6 +299,9 @@ class ClubExecBot(discord.Client):
 # Create the bot instance
 bot = ClubExecBot()
 
+# Make bot instance globally accessible for LangChain agent
+BOT_INSTANCE = bot
+
 # Slash command tree
 @bot.tree.command(name="setup", description="Start the bot setup process")
 async def setup_command(interaction: discord.Interaction):
