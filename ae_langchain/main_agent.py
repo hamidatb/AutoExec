@@ -276,7 +276,7 @@ def run_agent_text_only(query: str):
     safe_tools = [create_meeting_mins, send_meeting_schedule, handle_misc_questions]
     
     agent = create_tool_calling_agent(llm, safe_tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=safe_tools, verbose=False)
+    agent_executor = AgentExecutor(agent=agent, tools=safe_tools, verbose=True)
     
     try:
         response = agent_executor.invoke({"input": f"{query}"})
