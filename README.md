@@ -115,14 +115,61 @@ MEETING_REMINDER_CHANNEL_ID=channel_id_for_meeting_reminders
 ESCALATION_CHANNEL_ID=channel_id_for_escalations
 ```
 
-### **6. Run the Bot**
+### **6. Environment Management (IMPORTANT!)**
+
+**⚠️ CRITICAL: Avoid API Key Conflicts**
+
+This project uses a virtual environment to prevent conflicts with conda or system environment variables. Follow these steps carefully:
+
+#### **Option A: Use Setup Scripts (Recommended)**
+```bash
+# First time setup
+./setup_env.sh
+
+# Run the bot
+./run_bot.sh
+```
+
+#### **Option B: Manual Setup**
+```bash
+# Deactivate conda if active
+conda deactivate
+
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Load environment variables
+export $(cat .env | grep -v '^#' | xargs)
+
+# Run the bot
+python -m discordbot.discord_client
+```
+
+#### **Option C: Use direnv (Advanced)**
+```bash
+# Install direnv
+brew install direnv  # macOS
+# or
+sudo apt install direnv  # Ubuntu
+
+# Allow direnv for this project
+direnv allow
+
+# The environment will automatically load when you enter the directory
+```
+
+### **7. Run the Bot**
 
 ```bash
 # Activate virtual environment
 source venv/bin/activate
 
-# Run the bot
-python discordbot/discord_client.py
+# Run the bot (use module format to avoid import issues)
+python -m discordbot.discord_client
 ```
 
 ## 📋 Bot Setup Process
