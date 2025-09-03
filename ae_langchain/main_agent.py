@@ -213,30 +213,82 @@ def handle_misc_questions() -> str:
 @tool
 def get_club_setup_info() -> str:
     """
-    Get information about the bot's setup status and configuration.
+    Get information about the bot's actual setup status and configuration.
     Use this when users ask about setup, configuration, or "what club are you set up for".
 
     Args:
         None
 
     Returns:
-        string: Information about the bot's setup status
+        string: Information about the bot's actual setup status
     """
 
-    return """🤖 **AutoExec Setup Status**
+    try:
+        # Import the Discord client to check actual setup status
+        from discordbot.discord_client import BOT_INSTANCE
+        
+        if BOT_INSTANCE is None:
+            return "❌ **Setup Status: ERROR**\n\nI cannot check my setup status because the Discord bot is not running."
+        
+        # Check if there are any club configurations
+        if not hasattr(BOT_INSTANCE, 'club_configs') or not BOT_INSTANCE.club_configs:
+            return """❌ **Setup Status: NOT CONFIGURED**\n\nI am **NOT** set up for any student groups yet.
 
-I'm AutoExec, your AI-powered club executive task manager! 
+**What this means:**
+• No clubs or student groups have been configured
+• No Google Sheets are linked
+• No admin users are set up
+• I cannot manage meetings or tasks
 
-**Current Status:** I'm running and ready to help with club executive tasks.
+**To get started:**
+• An admin needs to run `/setup` to configure me for your group
+• This will set up Google Sheets integration
+• Configure admin permissions and channels
+• Link your group's meeting and task systems
 
-**What I Can Do:**
-• Manage meetings and schedules
-• Create and track meeting minutes  
-• Handle task assignments and deadlines
-• Send reminders and notifications
+**Current Status:** Waiting for initial setup by an administrator."""
+        
+        # Get the actual club configurations
+        club_configs = BOT_INSTANCE.club_configs
+        num_clubs = len(club_configs)
+        
+        if num_clubs == 0:
+            return """❌ **Setup Status: NOT CONFIGURED**\n\nI am **NOT** set up for any student groups yet.
+
+**What this means:**
+• No clubs or student groups have been configured
+• No Google Sheets are linked
+• No admin users are set up
+• I cannot manage meetings or tasks
+
+**To get started:**
+• An admin needs to run `/setup` to configure me for your group
+• This will set up Google Sheets integration
+• Configure admin permissions and channels
+• Link your group's meeting and task systems
+
+**Current Status:** Waiting for initial setup by an administrator."""
+        
+        # Show actual configured clubs
+        setup_info = f"""✅ **Setup Status: CONFIGURED**\n\nI am set up for **{num_clubs}** student group(s)!\n\n"""
+        
+        for guild_id, config in club_configs.items():
+            club_name = config.get('club_name', 'Unknown Club')
+            admin_id = config.get('admin_discord_id', 'Unknown')
+            has_meetings = 'meetings_sheet_id' in config
+            has_tasks = 'tasks_sheet_id' in config
+            
+            setup_info += f"**Group: {club_name}**\n"
+            setup_info += f"• Admin: <@{admin_id}>\n"
+            setup_info += f"• Meetings: {'✅ Configured' if has_meetings else '❌ Not configured'}\n"
+            setup_info += f"• Tasks: {'✅ Configured' if has_tasks else '❌ Not configured'}\n\n"
+        
+        setup_info += """**What I can do for configured groups:**
+• Schedule and manage meetings
+• Create and track meeting minutes
+• Assign and monitor tasks
+• Send automated reminders
 • Process natural language requests
-
-**Setup:** I'm configured and ready to work. You can ask me about meetings, tasks, scheduling, or any other club executive needs.
 
 **Example Questions:**
 • "What meetings do I have today?"
@@ -244,7 +296,90 @@ I'm AutoExec, your AI-powered club executive task manager!
 • "Send a reminder for the next meeting"
 • "Show me the upcoming schedule"
 
-What would you like help with today?"""
+**Current Status:** Fully operational for configured groups! 🎉"""
+        
+        return setup_info
+        
+    except Exception as e:
+        return f"""❌ **Setup Status: ERROR**\n\nI encountered an error checking my setup status: {str(e)}
+
+**What this means:**
+• There was a problem accessing my configuration
+• I may not be properly set up
+• Contact an administrator for assistance
+
+**Current Status:** Unable to determine setup status."""
+
+@tool
+def check_guild_setup_status(guild_id: str) -> str:
+    """
+    Check if the bot is set up for a specific Discord guild/server.
+    Use this when users ask about setup status in a specific server.
+
+    Args:
+        guild_id: The Discord guild/server ID to check
+
+    Returns:
+        string: Setup status for the specific guild
+    """
+
+    try:
+        # Import the Discord client to check actual setup status
+        from discordbot.discord_client import BOT_INSTANCE
+        
+        if BOT_INSTANCE is None:
+            return "❌ **Guild Setup Status: ERROR**\n\nI cannot check setup status because the Discord bot is not running."
+        
+        # Check if there are any club configurations
+        if not hasattr(BOT_INSTANCE, 'club_configs') or not BOT_INSTANCE.club_configs:
+            return f"❌ **Guild Setup Status: NOT CONFIGURED**\n\nI am **NOT** set up for guild {guild_id}.\n\n**Current Status:** No configurations found."
+        
+        # Check specific guild configuration
+        guild_config = BOT_INSTANCE.club_configs.get(guild_id)
+        
+        if not guild_config:
+            return f"❌ **Guild Setup Status: NOT CONFIGURED**\n\nI am **NOT** set up for guild {guild_id}.\n\n**What this means:**\n• This server has not been configured\n• No admin users are set up\n• No Google Sheets are linked\n\n**To get started:**\n• An admin needs to run `/setup` to configure me for this server\n\n**Current Status:** Waiting for setup by an administrator."
+        
+        # Show guild-specific configuration
+        club_name = guild_config.get('club_name', 'Unknown Club')
+        admin_id = guild_config.get('admin_discord_id', 'Unknown')
+        has_meetings = 'meetings_sheet_id' in guild_config
+        has_tasks = 'tasks_sheet_id' in guild_config
+        
+        setup_info = f"""✅ **Guild Setup Status: CONFIGURED**\n\nI am set up for **{club_name}** in this server!\n\n"""
+        
+        setup_info += f"**Group: {club_name}**\n"
+        setup_info += f"• Admin: <@{admin_id}>\n"
+        setup_info += f"• Meetings: {'✅ Configured' if has_meetings else '❌ Not configured'}\n"
+        setup_info += f"• Tasks: {'✅ Configured' if has_tasks else '❌ Not configured'}\n\n"
+        
+        if has_meetings and has_tasks:
+            setup_info += """**What I can do in this server:**
+• Schedule and manage meetings
+• Create and track meeting minutes
+• Assign and monitor tasks
+• Send automated reminders
+• Process natural language requests
+
+**Current Status:** Fully operational! 🎉"""
+        else:
+            setup_info += """**Partial Setup Detected:**
+• Some features may not be available
+• Contact the admin to complete configuration
+• Missing: Meetings or Tasks setup
+
+**Current Status:** Partially configured."""
+        
+        return setup_info
+        
+    except Exception as e:
+        return f"""❌ **Guild Setup Status: ERROR**\n\nI encountered an error checking setup status for guild {guild_id}: {str(e)}
+
+**What this means:**
+• There was a problem accessing the guild configuration
+• Contact an administrator for assistance
+
+**Current Status:** Unable to determine guild setup status."""
 
 # These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
@@ -333,11 +468,13 @@ AVAILABLE TOOLS (you MUST use one of these):
 - send_meeting_schedule: Use when users ask about upcoming meetings, meeting schedules, "what meetings do I have", or "show me meetings"
 - get_meeting_reminder_info: Use when users ask about meeting reminders, "send a reminder", or "remind me about meetings"
 - get_club_setup_info: Use when users ask about setup status, "what club are you set up for", or "are you configured"
+- check_guild_setup_status: Use when users ask about setup status in a specific server or "are you set up for this group"
 - handle_misc_questions: Use for general questions that don't fit other categories
 
 MANDATORY EXAMPLES:
 - "What club are you set up for?" → MUST use get_club_setup_info
 - "Are you set up yet?" → MUST use get_club_setup_info
+- "Are you set up for this group?" → MUST use check_guild_setup_status
 - "Can you send a reminder for a meeting in 2 mins" → MUST use get_meeting_reminder_info
 - "What meetings do I have today?" → MUST use send_meeting_schedule  
 - "Create meeting minutes" → MUST use create_meeting_mins
@@ -368,7 +505,8 @@ IMPORTANT: If you don't use a tool, you will fail. Always choose the most approp
         send_meeting_schedule, 
         handle_misc_questions, 
         get_meeting_reminder_info,
-        get_club_setup_info
+        get_club_setup_info,
+        check_guild_setup_status
     ]
     
     print(f"🔧 Available tools: {[tool.name for tool in safe_tools]}")
