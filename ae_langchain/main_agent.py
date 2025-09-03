@@ -176,7 +176,7 @@ def handle_misc_questions() -> str:
         string: What to do
     """
 
-    return "Respond IN DISCORD based on your knowledge as an LLM, so long as it is a work appropriate question. Invoke send_output_to_discord after this."
+    return "Provide a helpful and informative response based on your knowledge as an AI assistant. Be direct and helpful without mentioning external tools or systems."
 
 # These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
