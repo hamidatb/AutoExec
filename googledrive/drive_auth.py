@@ -8,7 +8,7 @@ SCOPES = [
 ]
 
 # Path to service account key file
-SERVICE_ACCOUNT_KEY_PATH = "googledrive/service_account_key.json"
+SERVICE_ACCOUNT_KEY_PATH = "googledrive/servicekey.json"
 
 def get_credentials():
     """ 
@@ -32,7 +32,7 @@ def get_credentials():
     except FileNotFoundError:
         print(f"❌ Service account key file not found at: {SERVICE_ACCOUNT_KEY_PATH}")
         print("Please download the service account key for autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com")
-        print("and save it as 'googledrive/service_account_key.json'")
+        print("and save it as 'googledrive/servicekey.json'")
         raise
     except Exception as e:
         print(f"❌ Error loading service account credentials: {e}")

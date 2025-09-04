@@ -14,6 +14,7 @@ googledrive/service_account_key.json
 # the google drive authentification information that gets stored on the computer
 token.json
 servicekey.json
+service_account_key.json
 
 # my personal notes
 quickstart.txt
