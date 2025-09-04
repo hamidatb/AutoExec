@@ -242,20 +242,25 @@ class SetupManager:
             if not monthly_access:
                 return f"❌ **Monthly Folder Access Failed**\n\nI cannot access the monthly folder `{monthly_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
             
-            # Both folders accessible, move to sheets initialization
-            self.setup_states[user_id]['step'] = 'sheets_initialization'
+            # Both folders accessible, proceed directly to sheets initialization
+            print(f"🔍 [SETUP] Both folders verified, proceeding to sheets initialization")
             
-            message = "✅ **Folders Selected and Verified Successfully!**\n\n"
-            message += f"• Config Folder ID: `{config_folder_id}` ✅ Accessible\n"
-            message += f"• Monthly Folder ID: `{monthly_folder_id}` ✅ Accessible\n\n"
-            message += "**Step 3: Google Sheets Initialization**\n"
-            message += "I'll now create the necessary Google Sheets for your club:\n\n"
-            message += f"• **{self.setup_states[user_id]['club_name']} Task Manager Config** - Main configuration\n"
-            message += f"• **{self.setup_states[user_id]['club_name']} Tasks - {datetime.now().strftime('%B %Y')}** - Task tracking\n"
-            message += f"• **{self.setup_states[user_id]['club_name']} Meetings - {datetime.now().strftime('%B %Y')}** - Meeting management\n\n"
-            message += "This may take a few moments..."
+            # Send initial message about folder verification
+            initial_message = "✅ **Folders Selected and Verified Successfully!**\n\n"
+            initial_message += f"• Config Folder ID: `{config_folder_id}` ✅ Accessible\n"
+            initial_message += f"• Monthly Folder ID: `{monthly_folder_id}` ✅ Accessible\n\n"
+            initial_message += "**Step 3: Google Sheets Initialization**\n"
+            initial_message += "I'll now create the necessary Google Sheets for your club:\n\n"
+            initial_message += f"• **{self.setup_states[user_id]['club_name']} Task Manager Config** - Main configuration\n"
+            initial_message += f"• **{self.setup_states[user_id]['club_name']} Tasks - {datetime.now().strftime('%B %Y')}** - Task tracking\n"
+            initial_message += f"• **{self.setup_states[user_id]['club_name']} Meetings - {datetime.now().strftime('%B %Y')}** - Meeting management\n\n"
+            initial_message += "This may take a few moments..."
             
-            return message
+            # Now immediately proceed to sheets initialization
+            sheets_result = await self._handle_sheets_initialization(user_id, "")
+            
+            # Combine the initial message with the sheets result
+            return initial_message + "\n\n" + sheets_result
             
         except Exception as e:
             print(f"❌ [SETUP ERROR] Error handling folder selection: {e}")
@@ -548,18 +553,37 @@ class SetupManager:
             print(f"🔍 [SETUP] All channels configured, updating config sheet")
             print(f"🔍 [SETUP] Config spreadsheet ID: {current_state['config_spreadsheet_id']}")
             
-            # Update config sheet with all channel IDs
-            try:
-                await self.sheets_manager.update_config_channels(
-                    current_state['config_spreadsheet_id'],
-                    current_state['task_reminders_channel_id'],
-                    current_state['meeting_reminders_channel_id'],
-                    current_state['escalation_channel_id']
-                )
-                print(f"🔍 [SETUP] Config sheet updated successfully")
-            except Exception as e:
-                print(f"❌ [SETUP ERROR] Failed to update config sheet: {e}")
-                return f"❌ **Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel IDs are correct\n• The bot has access to those channels\n• Try again with valid channel IDs"
+            # Update config sheet with all channel IDs (with retry logic)
+            max_retries = 3
+            retry_delay = 2  # seconds
+            
+            for attempt in range(max_retries):
+                try:
+                    print(f"🔍 [SETUP] Attempting to update config sheet (attempt {attempt + 1}/{max_retries})")
+                    await self.sheets_manager.update_config_channels(
+                        current_state['config_spreadsheet_id'],
+                        current_state['task_reminders_channel_id'],
+                        current_state['meeting_reminders_channel_id'],
+                        current_state['escalation_channel_id']
+                    )
+                    print(f"🔍 [SETUP] Config sheet updated successfully")
+                    break  # Success, exit retry loop
+                    
+                except Exception as e:
+                    print(f"❌ [SETUP ERROR] Failed to update config sheet (attempt {attempt + 1}/{max_retries}): {e}")
+                    
+                    if attempt < max_retries - 1:  # Not the last attempt
+                        print(f"🔍 [SETUP] Retrying in {retry_delay} seconds...")
+                        import asyncio
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        # Last attempt failed
+                        error_msg = str(e)
+                        if "Broken pipe" in error_msg or "Connection reset" in error_msg:
+                            return f"❌ **Network Connection Issue**\n\nThere was a temporary network problem connecting to Google Sheets.\n\n**Please try again in a few moments.**\n\nIf the problem persists, check your internet connection and try restarting the setup process."
+                        else:
+                            return f"❌ **Channel Configuration Failed**\n\nError: {error_msg}\n\n**Please check:**\n• The channel IDs are correct\n• The bot has access to those channels\n• Try again with valid channel IDs"
             
             # Mark setup as complete
             current_state['channels_configured'] = True
@@ -633,18 +657,37 @@ class SetupManager:
             print(f"🔍 [SETUP] Updating config sheet with channel IDs")
             print(f"🔍 [SETUP] Config spreadsheet ID: {current_state['config_spreadsheet_id']}")
             
-            # Update config sheet with channel IDs
-            try:
-                await self.sheets_manager.update_config_channels(
-                    current_state['config_spreadsheet_id'],
-                    channel_ids[0],  # Task reminders
-                    channel_ids[1],  # Meeting reminders
-                    channel_ids[2]   # Escalations
-                )
-                print(f"🔍 [SETUP] Config sheet updated successfully")
-            except Exception as e:
-                print(f"❌ [SETUP ERROR] Failed to update config sheet: {e}")
-                return f"❌ **Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel IDs are correct\n• The bot has access to those channels\n• Try again with valid channel IDs"
+            # Update config sheet with channel IDs (with retry logic)
+            max_retries = 3
+            retry_delay = 2  # seconds
+            
+            for attempt in range(max_retries):
+                try:
+                    print(f"🔍 [SETUP] Attempting to update config sheet (attempt {attempt + 1}/{max_retries})")
+                    await self.sheets_manager.update_config_channels(
+                        current_state['config_spreadsheet_id'],
+                        channel_ids[0],  # Task reminders
+                        channel_ids[1],  # Meeting reminders
+                        channel_ids[2]   # Escalations
+                    )
+                    print(f"🔍 [SETUP] Config sheet updated successfully")
+                    break  # Success, exit retry loop
+                    
+                except Exception as e:
+                    print(f"❌ [SETUP ERROR] Failed to update config sheet (attempt {attempt + 1}/{max_retries}): {e}")
+                    
+                    if attempt < max_retries - 1:  # Not the last attempt
+                        print(f"🔍 [SETUP] Retrying in {retry_delay} seconds...")
+                        import asyncio
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        # Last attempt failed
+                        error_msg = str(e)
+                        if "Broken pipe" in error_msg or "Connection reset" in error_msg:
+                            return f"❌ **Network Connection Issue**\n\nThere was a temporary network problem connecting to Google Sheets.\n\n**Please try again in a few moments.**\n\nIf the problem persists, check your internet connection and try restarting the setup process."
+                        else:
+                            return f"❌ **Channel Configuration Failed**\n\nError: {error_msg}\n\n**Please check:**\n• The channel IDs are correct\n• The bot has access to those channels\n• Try again with valid channel IDs"
             
             # Mark setup as complete
             current_state['channels_configured'] = True
