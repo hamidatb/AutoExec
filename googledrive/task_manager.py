@@ -15,13 +15,16 @@ class TaskManager:
         self.sheets_manager = ClubSheetsManager()
         self.minutes_parser = MinutesParser()
         
-    async def add_task(self, task_data: Dict[str, Any], tasks_spreadsheet_id: str) -> bool:
+    async def add_task(self, task_data: Dict[str, Any], tasks_spreadsheet_id: str, 
+                      club_name: str = None, folder_id: str = None) -> bool:
         """
         Adds a new task to the system.
         
         Args:
             task_data: Dictionary containing task information
             tasks_spreadsheet_id: ID of the tasks spreadsheet
+            club_name: Name of the club (for automatic sheet creation)
+            folder_id: Folder ID for automatic sheet creation
             
         Returns:
             bool: True if successful, False otherwise
@@ -37,6 +40,17 @@ class TaskManager:
                 task_data['status'] = 'open'
             if not task_data.get('priority'):
                 task_data['priority'] = 'medium'
+            
+            # Determine the month for the task
+            current_month = datetime.now().strftime("%B %Y")
+            
+            # Ensure monthly sheets exist for this month
+            if club_name and folder_id:
+                monthly_sheets = self.sheets_manager.get_or_create_monthly_sheets(
+                    club_name, current_month, folder_id
+                )
+                if monthly_sheets and 'tasks' in monthly_sheets:
+                    tasks_spreadsheet_id = monthly_sheets['tasks']
             
             # Add task to spreadsheet
             success = self.sheets_manager.add_task(tasks_spreadsheet_id, task_data)
@@ -54,14 +68,15 @@ class TaskManager:
             return False
     
     async def update_task_status(self, task_id: str, new_status: str, 
-                                tasks_spreadsheet_id: str) -> bool:
+                                tasks_spreadsheet_id: str, config_spreadsheet_id: str = None) -> bool:
         """
-        Updates the status of a task.
+        Updates the status of a task in the Tasks sheet (single source of truth).
         
         Args:
             task_id: ID of the task to update
             new_status: New status for the task
             tasks_spreadsheet_id: ID of the tasks spreadsheet
+            config_spreadsheet_id: ID of the config spreadsheet (for timer management)
             
         Returns:
             bool: True if successful, False otherwise
@@ -73,15 +88,19 @@ class TaskManager:
                 print(f"Invalid status: {new_status}. Must be one of {valid_statuses}")
                 return False
             
-            # Update task in spreadsheet
+            # Update task in spreadsheet (single source of truth)
             success = self.sheets_manager.update_task_status(tasks_spreadsheet_id, task_id, new_status)
             
             if success:
-                print(f"Task {task_id} status updated to {new_status}")
+                print(f"Task {task_id} status updated to {new_status} in Tasks sheet")
                 
                 # If task is done, cancel any pending reminders
-                if new_status == 'done':
-                    await self._cancel_task_reminders(task_id)
+                if new_status == 'done' and config_spreadsheet_id:
+                    await self._cancel_task_reminders(task_id, config_spreadsheet_id)
+                
+                # If task is blocked, update reminders to reflect blocked status
+                elif new_status == 'blocked' and config_spreadsheet_id:
+                    await self._update_task_reminders_for_blocked(task_id, config_spreadsheet_id)
             
             return success
             
@@ -90,14 +109,15 @@ class TaskManager:
             return False
     
     async def reschedule_task(self, task_id: str, new_deadline: str, 
-                             tasks_spreadsheet_id: str) -> bool:
+                             tasks_spreadsheet_id: str, config_spreadsheet_id: str = None) -> bool:
         """
-        Reschedules a task to a new deadline.
+        Reschedules a task to a new deadline in the Tasks sheet (single source of truth).
         
         Args:
             task_id: ID of the task to reschedule
             new_deadline: New deadline in ISO format
             tasks_spreadsheet_id: ID of the tasks spreadsheet
+            config_spreadsheet_id: ID of the config spreadsheet (for timer management)
             
         Returns:
             bool: True if successful, False otherwise
@@ -110,14 +130,15 @@ class TaskManager:
                 print(f"Invalid deadline format: {new_deadline}. Use ISO format (YYYY-MM-DD)")
                 return False
             
-            # Update task deadline in spreadsheet
+            # Update task deadline in spreadsheet (single source of truth)
             success = self.sheets_manager.update_task_deadline(tasks_spreadsheet_id, task_id, new_deadline)
             
             if success:
-                print(f"Task {task_id} rescheduled to {new_deadline}")
+                print(f"Task {task_id} rescheduled to {new_deadline} in Tasks sheet")
                 
                 # Reschedule reminders for the new deadline
-                await self._reschedule_task_reminders(task_id, new_deadline, tasks_spreadsheet_id)
+                if config_spreadsheet_id:
+                    await self._reschedule_task_reminders(task_id, new_deadline, config_spreadsheet_id)
             
             return success
             
@@ -219,55 +240,144 @@ class TaskManager:
             return []
     
     async def _schedule_task_reminders(self, task_data: Dict[str, Any], 
-                                      tasks_spreadsheet_id: str):
+                                      tasks_spreadsheet_id: str, config_spreadsheet_id: str = None):
         """
-        Schedules reminders for a task.
+        Schedules reminders for a task using the Timers tab.
         
         Args:
             task_data: Task data dictionary
             tasks_spreadsheet_id: ID of the tasks spreadsheet
+            config_spreadsheet_id: ID of the config spreadsheet (for timers)
         """
         try:
-            # This would integrate with a proper scheduling system
-            # For now, we'll just log the reminder scheduling
-            print(f"Scheduling reminders for task: {task_data.get('title')}")
+            if not config_spreadsheet_id:
+                print("No config spreadsheet ID provided for timer scheduling")
+                return
+                
+            task_id = task_data.get('task_id', '')
+            due_at = task_data.get('due_at', '')
             
-            # Schedule reminders at:
-            # T-24h, T-2h, T+0h (overdue), T+48h (escalation)
+            if not due_at or due_at in ['next_meeting', 'this_week', 'next_week', 'end_of_month']:
+                print(f"No specific deadline for task {task_id}, skipping reminder scheduling")
+                return
+            
+            # Parse deadline
+            try:
+                deadline = datetime.fromisoformat(due_at)
+            except ValueError:
+                print(f"Invalid deadline format for task {task_id}: {due_at}")
+                return
+            
+            # Schedule reminders at T-24h, T-2h, T+0h (overdue), T+48h (escalation)
+            reminders = [
+                {'type': 'task_reminder_24h', 'fire_at': deadline - timedelta(hours=24)},
+                {'type': 'task_reminder_2h', 'fire_at': deadline - timedelta(hours=2)},
+                {'type': 'task_overdue', 'fire_at': deadline},
+                {'type': 'task_escalate', 'fire_at': deadline + timedelta(hours=48)}
+            ]
+            
+            for reminder in reminders:
+                timer_data = {
+                    'id': f"{task_id}_{reminder['type']}",
+                    'guild_id': '',  # Will be set by caller
+                    'type': reminder['type'],
+                    'ref_type': 'task',
+                    'ref_id': task_id,
+                    'fire_at_utc': reminder['fire_at'].isoformat(),
+                    'channel_id': '',  # Will be set by caller
+                    'state': 'active'
+                }
+                
+                self.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
+                print(f"Scheduled {reminder['type']} reminder for task {task_id}")
             
         except Exception as e:
             print(f"Error scheduling task reminders: {e}")
     
-    async def _cancel_task_reminders(self, task_id: str):
+    async def _cancel_task_reminders(self, task_id: str, config_spreadsheet_id: str):
         """
         Cancels reminders for a completed task.
         
         Args:
             task_id: ID of the task
+            config_spreadsheet_id: ID of the config spreadsheet
         """
         try:
-            print(f"Cancelling reminders for task: {task_id}")
-            # Cancel scheduled reminders
+            # Get all timers for this task
+            timers = self.sheets_manager.get_timers(config_spreadsheet_id)
+            task_timers = [t for t in timers if t.get('ref_id') == task_id and t.get('ref_type') == 'task']
+            
+            # Cancel all active timers for this task
+            for timer in task_timers:
+                if timer.get('state') == 'active':
+                    self.sheets_manager.update_timer_state(config_spreadsheet_id, timer['id'], 'cancelled')
+                    print(f"Cancelled timer {timer['id']} for task {task_id}")
             
         except Exception as e:
             print(f"Error cancelling task reminders: {e}")
     
     async def _reschedule_task_reminders(self, task_id: str, new_deadline: str,
-                                        tasks_spreadsheet_id: str):
+                                        config_spreadsheet_id: str):
         """
         Reschedules reminders for a task with a new deadline.
         
         Args:
             task_id: ID of the task
             new_deadline: New deadline
-            tasks_spreadsheet_id: ID of the tasks spreadsheet
+            config_spreadsheet_id: ID of the config spreadsheet
         """
         try:
-            print(f"Rescheduling reminders for task: {task_id} to {new_deadline}")
-            # Cancel existing reminders and schedule new ones
+            # Cancel existing reminders
+            await self._cancel_task_reminders(task_id, config_spreadsheet_id)
+            
+            # Schedule new reminders for the new deadline
+            deadline = datetime.fromisoformat(new_deadline)
+            reminders = [
+                {'type': 'task_reminder_24h', 'fire_at': deadline - timedelta(hours=24)},
+                {'type': 'task_reminder_2h', 'fire_at': deadline - timedelta(hours=2)},
+                {'type': 'task_overdue', 'fire_at': deadline},
+                {'type': 'task_escalate', 'fire_at': deadline + timedelta(hours=48)}
+            ]
+            
+            for reminder in reminders:
+                timer_data = {
+                    'id': f"{task_id}_{reminder['type']}",
+                    'guild_id': '',  # Will be set by caller
+                    'type': reminder['type'],
+                    'ref_type': 'task',
+                    'ref_id': task_id,
+                    'fire_at_utc': reminder['fire_at'].isoformat(),
+                    'channel_id': '',  # Will be set by caller
+                    'state': 'active'
+                }
+                
+                self.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
+                print(f"Rescheduled {reminder['type']} reminder for task {task_id}")
             
         except Exception as e:
             print(f"Error rescheduling task reminders: {e}")
+    
+    async def _update_task_reminders_for_blocked(self, task_id: str, config_spreadsheet_id: str):
+        """
+        Updates reminders for a blocked task.
+        
+        Args:
+            task_id: ID of the task
+            config_spreadsheet_id: ID of the config spreadsheet
+        """
+        try:
+            # Get all timers for this task
+            timers = self.sheets_manager.get_timers(config_spreadsheet_id)
+            task_timers = [t for t in timers if t.get('ref_id') == task_id and t.get('ref_type') == 'task']
+            
+            # Update all active timers to reflect blocked status
+            for timer in task_timers:
+                if timer.get('state') == 'active':
+                    self.sheets_manager.update_timer_state(config_spreadsheet_id, timer['id'], 'blocked')
+                    print(f"Updated timer {timer['id']} to blocked status for task {task_id}")
+            
+        except Exception as e:
+            print(f"Error updating task reminders for blocked status: {e}")
     
     async def send_task_reminders(self, tasks_spreadsheet_id: str, 
                                  reminder_channel_id: int, bot_instance):
