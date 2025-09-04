@@ -237,7 +237,7 @@ I welcome contributions from fellow developers! Whether you're interested in:
 - **Infrastructure** (deployment automation, monitoring)
 - **Documentation** (tutorials, API docs)
 
-Please check out our [Contributing Guidelines](CONTRIBUTING.md) and feel free to open an issue or submit a pull request.
+Feel free to open an issue or submit a pull request to discuss potential contributions.
 
 ## 📞 Let's Connect
 
