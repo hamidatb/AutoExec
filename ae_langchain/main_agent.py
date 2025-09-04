@@ -133,8 +133,7 @@ def send_output_to_discord(messageToSend:str) -> str:
 @tool
 def send_meeting_schedule(amount_of_meetings_to_return: int):
     """
-    Retrieves a formatted string representation of the upcoming few meetings from Google Sheets, 
-    and automatically sends it to Discord. 
+    Retrieves a formatted string representation of the upcoming few meetings from Google Sheets.
 
     **This function REQUIRES an argument. It will raise an error if none is provided.**
 
@@ -142,7 +141,7 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
         amount_of_meetings_to_return (int): The number of meetings to return (REQUIRED).
         
     Returns:
-        str: Confirmation that the schedule was sent.
+        str: Formatted meeting schedule information to be sent to Discord.
     """
     # Ensure an argument is provided
     if amount_of_meetings_to_return is None:
@@ -160,9 +159,9 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
     meetings_info += "Meetings are now managed through Google Sheets instead of Google Calendar.\n"
     meetings_info += "Use `/meeting upcoming` to see scheduled meetings."
     
-    send_output_to_discord(meetings_info)
-
-    return "The meeting schedule has been sent to Discord now"
+    # Return the meeting info directly instead of sending to Discord
+    # The LangChain agent will handle sending this to Discord
+    return meetings_info
     
 @tool
 def send_reminder_for_next_meeting():
