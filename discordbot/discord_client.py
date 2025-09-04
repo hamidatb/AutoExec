@@ -80,14 +80,22 @@ class ClubExecBot(discord.Client):
         if message.author == self.user:
             return
             
-        # Handle DM setup process
+        # Handle DM setup process FIRST - this takes priority
         if isinstance(message.channel, discord.DMChannel):
-            await self.handle_dm_setup(message)
-            # Also handle natural language queries in DMs
-            await self.handle_natural_language(message)
-            return
+            # Check if user is in setup process first
+            if self.setup_manager.is_in_setup(str(message.author.id)):
+                # User is in setup - ONLY handle setup responses
+                await self.handle_dm_setup(message)
+                return
+            else:
+                # User is not in setup - handle setup commands or general queries
+                await self.handle_dm_setup(message)
+                # Only process natural language if setup manager didn't handle it
+                if not self.setup_manager.is_in_setup(str(message.author.id)):
+                    await self.handle_natural_language(message)
+                return
             
-        # Handle natural language commands and queries
+        # Handle natural language commands and queries in public channels
         await self.handle_natural_language(message)
             
         # Handle task replies in public channels
@@ -96,6 +104,10 @@ class ClubExecBot(discord.Client):
             
     async def handle_natural_language(self, message: discord.Message):
         """Handle natural language messages using LangChain agent."""
+        # CRITICAL: Skip natural language processing if user is in setup mode
+        if isinstance(message.channel, discord.DMChannel) and self.setup_manager.is_in_setup(str(message.author.id)):
+            return
+            
         content = message.content.strip()
         
         # Store channel context for LangChain responses
@@ -124,6 +136,10 @@ class ClubExecBot(discord.Client):
             
     async def handle_autoexec_command(self, message: discord.Message):
         """Handle $AE commands using LangChain agent."""
+        # CRITICAL: Skip if user is in setup mode
+        if isinstance(message.channel, discord.DMChannel) and self.setup_manager.is_in_setup(str(message.author.id)):
+            return
+            
         try:
             # Store channel context for LangChain responses
             self.last_channel_id = message.channel.id
@@ -223,6 +239,10 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             
     async def handle_meeting_minutes_request(self, message: discord.Message):
         """Handle $AEmm meeting minutes requests."""
+        # CRITICAL: Skip if user is in setup mode
+        if isinstance(message.channel, discord.DMChannel) and self.setup_manager.is_in_setup(str(message.author.id)):
+            return
+            
         try:
             # Store channel context for LangChain responses
             self.last_channel_id = message.channel.id
@@ -277,6 +297,10 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             
     async def handle_dm_general_query(self, message: discord.Message):
         """Handle general queries in DMs that don't match other patterns."""
+        # CRITICAL: Skip if user is in setup mode
+        if self.setup_manager.is_in_setup(str(message.author.id)):
+            return
+            
         try:
             # Store channel context for LangChain responses
             self.last_channel_id = message.channel.id
@@ -313,11 +337,16 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             
     def should_use_langchain(self, content: str) -> bool:
         """Determine if a message should be processed by LangChain."""
+        # Skip very short messages (likely setup responses)
+        if len(content.strip()) <= 3:
+            return False
+            
         # Check for natural language patterns
         natural_language_indicators = [
             'can you', 'could you', 'please', 'help me', 'how do i',
             'what is', 'when is', 'where is', 'why', 'how',
-            'i need', 'i want', 'i would like', 'tell me', 'show me'
+            'i need', 'i want', 'i would like', 'tell me', 'show me',
+            'are you', 'what can you', 'how do you work'
         ]
         
         content_lower = content.lower()
@@ -327,12 +356,12 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             if indicator in content_lower:
                 return True
                 
-        # Check for question marks
-        if '?' in content:
+        # Check for question marks (but not for very short messages)
+        if '?' in content and len(content.split()) > 2:
             return True
             
         # Check for longer, conversational messages
-        if len(content.split()) > 5:
+        if len(content.split()) > 8:
             return True
             
         return False
@@ -363,8 +392,36 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
                 await self.load_club_configurations()
             return
             
-        # If not a setup command and not in setup process, don't return early
-        # Let natural language processing handle it
+        # If not in setup process, check if this is a setup-related question
+        # that should be handled by the setup manager instead of LangChain
+        content_lower = message.content.lower()
+        setup_keywords = ['setup', 'configure', 'are you set up', 'what club', 'admin', 'permission', 'set up']
+        
+        if any(keyword in content_lower for keyword in setup_keywords):
+            # This is a setup-related question - provide helpful setup info
+            response = """🤖 **Setup Status Check**
+
+I am **NOT** set up for any student groups yet.
+
+**What this means:**
+• No clubs or student groups have been configured
+• No Google Sheets are linked
+• No admin users are set up
+• I cannot manage meetings or tasks
+
+**To get started:**
+• Run `/setup` to begin the configuration process
+• This will set up Google Sheets integration
+• Configure admin permissions and channels
+• Link your group's meeting and task systems
+
+**Current Status:** Waiting for initial setup by an administrator."""
+            
+            await message.channel.send(response)
+            return
+            
+        # If not a setup command and not in setup process, and not a setup question,
+        # let natural language processing handle it
                 
     async def handle_task_reply(self, message: discord.Message):
         """Handle user replies to task reminders."""
