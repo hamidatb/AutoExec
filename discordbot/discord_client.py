@@ -107,11 +107,43 @@ class ClubExecBot(discord.Client):
         if isinstance(message.channel, discord.DMChannel) and self.setup_manager.is_in_setup(str(message.author.id)):
             return
         
+        # CRITICAL: For DM channels, only process LangChain if setup is NOT complete
+        # If setup is complete, DMs should be treated as commands or ignored
+        if isinstance(message.channel, discord.DMChannel):
+            user_id = str(message.author.id)
+            if self.setup_manager.is_setup_complete(user_id):
+                print(f"🔍 [DM PROCESSING] User {user_id} has completed setup, skipping LangChain processing")
+                # Setup is complete, so this DM should be treated as a command or ignored
+                # Handle simple setup status questions
+                content_lower = message.content.lower().strip()
+                if any(phrase in content_lower for phrase in ['are you setup', 'setup complete', 'setup done', 'are you configured']):
+                    club_config = self.setup_manager.get_club_config(user_id)
+                    if club_config:
+                        await message.channel.send(
+                            f"✅ **Yes, I'm fully set up!**\n\n"
+                            f"**Club:** {club_config.get('club_name', 'Unknown')}\n"
+                            f"**Admin:** <@{user_id}>\n"
+                            f"**Setup completed:** {club_config.get('completed_at', 'Unknown')}\n\n"
+                            f"I'm ready to help manage meetings and tasks for your club!"
+                        )
+                    else:
+                        await message.channel.send("✅ **Yes, I'm set up and ready to help!**")
+                    return
+                
+                # For other non-command DMs after setup, ignore them
+                if not message.content.startswith('/'):
+                    print(f"🔍 [DM PROCESSING] Ignoring non-command DM from user {user_id}")
+                    return
+        
         # Check setup gating for ALL channels (including DMs for non-setup users)
         guild_id = str(message.guild.id) if message.guild else None
         user_id = str(message.author.id)
         
-        if not self.is_fully_setup(guild_id, user_id):
+        print(f"🔍 [SETUP CHECK] Checking setup for user {user_id}, guild {guild_id}")
+        setup_complete = self.is_fully_setup(guild_id, user_id)
+        print(f"🔍 [SETUP CHECK] Setup complete: {setup_complete}")
+        
+        if not setup_complete:
             await message.channel.send(
                 "❌ **Setup Required**\n\n"
                 "Setup is not complete. Please ask your admin to run `/setup` in DM with me."
@@ -488,9 +520,13 @@ I am **NOT** set up for any student groups yet.
         Returns:
             True if fully set up, False otherwise
         """
+        print(f"🔍 [SETUP CHECK] is_fully_setup called with guild_id={guild_id}, user_id={user_id}")
+        
         # For DM interactions, check by user_id
         if user_id:
-            return self.setup_manager.is_setup_complete(user_id)
+            result = self.setup_manager.is_setup_complete(user_id)
+            print(f"🔍 [SETUP CHECK] User {user_id} setup complete: {result}")
+            return result
         
         # For guild interactions, we need to find the admin user_id for this guild
         # This is a simplified approach - in practice you might want to store guild->admin mapping
@@ -498,16 +534,21 @@ I am **NOT** set up for any student groups yet.
             # For now, we'll check if any user in the guild has completed setup
             # This is not ideal but works for the current architecture
             all_clubs = self.setup_manager.status_manager.get_all_clubs()
+            print(f"🔍 [SETUP CHECK] Found {len(all_clubs)} clubs total")
             for club_user_id, club_config in all_clubs.items():
                 if club_config.get('setup_complete', False):
+                    print(f"🔍 [SETUP CHECK] Club {club_user_id} has completed setup")
                     # Check if this user is in the guild (simplified check)
                     # In a real implementation, you'd want to store guild_id in the config
                     return True
+            print(f"🔍 [SETUP CHECK] No completed setups found for guild {guild_id}")
             return False
         else:
             # Check if any club has completed setup
             all_clubs = self.setup_manager.status_manager.get_all_clubs()
-            return any(club_config.get('setup_complete', False) for club_config in all_clubs.values())
+            result = any(club_config.get('setup_complete', False) for club_config in all_clubs.values())
+            print(f"🔍 [SETUP CHECK] Any club setup complete: {result}")
+            return result
     
     async def check_setup_gate(self, interaction: discord.Interaction) -> bool:
         """
