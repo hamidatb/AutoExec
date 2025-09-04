@@ -246,28 +246,228 @@ def get_meeting_reminder_info():
         if BOT_INSTANCE is None:
             return "❌ ERROR: The bot instance is not running."
         
-        # This would need to be implemented to get meetings from Google Sheets
-        reminder_info = """
-**Meeting Reminders:**
+        # Get actual meeting reminder information from Google Sheets
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        if not all_guilds:
+            return "❌ No club configuration found. Please run `/setup` first."
+        
+        # Get the next upcoming meeting for reminder info
+        for guild_id, guild_config in all_guilds.items():
+            if guild_config.get('setup_complete', False):
+                # Get the meetings sheet ID from the monthly_sheets structure
+                meetings_sheet_id = None
+                if 'monthly_sheets' in guild_config and 'meetings' in guild_config['monthly_sheets']:
+                    meetings_sheet_id = guild_config['monthly_sheets']['meetings']
+                elif 'meetings_sheet_id' in guild_config:
+                    meetings_sheet_id = guild_config['meetings_sheet_id']
+                
+                if meetings_sheet_id:
+                    # Get the next upcoming meeting
+                    upcoming_meetings = BOT_INSTANCE.meeting_manager.get_upcoming_meetings(
+                        meetings_sheet_id, 
+                        limit=1
+                    )
+                    
+                    if upcoming_meetings:
+                        meeting = upcoming_meetings[0]
+                        title = meeting.get('title', 'Untitled Meeting')
+                        start_time = meeting.get('start_at_local', meeting.get('start_at_utc', 'Time TBD'))
+                        location = meeting.get('location', 'Location TBD')
+                        meeting_link = meeting.get('meeting_link', '')
+                        
+                        reminder_info = f"""📅 **Next Meeting Reminder:**
 
-Meetings are now managed through Google Sheets instead of Google Calendar.
+**{title}**
+🕐 {start_time}
+📍 {location}
+{f"🔗 {meeting_link}" if meeting_link else ""}
 
-**To see upcoming meetings:**
-• Use `/meeting upcoming` command
-• Check the Google Sheets for your club
+**Automatic reminders are sent at:**
+• T-2 hours before the meeting
+• T-0 (meeting start time)
 
-**Automatic reminders:**
-• Meeting reminders are sent automatically based on the schedule in Google Sheets
-• Reminders are sent at T-2h and T-0 (meeting start time)
+**To schedule a new meeting:**
+• Use `/meeting set` with title, start time, location, and meeting link
+• Or ask me: "Schedule a meeting for tomorrow at 2pm about project updates"
+"""
+                    else:
+                        reminder_info = """📅 **Meeting Reminders:**
+
+**No upcoming meetings scheduled.**
 
 **To schedule a meeting:**
 • Use `/meeting set` with title, start time, location, and meeting link
-        """
+• Or ask me: "Schedule a meeting for tomorrow at 2pm about project updates"
+
+**Automatic reminders:**
+• Meeting reminders are sent automatically at T-2h and T-0 (meeting start time)
+"""
+                    break
+        else:
+            reminder_info = "❌ No meetings spreadsheet configured. Please run `/setup` first."
         
         return reminder_info
         
     except Exception as e:
         return f"I encountered an error getting meeting information: {str(e)}"
+
+@tool
+def schedule_meeting(meeting_title: str, start_time: str, location: str = "", meeting_link: str = "") -> str:
+    """
+    Schedule a new meeting and add it to the Google Sheets.
+    
+    Args:
+        meeting_title (str): The title of the meeting (REQUIRED)
+        start_time (str): The start time in format "YYYY-MM-DD HH:MM" (REQUIRED)
+        location (str): The meeting location or description (optional)
+        meeting_link (str): The meeting link (Zoom, Teams, etc.) (optional)
+        
+    Returns:
+        str: Confirmation message about the scheduled meeting
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    from datetime import datetime, timezone
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get guild configurations from the setup manager
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        if not all_guilds:
+            return "❌ No club configuration found. Please run `/setup` first."
+        
+        # Get the first available guild configuration
+        for guild_id, guild_config in all_guilds.items():
+            if guild_config.get('setup_complete', False):
+                # Get the meetings sheet ID from the monthly_sheets structure
+                meetings_sheet_id = None
+                if 'monthly_sheets' in guild_config and 'meetings' in guild_config['monthly_sheets']:
+                    meetings_sheet_id = guild_config['monthly_sheets']['meetings']
+                elif 'meetings_sheet_id' in guild_config:
+                    meetings_sheet_id = guild_config['meetings_sheet_id']
+                
+                if not meetings_sheet_id:
+                    return "❌ No meetings spreadsheet configured. Please run `/setup` first."
+                
+                # Parse start time
+                try:
+                    start_datetime = datetime.strptime(start_time, "%Y-%m-%d %H:%M")
+                    start_datetime = start_datetime.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    return "❌ Invalid start time format. Please use YYYY-MM-DD HH:MM format."
+                
+                # Create meeting data
+                meeting_data = {
+                    'title': meeting_title,
+                    'start_at_utc': start_datetime.isoformat(),
+                    'end_at_utc': None,
+                    'start_at_local': start_datetime.strftime("%B %d, %Y at %I:%M %p"),
+                    'end_at_local': None,
+                    'location': location or '',
+                    'meeting_link': meeting_link or '',
+                    'channel_id': '',  # Will be set by the meeting manager
+                    'created_by': 'langchain_agent'
+                }
+                
+                # Schedule meeting
+                success = BOT_INSTANCE.meeting_manager.schedule_meeting(
+                    meeting_data, 
+                    meetings_sheet_id
+                )
+                
+                if success:
+                    return f"✅ Meeting '{meeting_title}' scheduled successfully!\n\n**Details:**\n🕐 {meeting_data['start_at_local']}\n📍 {location if location else 'Location TBD'}\n{f'🔗 {meeting_link}' if meeting_link else ''}\n\nMeeting has been added to your Google Sheets and automatic reminders will be sent."
+                else:
+                    return "❌ Failed to schedule meeting. Please try again or use `/meeting set` command."
+                
+                break
+        else:
+            return "❌ No meetings spreadsheet configured. Please run `/setup` first."
+            
+    except Exception as e:
+        print(f"Error scheduling meeting: {e}")
+        return f"❌ Error scheduling meeting: {str(e)}"
+
+@tool
+def send_announcement(announcement_message: str, announcement_type: str = "general") -> str:
+    """
+    Send an announcement message to Discord to the appropriate channel based on the type.
+    Use this for meeting reminders, general announcements, or any other messages.
+    
+    Args:
+        announcement_message (str): The announcement message to send (REQUIRED)
+        announcement_type (str): Type of announcement - "meeting", "task", "general", or "escalation" (optional, defaults to "general")
+        
+    Returns:
+        str: Confirmation that the announcement was sent
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get guild configurations from the setup manager
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        if not all_guilds:
+            return "❌ No club configuration found. Please run `/setup` first."
+        
+        # Get the first available guild configuration
+        for guild_id, guild_config in all_guilds.items():
+            if guild_config.get('setup_complete', False):
+                # Determine which channel to send to based on announcement type
+                channel_id = None
+                channel_name = ""
+                
+                if announcement_type.lower() == "meeting":
+                    channel_id = guild_config.get('meeting_reminders_channel_id')
+                    channel_name = "meeting reminders"
+                elif announcement_type.lower() == "task":
+                    channel_id = guild_config.get('task_reminders_channel_id')
+                    channel_name = "task reminders"
+                elif announcement_type.lower() == "escalation":
+                    channel_id = guild_config.get('escalation_channel_id')
+                    channel_name = "escalation"
+                else:  # general or default
+                    # For general announcements, use meeting reminders channel as default
+                    channel_id = guild_config.get('meeting_reminders_channel_id')
+                    channel_name = "general announcements"
+                
+                if not channel_id:
+                    return f"❌ No {channel_name} channel configured. Please run `/setup` first."
+                
+                # Send the announcement to the specific channel
+                formatted_message = f"📢 **{announcement_type.upper()} ANNOUNCEMENT**\n\n{announcement_message}"
+                
+                # Send to the specific channel using the bot's send_any_message method
+                # We need to run this in the bot's event loop
+                import asyncio
+                try:
+                    # Try to get the current event loop
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Schedule the task in the current loop
+                        loop.create_task(BOT_INSTANCE.send_any_message(formatted_message, int(channel_id)))
+                    else:
+                        # Run in a new event loop
+                        asyncio.run(BOT_INSTANCE.send_any_message(formatted_message, int(channel_id)))
+                except RuntimeError as e:
+                    # No event loop available - this is expected in some contexts
+                    print(f"⚠️ Could not send announcement to specific channel (no event loop): {e}")
+                    # Fallback to the generic send_output_to_discord
+                    result = send_output_to_discord(formatted_message)
+                
+                return f"✅ Announcement sent successfully to {channel_name} channel!\n\n**Message sent:**\n{formatted_message}"
+                
+                break
+        else:
+            return "❌ No club configuration found. Please run `/setup` first."
+            
+    except Exception as e:
+        print(f"Error sending announcement: {e}")
+        return f"❌ Error sending announcement: {str(e)}"
+
 @tool
 def handle_misc_questions() -> str:
     """
@@ -550,7 +750,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule,handle_misc_questions, send_reminder_for_next_meeting]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, handle_misc_questions, send_reminder_for_next_meeting, schedule_meeting, send_announcement]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
@@ -617,6 +817,8 @@ AVAILABLE TOOLS (you MUST use one of these):
 - create_meeting_mins: Use when users ask about creating meeting minutes, want to create minutes, or mention "meeting minutes"
 - send_meeting_schedule: Use when users ask about upcoming meetings, meeting schedules, "what meetings do I have", or "show me meetings"
 - get_meeting_reminder_info: Use when users ask about meeting reminders, "send a reminder", or "remind me about meetings"
+- schedule_meeting: Use when users want to SCHEDULE/CREATE a new meeting, "schedule a meeting", "set up a meeting", or "create a meeting"
+- send_announcement: Use when users want to SEND AN ANNOUNCEMENT, "send out an announcement", "announce something", or "send a message to everyone". Supports types: "meeting", "task", "general", "escalation"
 - get_club_setup_info: Use when users ask about setup status, "what club are you set up for", or "are you configured"
 - check_guild_setup_status: Use when users ask about setup status in a specific server or "are you set up for this group"
 - handle_misc_questions: Use for general questions that don't fit other categories
@@ -628,6 +830,10 @@ MANDATORY EXAMPLES:
 - "Can you send a reminder for a meeting in 2 mins" → MUST use get_meeting_reminder_info
 - "What meetings do I have today?" → MUST use send_meeting_schedule  
 - "Create meeting minutes" → MUST use create_meeting_mins
+- "Schedule a meeting for tomorrow at 2pm" → MUST use schedule_meeting
+- "Set up a meeting for next week" → MUST use schedule_meeting
+- "Send out an announcement about the meeting tomorrow" → MUST use send_announcement
+- "Announce that we're having a team meeting" → MUST use send_announcement
 
 YOU MUST USE A TOOL FOR EVERY RESPONSE. DO NOT GIVE GENERIC ANSWERS.
 
@@ -656,7 +862,9 @@ IMPORTANT: If you don't use a tool, you will fail. Always choose the most approp
         handle_misc_questions, 
         get_meeting_reminder_info,
         get_club_setup_info,
-        check_guild_setup_status
+        check_guild_setup_status,
+        schedule_meeting,
+        send_announcement
     ]
     
     print(f"🔧 Available tools: {[tool.name for tool in safe_tools]}")
