@@ -60,15 +60,23 @@ class SetupStatusManager:
         Returns:
             True if setup is complete, False otherwise
         """
+        print(f"🔍 [SETUP STATUS DEBUG] Checking setup status for user: {user_id}")
+        
         status_data = self._read_status_file()
-        club_data = status_data.get("clubs", {}).get(user_id)
+        print(f"🔍 [SETUP STATUS DEBUG] Status file contents: {status_data}")
+        
+        clubs = status_data.get("clubs", {})
+        print(f"🔍 [SETUP STATUS DEBUG] All clubs in file: {list(clubs.keys())}")
+        
+        club_data = clubs.get(user_id)
+        print(f"🔍 [SETUP STATUS DEBUG] Club data for user {user_id}: {club_data}")
         
         if not club_data:
-            print(f"🔍 [SETUP STATUS] No setup data found for user {user_id}")
+            print(f"❌ [SETUP STATUS DEBUG] No setup data found for user {user_id}")
             return False
         
         is_complete = club_data.get("setup_complete", False)
-        print(f"🔍 [SETUP STATUS] Setup status for user {user_id}: {is_complete}")
+        print(f"🔍 [SETUP STATUS DEBUG] Setup status for user {user_id}: {is_complete}")
         return is_complete
     
     def get_club_config(self, user_id: str) -> Optional[Dict[str, Any]]:

@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from .sheets_manager import ClubSheetsManager
-from .setup_status_manager import SetupStatusManager
+from .guild_setup_manager import GuildSetupStatusManager
 from .meeting_manager import MeetingManager
 from .task_manager import TaskManager
 
@@ -17,47 +17,47 @@ class SetupManager:
         self.sheets_manager = ClubSheetsManager()
         self.meeting_manager = MeetingManager()
         self.task_manager = TaskManager()
-        self.status_manager = SetupStatusManager()
+        self.status_manager = GuildSetupStatusManager()
         self.setup_states = {}  # Track setup progress for each user
     
-    def is_setup_complete(self, user_id: str) -> bool:
+    def is_setup_complete(self, guild_id: str) -> bool:
         """
-        Check if setup is complete for a user.
+        Check if setup is complete for a guild.
         
         Args:
-            user_id: Discord user ID
+            guild_id: Discord guild ID
             
         Returns:
             True if setup is complete, False otherwise
         """
-        return self.status_manager.is_setup_complete(user_id)
+        return self.status_manager.is_setup_complete(guild_id)
     
-    def get_club_config(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def get_guild_config(self, guild_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get club configuration for a user.
+        Get guild configuration.
         
         Args:
-            user_id: Discord user ID
+            guild_id: Discord guild ID
             
         Returns:
-            Club configuration dict or None if not found
+            Guild configuration dict or None if not found
         """
-        return self.status_manager.get_club_config(user_id)
+        return self.status_manager.get_guild_config(guild_id)
     
-    def can_modify_config(self, user_id: str, target_club_user_id: str) -> bool:
+    def can_modify_config(self, user_id: str, guild_id: str) -> bool:
         """
-        Check if a user can modify a club's configuration.
+        Check if a user can modify a guild's configuration.
         
         Args:
             user_id: User ID requesting to modify
-            target_club_user_id: Club's admin user ID
+            guild_id: Guild ID
             
         Returns:
             True if user can modify, False otherwise
         """
-        return self.status_manager.can_modify_config(user_id, target_club_user_id)
+        return self.status_manager.can_modify_config(user_id, guild_id)
         
-    async def start_setup(self, user_id: str, user_name: str) -> str:
+    async def start_setup(self, user_id: str, user_name: str, guild_id: str = None, guild_name: str = None) -> str:
         """
         Starts the setup process for a new user.
         
@@ -74,6 +74,8 @@ class SetupManager:
                 'step': 'club_name',
                 'club_name': None,
                 'admin_discord_id': None,
+                'guild_id': guild_id,
+                'guild_name': guild_name,
                 'config_folder_id': None,
                 'monthly_folder_id': None,
                 'config_spreadsheet_id': None,
@@ -645,9 +647,10 @@ class SetupManager:
             
             # Save setup completion to persistent storage
             try:
-                club_config = {
+                guild_config = {
+                    'guild_name': current_state.get('guild_name', 'Unknown Guild'),
                     'club_name': current_state['club_name'],
-                    'admin_id': current_state['admin_discord_id'],
+                    'admin_user_id': current_state['admin_discord_id'],
                     'config_spreadsheet_id': current_state['config_spreadsheet_id'],
                     'task_reminders_channel_id': current_state['task_reminders_channel_id'],
                     'meeting_reminders_channel_id': current_state['meeting_reminders_channel_id'],
@@ -657,7 +660,11 @@ class SetupManager:
                     'monthly_sheets': current_state.get('monthly_sheets', {})
                 }
                 
-                self.status_manager.mark_setup_complete(user_id, club_config)
+                guild_id = current_state.get('guild_id')
+                if not guild_id:
+                    return f"❌ **Setup Completion Failed**\n\nError: No guild ID found in setup state.\n\n**Please contact support.**"
+                
+                self.status_manager.mark_setup_complete(guild_id, guild_config)
                 print(f"🔍 [SETUP] Setup completion saved to persistent storage")
             except Exception as e:
                 print(f"❌ [SETUP ERROR] Failed to save setup completion: {e}")
@@ -769,9 +776,10 @@ class SetupManager:
             
             # Save setup completion to persistent storage
             try:
-                club_config = {
+                guild_config = {
+                    'guild_name': current_state.get('guild_name', 'Unknown Guild'),
                     'club_name': current_state['club_name'],
-                    'admin_id': current_state['admin_discord_id'],
+                    'admin_user_id': current_state['admin_discord_id'],
                     'config_spreadsheet_id': current_state['config_spreadsheet_id'],
                     'task_reminders_channel_id': current_state['task_reminders_channel_id'],
                     'meeting_reminders_channel_id': current_state['meeting_reminders_channel_id'],
@@ -781,7 +789,11 @@ class SetupManager:
                     'monthly_sheets': current_state.get('monthly_sheets', {})
                 }
                 
-                self.status_manager.mark_setup_complete(user_id, club_config)
+                guild_id = current_state.get('guild_id')
+                if not guild_id:
+                    return f"❌ **Setup Completion Failed**\n\nError: No guild ID found in setup state.\n\n**Please contact support.**"
+                
+                self.status_manager.mark_setup_complete(guild_id, guild_config)
                 print(f"🔍 [SETUP] Setup completion saved to persistent storage")
             except Exception as e:
                 print(f"❌ [SETUP ERROR] Failed to save setup completion: {e}")
