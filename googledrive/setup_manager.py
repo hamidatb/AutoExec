@@ -288,9 +288,21 @@ class SetupManager:
                 'parents': [folder_id]
             }
             
+            # Create a simple text file using MediaIoBaseUpload
+            from googleapiclient.http import MediaIoBaseUpload
+            import io
+            
+            # Create a file-like object with the test content
+            test_content = 'Test access file - can be deleted'
+            media_body = MediaIoBaseUpload(
+                io.BytesIO(test_content.encode('utf-8')),
+                mimetype='text/plain',
+                resumable=False
+            )
+            
             test_file = self.sheets_manager.drive_service.files().create(
                 body=test_file_metadata,
-                media_body='Test access file - can be deleted'
+                media_body=media_body
             ).execute()
             
             print(f"🔍 [SETUP] Test file created successfully: {test_file.get('id')}")
@@ -303,6 +315,9 @@ class SetupManager:
             
         except Exception as e:
             print(f"❌ [SETUP ERROR] Folder access verification failed for {folder_id}: {e}")
+            print(f"❌ [SETUP ERROR] Exception type: {type(e).__name__}")
+            import traceback
+            print(f"❌ [SETUP ERROR] Full traceback: {traceback.format_exc()}")
             return False
     
     def _extract_folder_id(self, folder_link: str) -> str:
