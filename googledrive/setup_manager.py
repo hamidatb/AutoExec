@@ -87,8 +87,6 @@ class SetupManager:
                 return await self._handle_admin_selection(user_id, message_content)
             elif current_step == 'folder_selection':
                 return await self._handle_folder_selection(user_id, message_content)
-            elif current_step == 'folder_verification':
-                return await self._handle_folder_verification(user_id, message_content)
             elif current_step == 'sheets_initialization':
                 return await self._handle_sheets_initialization(user_id, message_content)
             elif current_step == 'task_reminders_channel':
@@ -218,41 +216,8 @@ class SetupManager:
             self.setup_states[user_id]['config_folder_id'] = config_folder_id
             self.setup_states[user_id]['monthly_folder_id'] = monthly_folder_id
             
-            # Move to folder verification step
-            self.setup_states[user_id]['step'] = 'folder_verification'
-            
-            message = "✅ **Folders Selected Successfully!**\n\n"
-            message += f"• Config Folder ID: `{config_folder_id}`\n"
-            message += f"• Monthly Folder ID: `{monthly_folder_id}`\n\n"
-            message += "**Step 3: Folder Access Verification**\n"
-            message += "I'll now verify that I can access these folders...\n\n"
-            message += "This may take a few moments..."
-            
-            return message
-            
-        except Exception as e:
-            print(f"❌ [SETUP ERROR] Error handling folder selection: {e}")
-            return "❌ Error processing folder links. Please try again."
-    
-    async def _handle_folder_verification(self, user_id: str, message_content: str) -> str:
-        """
-        Handles folder access verification.
-        
-        Args:
-            user_id: Discord ID of the user
-            message_content: User's response (should be "continue" or similar)
-            
-        Returns:
-            Next setup message
-        """
-        try:
-            print(f"🔍 [SETUP] Starting folder verification for user {user_id}")
-            
-            current_state = self.setup_states[user_id]
-            config_folder_id = current_state['config_folder_id']
-            monthly_folder_id = current_state['monthly_folder_id']
-            
-            print(f"🔍 [SETUP] Verifying access to config folder: {config_folder_id}")
+            # Immediately verify folder access instead of waiting for user input
+            print(f"🔍 [SETUP] Starting immediate folder verification for user {user_id}")
             
             # Test access to config folder
             try:
@@ -262,8 +227,6 @@ class SetupManager:
                 print(f"❌ [SETUP ERROR] Config folder verification failed: {e}")
                 config_access = False
             
-            print(f"🔍 [SETUP] Verifying access to monthly folder: {monthly_folder_id}")
-            
             # Test access to monthly folder
             try:
                 monthly_access = await self._verify_folder_access(monthly_folder_id)
@@ -272,7 +235,7 @@ class SetupManager:
                 print(f"❌ [SETUP ERROR] Monthly folder verification failed: {e}")
                 monthly_access = False
             
-            # Check results
+            # Check results and proceed accordingly
             if not config_access:
                 return f"❌ **Config Folder Access Failed**\n\nI cannot access the config folder `{config_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
             
@@ -280,23 +243,23 @@ class SetupManager:
                 return f"❌ **Monthly Folder Access Failed**\n\nI cannot access the monthly folder `{monthly_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
             
             # Both folders accessible, move to sheets initialization
-            current_state['step'] = 'sheets_initialization'
+            self.setup_states[user_id]['step'] = 'sheets_initialization'
             
-            message = "✅ **Folder Access Verified Successfully!**\n\n"
-            message += f"• Config Folder: ✅ Accessible\n"
-            message += f"• Monthly Folder: ✅ Accessible\n\n"
-            message += "**Step 4: Google Sheets Initialization**\n"
+            message = "✅ **Folders Selected and Verified Successfully!**\n\n"
+            message += f"• Config Folder ID: `{config_folder_id}` ✅ Accessible\n"
+            message += f"• Monthly Folder ID: `{monthly_folder_id}` ✅ Accessible\n\n"
+            message += "**Step 3: Google Sheets Initialization**\n"
             message += "I'll now create the necessary Google Sheets for your club:\n\n"
-            message += f"• **{current_state['club_name']} Task Manager Config** - Main configuration\n"
-            message += f"• **{current_state['club_name']} Tasks - {datetime.now().strftime('%B %Y')}** - Task tracking\n"
-            message += f"• **{current_state['club_name']} Meetings - {datetime.now().strftime('%B %Y')}** - Meeting management\n\n"
+            message += f"• **{self.setup_states[user_id]['club_name']} Task Manager Config** - Main configuration\n"
+            message += f"• **{self.setup_states[user_id]['club_name']} Tasks - {datetime.now().strftime('%B %Y')}** - Task tracking\n"
+            message += f"• **{self.setup_states[user_id]['club_name']} Meetings - {datetime.now().strftime('%B %Y')}** - Meeting management\n\n"
             message += "This may take a few moments..."
             
             return message
             
         except Exception as e:
-            print(f"❌ [SETUP ERROR] Error in folder verification: {e}")
-            return "❌ Error verifying folder access. Please try again."
+            print(f"❌ [SETUP ERROR] Error handling folder selection: {e}")
+            return "❌ Error processing folder links. Please try again."
     
     async def _verify_folder_access(self, folder_id: str) -> bool:
         """
