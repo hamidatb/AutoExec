@@ -48,6 +48,7 @@ class SetupManager:
             message += "1. Created Google Drive folders for your club's documents\n"
             message += "2. Shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**\n"
             message += "3. Given the service account 'Editor' permissions\n\n"
+            message += "**Note**: No OAuth setup required - just share the folders and you're ready to go!\n\n"
             message += "**Step 1: Club Information**\n"
             message += "What is the name of your club or group?"
             
@@ -148,6 +149,7 @@ class SetupManager:
             message += "**Step 3: Google Sheets Initialization**\n"
             message += "Before I create the Google Sheets, I need to know where to put them.\n\n"
             message += "**IMPORTANT**: Please make sure you have shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**!\n\n"
+            message += "**No OAuth needed** - the bot will access only the folders you specifically share.\n\n"
             message += "Please provide the Google Drive folder links for:\n"
             message += "• **Main Config Folder** - Where to store the Task Manager Config sheet\n"
             message += "• **Monthly Sheets Folder** - Where to store monthly task and meeting sheets\n\n"
