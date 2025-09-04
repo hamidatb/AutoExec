@@ -91,8 +91,12 @@ class SetupManager:
                 return await self._handle_folder_verification(user_id, message_content)
             elif current_step == 'sheets_initialization':
                 return await self._handle_sheets_initialization(user_id, message_content)
-            elif current_step == 'channel_configuration':
-                return await self._handle_channel_configuration(user_id, message_content)
+            elif current_step == 'task_reminders_channel':
+                return await self._handle_task_reminders_channel(user_id, message_content)
+            elif current_step == 'meeting_reminders_channel':
+                return await self._handle_meeting_reminders_channel(user_id, message_content)
+            elif current_step == 'escalation_channel':
+                return await self._handle_escalation_channel(user_id, message_content)
             else:
                 print(f"❌ [SETUP ERROR] Unknown setup step: {current_step}")
                 return "❌ Unknown setup step. Please start setup again."
@@ -423,8 +427,8 @@ class SetupManager:
             # Store monthly sheets
             current_state['monthly_sheets'] = monthly_sheets
             
-            # Move to next step
-            current_state['step'] = 'channel_configuration'
+            # Move to next step - start with task reminders channel
+            current_state['step'] = 'task_reminders_channel'
             
             print(f"🔍 [SETUP] Sheets initialization completed successfully")
             print(f"🔍 [SETUP] Moving to channel configuration step")
@@ -433,24 +437,195 @@ class SetupManager:
             message += f"• Config Sheet: `{config_spreadsheet_id}`\n"
             message += f"• Tasks Sheet: `{monthly_sheets['tasks']}`\n"
             message += f"• Meetings Sheet: `{monthly_sheets['meetings']}`\n\n"
-            message += "**Step 5: Channel Configuration**\n"
-            message += "Now I need to know which Discord channels to use for different types of messages:\n\n"
-            message += "Please provide the channel IDs for:\n"
-            message += "• **Task reminders** - Where I'll send task deadline reminders (T-24h, T-2h, overdue)\n"
-            message += "• **Meeting reminders** - Where I'll send meeting notifications (T-2h, T-0)\n"
-            message += "• **Escalations** - Where I'll send alerts for overdue tasks and admin notifications\n\n"
-            message += "**How to get channel IDs:**\n"
-            message += "1. Right-click on the channel in Discord\n"
-            message += "2. Select 'Copy ID'\n"
-            message += "3. Paste all three IDs in your next message (one per line)\n\n"
-            message += "**Example format:**\n"
-            message += "```\n123456789012345678\n987654321098765432\n555666777888999000\n```"
+            message += "**Step 5a: Task Reminders Channel**\n"
+            message += "Now I need to know which Discord channels to use for different types of messages.\n\n"
+            message += "First, which channel should I use for task reminders?\n\n"
+            message += "This is where I'll send:\n"
+            message += "• Task deadline reminders (T-24h, T-2h)\n"
+            message += "• Overdue task notifications\n"
+            message += "• Task completion confirmations\n\n"
+            message += "Please provide the channel ID:"
             
             return message
             
         except Exception as e:
             print(f"❌ [SETUP ERROR] Error in sheets initialization: {e}")
             return f"❌ **Sheets Initialization Failed**\n\nError: {str(e)}\n\n**Please check:**\n• Your Google Drive permissions\n• The service account has access to the folders\n• Try running setup again"
+    
+    async def _handle_task_reminders_channel(self, user_id: str, message_content: str) -> str:
+        """
+        Handles task reminders channel configuration.
+        
+        Args:
+            user_id: Discord ID of the user
+            message_content: Channel ID for task reminders
+            
+        Returns:
+            Next setup message
+        """
+        try:
+            print(f"🔍 [SETUP] Processing task reminders channel for user {user_id}")
+            print(f"🔍 [SETUP] Channel message content: {message_content}")
+            
+            # Extract channel ID
+            channel_id = message_content.strip()
+            print(f"🔍 [SETUP] Extracted task reminders channel ID: {channel_id}")
+            
+            if not channel_id or not channel_id.isdigit():
+                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here"
+            
+            # Store task reminders channel ID
+            current_state = self.setup_states[user_id]
+            current_state['task_reminders_channel_id'] = channel_id
+            
+            # Move to next step
+            current_state['step'] = 'meeting_reminders_channel'
+            
+            message = "✅ **Task Reminders Channel Set!**\n\n"
+            message += f"Task reminders will be sent to: <#{channel_id}>\n\n"
+            message += "**Step 5b: Meeting Reminders Channel**\n"
+            message += "Now, which channel should I use for meeting reminders?\n\n"
+            message += "This is where I'll send:\n"
+            message += "• Meeting notifications (T-2h, T-0)\n"
+            message += "• Meeting reminders\n\n"
+            message += "Please provide the channel ID:"
+            
+            return message
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Error in task reminders channel configuration: {e}")
+            return f"❌ **Task Reminders Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel ID is correct\n• The bot has access to that channel\n• Try again with a valid channel ID"
+    
+    async def _handle_meeting_reminders_channel(self, user_id: str, message_content: str) -> str:
+        """
+        Handles meeting reminders channel configuration.
+        
+        Args:
+            user_id: Discord ID of the user
+            message_content: Channel ID for meeting reminders
+            
+        Returns:
+            Next setup message
+        """
+        try:
+            print(f"🔍 [SETUP] Processing meeting reminders channel for user {user_id}")
+            print(f"🔍 [SETUP] Channel message content: {message_content}")
+            
+            # Extract channel ID
+            channel_id = message_content.strip()
+            print(f"🔍 [SETUP] Extracted meeting reminders channel ID: {channel_id}")
+            
+            if not channel_id or not channel_id.isdigit():
+                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here"
+            
+            # Store meeting reminders channel ID
+            current_state = self.setup_states[user_id]
+            current_state['meeting_reminders_channel_id'] = channel_id
+            
+            # Move to next step
+            current_state['step'] = 'escalation_channel'
+            
+            message = "✅ **Meeting Reminders Channel Set!**\n\n"
+            message += f"Meeting reminders will be sent to: <#{channel_id}>\n\n"
+            message += "**Step 5c: Escalation Channel**\n"
+            message += "Finally, which channel should I use for escalations?\n\n"
+            message += "This is where I'll send:\n"
+            message += "• Overdue task alerts\n"
+            message += "• Admin notifications\n"
+            message += "• Important system messages\n\n"
+            message += "Please provide the channel ID:"
+            
+            return message
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Error in meeting reminders channel configuration: {e}")
+            return f"❌ **Meeting Reminders Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel ID is correct\n• The bot has access to that channel\n• Try again with a valid channel ID"
+    
+    async def _handle_escalation_channel(self, user_id: str, message_content: str) -> str:
+        """
+        Handles escalation channel configuration and completes setup.
+        
+        Args:
+            user_id: Discord ID of the user
+            message_content: Channel ID for escalations
+            
+        Returns:
+            Setup completion message
+        """
+        try:
+            print(f"🔍 [SETUP] Processing escalation channel for user {user_id}")
+            print(f"🔍 [SETUP] Channel message content: {message_content}")
+            
+            # Extract channel ID
+            channel_id = message_content.strip()
+            print(f"🔍 [SETUP] Extracted escalation channel ID: {channel_id}")
+            
+            if not channel_id or not channel_id.isdigit():
+                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here"
+            
+            # Store escalation channel ID
+            current_state = self.setup_states[user_id]
+            current_state['escalation_channel_id'] = channel_id
+            
+            print(f"🔍 [SETUP] All channels configured, updating config sheet")
+            print(f"🔍 [SETUP] Config spreadsheet ID: {current_state['config_spreadsheet_id']}")
+            
+            # Update config sheet with all channel IDs
+            try:
+                await self.sheets_manager.update_config_channels(
+                    current_state['config_spreadsheet_id'],
+                    current_state['task_reminders_channel_id'],
+                    current_state['meeting_reminders_channel_id'],
+                    current_state['escalation_channel_id']
+                )
+                print(f"🔍 [SETUP] Config sheet updated successfully")
+            except Exception as e:
+                print(f"❌ [SETUP ERROR] Failed to update config sheet: {e}")
+                return f"❌ **Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel IDs are correct\n• The bot has access to those channels\n• Try again with valid channel IDs"
+            
+            # Mark setup as complete
+            current_state['channels_configured'] = True
+            
+            print(f"🔍 [SETUP] Logging successful setup completion")
+            
+            # Log successful setup
+            try:
+                await self.sheets_manager.log_action(
+                    current_state['config_spreadsheet_id'],
+                    'setup_completed',
+                    user_id,
+                    f'Setup completed for club: {current_state["club_name"]}',
+                    'success'
+                )
+                print(f"🔍 [SETUP] Setup completion logged successfully")
+            except Exception as e:
+                print(f"⚠️ [SETUP WARNING] Failed to log setup completion: {e}")
+                # Don't fail the setup for logging errors
+            
+            # Clean up setup state
+            del self.setup_states[user_id]
+            
+            print(f"🔍 [SETUP] Setup completed successfully for user {user_id}")
+            
+            message = "🎉 **Setup Complete!** 🎉\n\n"
+            message += f"Your club **{current_state['club_name']}** is now configured!\n\n"
+            message += "**Channel Configuration:**\n"
+            message += f"• Task reminders will be sent to: <#{current_state['task_reminders_channel_id']}>\n"
+            message += f"• Meeting reminders will be sent to: <#{current_state['meeting_reminders_channel_id']}>\n"
+            message += f"• Escalations will be sent to: <#{current_state['escalation_channel_id']}>\n\n"
+            message += "**What happens next:**\n"
+            message += "• I'll listen for commands in your DM and public channels\n"
+            message += "• Use `/meeting set` to schedule meetings\n"
+            message += "• Use `/assign` to create tasks\n"
+            message += "• I'll automatically parse meeting minutes and create tasks\n"
+            message += "• Task reminders and escalations will be sent to the configured channels\n\n"
+            message += "**Need help?** Use `/help` to see all available commands."
+            
+            return message
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Error in escalation channel configuration: {e}")
+            return f"❌ **Escalation Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel ID is correct\n• The bot has access to that channel\n• Try again with a valid channel ID"
     
     async def _handle_channel_configuration(self, user_id: str, message_content: str) -> str:
         """
