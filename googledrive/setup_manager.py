@@ -560,7 +560,7 @@ class SetupManager:
             for attempt in range(max_retries):
                 try:
                     print(f"🔍 [SETUP] Attempting to update config sheet (attempt {attempt + 1}/{max_retries})")
-                    await self.sheets_manager.update_config_channels(
+                    self.sheets_manager.update_config_channels(
                         current_state['config_spreadsheet_id'],
                         current_state['task_reminders_channel_id'],
                         current_state['meeting_reminders_channel_id'],
@@ -664,7 +664,7 @@ class SetupManager:
             for attempt in range(max_retries):
                 try:
                     print(f"🔍 [SETUP] Attempting to update config sheet (attempt {attempt + 1}/{max_retries})")
-                    await self.sheets_manager.update_config_channels(
+                    self.sheets_manager.update_config_channels(
                         current_state['config_spreadsheet_id'],
                         channel_ids[0],  # Task reminders
                         channel_ids[1],  # Meeting reminders
