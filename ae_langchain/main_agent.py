@@ -23,6 +23,9 @@ Config().validate()
 if not os.getenv("OPENAI_API_KEY"):
     raise EnvironmentError("API Key not found. Check your .env file!")
 
+# Global variable for pending announcements
+_pending_announcements = []
+
 @tool 
 def start_discord_bot():
     """
@@ -113,8 +116,6 @@ def send_output_to_discord(messageToSend:str) -> str:
     
     # Store the message in a global variable that works across threads
     global _pending_announcements
-    if '_pending_announcements' not in globals():
-        _pending_announcements = []
     
     _pending_announcements.append({
         'message': str(messageToSend),
@@ -472,13 +473,8 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
                 # and returning a response that indicates the message should be sent
                 
                 # Store the message in a global variable that works across threads
-                import threading
-                if not hasattr(threading.current_thread(), 'pending_announcements'):
-                    # Use a global variable instead of bot instance
-                    global _pending_announcements
-                    if '_pending_announcements' not in globals():
-                        _pending_announcements = []
-                    print(f"🔍 [send_announcement] Using global pending_announcements list")
+                global _pending_announcements
+                print(f"🔍 [send_announcement] Using global pending_announcements list")
                 
                 announcement_data = {
                     'message': formatted_message,
