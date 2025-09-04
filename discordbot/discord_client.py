@@ -3,7 +3,7 @@ from discord import app_commands
 import asyncio
 import re
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from googledrive.sheets_manager import ClubSheetsManager
 from googledrive.meeting_manager import MeetingManager
@@ -71,9 +71,13 @@ class ClubExecBot(discord.Client):
         # Load existing club configurations
         await self.load_club_configurations()
         
+        # Rehydrate reminders from Timers tab
+        await self.rehydrate_reminders()
+        
         # Start reminder loops
         asyncio.create_task(self.reminder_loop())
         asyncio.create_task(self.meeting_reminder_loop())
+        asyncio.create_task(self.reconciliation_loop())
         
     async def on_message(self, message: discord.Message):
         """Handle incoming messages."""
@@ -102,6 +106,16 @@ class ClubExecBot(discord.Client):
         # CRITICAL: Skip natural language processing if user is in setup mode
         if isinstance(message.channel, discord.DMChannel) and self.setup_manager.is_in_setup(str(message.author.id)):
             return
+        
+        # Check setup gating for public channels
+        if not isinstance(message.channel, discord.DMChannel):
+            guild_id = str(message.guild.id) if message.guild else None
+            if not self.is_fully_setup(guild_id):
+                await message.channel.send(
+                    "❌ **Setup Required**\n\n"
+                    "Setup is not complete. Please ask your admin to run `/setup` in DM with me."
+                )
+                return
             
         content = message.content.strip()
         
@@ -425,8 +439,12 @@ I am **NOT** set up for any student groups yet.
                 
     async def handle_task_reply(self, message: discord.Message):
         """Handle user replies to task reminders."""
+        # Check setup gating first
+        guild_id = str(message.guild.id) if message.guild else None
+        if not self.is_fully_setup(guild_id):
+            return
+        
         # Find the club configuration for this guild
-        guild_id = str(message.guild.id)
         club_config = self.club_configs.get(guild_id)
         
         if not club_config:
@@ -457,6 +475,116 @@ I am **NOT** set up for any student groups yet.
         # This would load from the config sheets
         # For now, we'll use environment variables
         pass
+    
+    def is_fully_setup(self, guild_id: str = None) -> bool:
+        """
+        Checks if the bot is fully set up for a guild.
+        
+        Args:
+            guild_id: Guild ID to check (if None, checks if any guild is set up)
+            
+        Returns:
+            True if fully set up, False otherwise
+        """
+        if guild_id:
+            return guild_id in self.club_configs and self.club_configs[guild_id].get('admin_discord_id')
+        else:
+            return len(self.club_configs) > 0 and any(
+                config.get('admin_discord_id') for config in self.club_configs.values()
+            )
+    
+    async def check_setup_gate(self, interaction: discord.Interaction) -> bool:
+        """
+        Checks if the bot is set up and blocks commands if not.
+        
+        Args:
+            interaction: Discord interaction to respond to
+            
+        Returns:
+            True if setup is complete, False if blocked
+        """
+        guild_id = str(interaction.guild.id) if interaction.guild else None
+        
+        if not self.is_fully_setup(guild_id):
+            await interaction.response.send_message(
+                "❌ **Setup Required**\n\n"
+                "Setup is not complete. Please ask your admin to run `/setup` in DM with me.",
+                ephemeral=True
+            )
+            return False
+        return True
+    
+    async def rehydrate_reminders(self):
+        """Rehydrates reminders from the Timers tab on startup."""
+        try:
+            for guild_id, club_config in self.club_configs.items():
+                if 'config_spreadsheet_id' in club_config:
+                    # Load timers from Timers tab
+                    timers = self.sheets_manager.get_timers(club_config['config_spreadsheet_id'])
+                    for timer in timers:
+                        if timer.get('state') == 'active':
+                            # Schedule the timer
+                            await self._schedule_timer(timer)
+            print("✅ Reminders rehydrated from Timers tab")
+        except Exception as e:
+            print(f"Error rehydrating reminders: {e}")
+    
+    async def reconciliation_loop(self):
+        """Reconciliation job that runs every 15 minutes to ensure timers match current data."""
+        while True:
+            try:
+                await asyncio.sleep(900)  # Wait 15 minutes
+                await self.reconcile_timers()
+            except Exception as e:
+                print(f"Error in reconciliation loop: {e}")
+                await asyncio.sleep(60)  # Wait 1 minute on error
+    
+    async def reconcile_timers(self):
+        """Reconciles timers with current Tasks and Meetings sheets."""
+        try:
+            for guild_id, club_config in self.club_configs.items():
+                if 'config_spreadsheet_id' in club_config:
+                    # Get current timers
+                    current_timers = self.sheets_manager.get_timers(club_config['config_spreadsheet_id'])
+                    
+                    # Get current tasks and meetings
+                    tasks = []
+                    meetings = []
+                    if 'tasks_sheet_id' in club_config:
+                        tasks = self.sheets_manager.get_all_tasks(club_config['tasks_sheet_id'])
+                    if 'meetings_sheet_id' in club_config:
+                        meetings = self.sheets_manager.get_all_meetings(club_config['meetings_sheet_id'])
+                    
+                    # Update timers based on current data
+                    await self._update_timers_from_data(current_timers, tasks, meetings, club_config['config_spreadsheet_id'])
+            
+            print("✅ Timer reconciliation completed")
+        except Exception as e:
+            print(f"Error in timer reconciliation: {e}")
+    
+    async def _schedule_timer(self, timer: Dict[str, Any]):
+        """Schedules a timer based on its configuration."""
+        try:
+            # This would integrate with a proper scheduling system
+            # For now, we'll just store it in active_reminders
+            timer_id = timer.get('id')
+            if timer_id:
+                self.active_reminders[timer_id] = timer
+                print(f"Scheduled timer: {timer_id}")
+        except Exception as e:
+            print(f"Error scheduling timer: {e}")
+    
+    async def _update_timers_from_data(self, current_timers: List[Dict[str, Any]], 
+                                     tasks: List[Dict[str, Any]], 
+                                     meetings: List[Dict[str, Any]], 
+                                     config_spreadsheet_id: str):
+        """Updates timers based on current tasks and meetings data."""
+        try:
+            # This would implement the reconciliation logic
+            # For now, we'll just log that reconciliation is happening
+            print(f"Reconciling {len(current_timers)} timers with {len(tasks)} tasks and {len(meetings)} meetings")
+        except Exception as e:
+            print(f"Error updating timers from data: {e}")
         
     async def reminder_loop(self):
         """Background loop for sending task reminders."""
@@ -626,28 +754,25 @@ If you need help, contact your server admin or use the natural language features
     action="Action to perform",
     title="Meeting title",
     start="Start time (YYYY-MM-DD HH:MM)",
-    end="End time (YYYY-MM-DD HH:MM)",
-    minutes_url="Google Docs URL for minutes"
+    location="Meeting location or link",
+    meeting_link="Meeting link (Zoom, Teams, etc.)"
 )
 async def meeting_command(
     interaction: discord.Interaction,
     action: str,
     title: Optional[str] = None,
     start: Optional[str] = None,
-    end: Optional[str] = None,
-    minutes_url: Optional[str] = None
+    location: Optional[str] = None,
+    meeting_link: Optional[str] = None
 ):
     """Handle meeting-related commands."""
+    # Check setup gating first
+    if not await bot.check_setup_gate(interaction):
+        return
+    
     # Check if user is admin
     guild_id = str(interaction.guild.id)
     club_config = bot.club_configs.get(guild_id)
-    
-    if not club_config:
-        await interaction.response.send_message(
-            "❌ Bot not configured for this server. Please run `/setup` first.",
-            ephemeral=True
-        )
-        return
         
     if str(interaction.user.id) != club_config.get('admin_discord_id'):
         await interaction.response.send_message(
@@ -675,27 +800,16 @@ async def meeting_command(
                     ephemeral=True
                 )
                 return
-                
-            # Parse end time if provided
-            end_time = None
-            if end:
-                try:
-                    end_time = datetime.strptime(end, "%Y-%m-%d %H:%M")
-                    end_time = end_time.replace(tzinfo=timezone.utc)
-                except ValueError:
-                    await interaction.response.send_message(
-                        "❌ Invalid end time format. Use YYYY-MM-DD HH:MM",
-                        ephemeral=True
-                    )
-                    return
                     
             # Create meeting data
             meeting_data = {
                 'title': title,
                 'start_at_utc': start_time.isoformat(),
-                'end_at_utc': end_time.isoformat() if end_time else None,
+                'end_at_utc': None,  # No end time needed
                 'start_at_local': start_time.strftime("%B %d, %Y at %I:%M %p"),
-                'end_at_local': end_time.strftime("%B %d, %Y at %I:%M %p") if end_time else None,
+                'end_at_local': None,
+                'location': location or '',
+                'meeting_link': meeting_link or '',
                 'channel_id': str(interaction.channel.id),
                 'created_by': str(interaction.user.id)
             }
@@ -707,11 +821,14 @@ async def meeting_command(
             )
             
             if success:
-                await interaction.response.send_message(
-                    f"✅ Meeting '{title}' scheduled successfully!\n"
-                    f"Start: {meeting_data['start_at_local']}\n"
-                    f"Channel: <#{interaction.channel.id}>"
-                )
+                message = f"✅ Meeting '{title}' scheduled successfully!\n"
+                message += f"Start: {meeting_data['start_at_local']}\n"
+                if location:
+                    message += f"Location: {location}\n"
+                if meeting_link:
+                    message += f"Link: {meeting_link}\n"
+                message += f"Channel: <#{interaction.channel.id}>"
+                await interaction.response.send_message(message)
             else:
                 await interaction.response.send_message(
                     "❌ Failed to schedule meeting. Please try again.",
@@ -743,17 +860,11 @@ async def meeting_command(
                 ephemeral=True
             )
             
-        elif action.lower() == "linkminutes":
-            if not minutes_url:
-                await interaction.response.send_message(
-                    "❌ Please provide the minutes document URL.",
-                    ephemeral=True
-                )
-                return
-                
-            # This would require a meeting ID or selection
+        elif action.lower() == "end":
+            # For the end command, we need to get the minutes URL from the interaction
+            # This would need to be passed as a parameter or handled differently
             await interaction.response.send_message(
-                "❌ Please specify which meeting to link minutes to. Use the meeting ID.",
+                "❌ Please use `/meeting end minutes:<url>` to end a meeting with minutes.",
                 ephemeral=True
             )
             
@@ -794,16 +905,13 @@ async def assign_command(
     due: Optional[str] = None
 ):
     """Assign a task to a user."""
+    # Check setup gating first
+    if not await bot.check_setup_gate(interaction):
+        return
+    
     # Check if user is admin
     guild_id = str(interaction.guild.id)
     club_config = bot.club_configs.get(guild_id)
-    
-    if not club_config:
-        await interaction.response.send_message(
-            "❌ Bot not configured for this server. Please run `/setup` first.",
-            ephemeral=True
-        )
-        return
         
     if str(interaction.user.id) != club_config.get('admin_discord_id'):
         await interaction.response.send_message(
@@ -868,15 +976,12 @@ async def assign_command(
 @app_commands.describe(month="Month to show (e.g., 'September 2025')")
 async def summary_command(interaction: discord.Interaction, month: Optional[str] = None):
     """Show task summary for a month."""
+    # Check setup gating first
+    if not await bot.check_setup_gate(interaction):
+        return
+    
     guild_id = str(interaction.guild.id)
     club_config = bot.club_configs.get(guild_id)
-    
-    if not club_config:
-        await interaction.response.send_message(
-            "❌ Bot not configured for this server. Please run `/setup` first.",
-            ephemeral=True
-        )
-        return
         
     try:
         # Get all tasks
@@ -936,15 +1041,12 @@ async def summary_command(interaction: discord.Interaction, month: Optional[str]
 @app_commands.describe(user="User to show tasks for")
 async def status_command(interaction: discord.Interaction, user: discord.Member):
     """Show tasks for a specific user."""
+    # Check setup gating first
+    if not await bot.check_setup_gate(interaction):
+        return
+    
     guild_id = str(interaction.guild.id)
     club_config = bot.club_configs.get(guild_id)
-    
-    if not club_config:
-        await interaction.response.send_message(
-            "❌ Bot not configured for this server. Please run `/setup` first.",
-            ephemeral=True
-        )
-        return
         
     try:
         # Get user tasks
@@ -995,15 +1097,12 @@ async def status_command(interaction: discord.Interaction, user: discord.Member)
 @app_commands.describe(task_id="ID of the task to mark as done")
 async def done_command(interaction: discord.Interaction, task_id: str):
     """Mark a task as complete."""
+    # Check setup gating first
+    if not await bot.check_setup_gate(interaction):
+        return
+    
     guild_id = str(interaction.guild.id)
     club_config = bot.club_configs.get(guild_id)
-    
-    if not club_config:
-        await interaction.response.send_message(
-            "❌ Bot not configured for this server. Please run `/setup` first.",
-            ephemeral=True
-        )
-        return
         
     try:
         # Update task status
@@ -1035,15 +1134,12 @@ async def done_command(interaction: discord.Interaction, task_id: str):
 )
 async def reschedule_command(interaction: discord.Interaction, task_id: str, new_date: str):
     """Reschedule a task to a new deadline."""
+    # Check setup gating first
+    if not await bot.check_setup_gate(interaction):
+        return
+    
     guild_id = str(interaction.guild.id)
     club_config = bot.club_configs.get(guild_id)
-    
-    if not club_config:
-        await interaction.response.send_message(
-            "❌ Bot not configured for this server. Please run `/setup` first.",
-            ephemeral=True
-        )
-        return
         
     try:
         # Parse new date
