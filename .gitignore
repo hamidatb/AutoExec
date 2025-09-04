@@ -10,6 +10,7 @@ logs/
 # google cloud credentials
 credentials.json
 googledrive/service_account_key.json
+googledrive/servicekey.json
 
 # the google drive authentification information that gets stored on the computer
 token.json
@@ -22,3 +23,6 @@ testcloud.txt
 service-account.json
 
 tokenOld.json
+
+# Guild configuration files 
+guild_setup_status.json

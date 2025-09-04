@@ -115,7 +115,29 @@ MEETING_REMINDER_CHANNEL_ID=channel_id_for_meeting_reminders
 ESCALATION_CHANNEL_ID=channel_id_for_escalations
 ```
 
-### **6. Environment Management (IMPORTANT!)**
+### **6. Guild Configuration Security (IMPORTANT!)**
+
+**⚠️ Security Update: Guild Configuration Files**
+
+The `guild_setup_status.json` file contains sensitive configuration data (Discord IDs, Google Drive IDs, etc.) and should **NOT** be committed to git. This file is now ignored by git to prevent accidental exposure of sensitive data.
+
+**What this means:**
+- ✅ The `guild_setup_status.json` file will exist locally and work normally
+- ✅ The file is ignored by git (won't be committed or pushed)
+- ✅ Each deployment/environment will have its own configuration file
+- ✅ Sensitive data stays local and secure
+
+**For new installations:**
+- Copy `guild_setup_status.example.json` to `guild_setup_status.json`
+- Fill in your actual configuration values
+- The file will be automatically ignored by git
+
+**For existing installations:**
+- Your existing `guild_setup_status.json` will continue to work
+- The file is now ignored by git (no more accidental commits)
+- No migration needed - everything works as before
+
+### **7. Environment Management (IMPORTANT!)**
 
 **⚠️ CRITICAL: Avoid API Key Conflicts**
 
