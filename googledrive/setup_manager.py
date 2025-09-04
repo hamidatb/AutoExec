@@ -1129,3 +1129,119 @@ class SetupManager:
         except Exception as e:
             print(f"Error getting configuration summary: {e}")
             return None
+
+    async def verify_folder_access_for_update(self, folder_id: str) -> tuple[bool, str]:
+        """
+        Verifies that the bot can access a Google Drive folder for configuration updates.
+        
+        Args:
+            folder_id: Google Drive folder ID
+            
+        Returns:
+            Tuple of (is_accessible: bool, message: str)
+        """
+        try:
+            print(f"🔍 [CONFIG UPDATE] Testing access to folder: {folder_id}")
+            
+            # Try to get folder metadata
+            folder = self.sheets_manager.drive_service.files().get(
+                fileId=folder_id,
+                fields='id,name,permissions'
+            ).execute()
+            
+            folder_name = folder.get('name', 'Unknown')
+            print(f"🔍 [CONFIG UPDATE] Folder metadata retrieved: {folder_name}")
+            
+            # Check if we have write permissions by trying to create a test file
+            test_file_metadata = {
+                'name': f'config_update_test_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt',
+                'parents': [folder_id]
+            }
+            
+            # Create a simple text file using MediaIoBaseUpload
+            from googleapiclient.http import MediaIoBaseUpload
+            import io
+            
+            # Create a file-like object with the test content
+            test_content = 'Configuration update test file - can be deleted'
+            media_body = MediaIoBaseUpload(
+                io.BytesIO(test_content.encode('utf-8')),
+                mimetype='text/plain',
+                resumable=False
+            )
+            
+            test_file = self.sheets_manager.drive_service.files().create(
+                body=test_file_metadata,
+                media_body=media_body
+            ).execute()
+            
+            print(f"🔍 [CONFIG UPDATE] Test file created successfully: {test_file.get('id')}")
+            
+            # Clean up test file
+            self.sheets_manager.drive_service.files().delete(fileId=test_file.get('id')).execute()
+            print(f"🔍 [CONFIG UPDATE] Test file cleaned up")
+            
+            return True, f"✅ Folder '{folder_name}' is accessible and writable"
+            
+        except Exception as e:
+            print(f"❌ [CONFIG UPDATE ERROR] Folder access verification failed for {folder_id}: {e}")
+            print(f"❌ [CONFIG UPDATE ERROR] Exception type: {type(e).__name__}")
+            import traceback
+            print(f"❌ [CONFIG UPDATE ERROR] Full traceback: {traceback.format_exc()}")
+            
+            error_msg = str(e)
+            if "not found" in error_msg.lower():
+                return False, f"❌ Folder not found. Please check the folder ID and ensure it exists."
+            elif "permission" in error_msg.lower() or "forbidden" in error_msg.lower():
+                return False, f"❌ Permission denied. Please ensure the folder is shared with the service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com** with 'Editor' permissions."
+            else:
+                return False, f"❌ Access verification failed: {error_msg}"
+
+    def update_guild_configuration(self, guild_id: str, user_id: str, updates: Dict[str, Any]) -> tuple[bool, str]:
+        """
+        Update guild configuration with validation. Only the admin can make changes.
+        
+        Args:
+            guild_id: Guild ID
+            user_id: User ID requesting the update
+            updates: Dictionary of configuration updates
+            
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        try:
+            # Check if user can modify config
+            if not self.status_manager.can_modify_config(user_id, guild_id):
+                return False, "❌ Access denied. Only the admin can modify server configuration."
+            
+            # Get current config
+            current_config = self.status_manager.get_guild_config(guild_id)
+            if not current_config:
+                return False, "❌ No configuration found for this server."
+            
+            # Validate folder updates if any
+            folder_updates = {}
+            for key, value in updates.items():
+                if key.endswith('_folder_id') and value:
+                    folder_updates[key] = value
+            
+            # Update the configuration
+            success = self.status_manager.update_guild_config(guild_id, user_id, updates)
+            
+            if success:
+                updated_settings = []
+                for key, value in updates.items():
+                    setting_name = key.replace('_', ' ').title()
+                    updated_settings.append(f"• {setting_name}: {value}")
+                
+                message = f"✅ **Configuration Updated Successfully!**\n\n"
+                message += f"**Updated Settings:**\n" + "\n".join(updated_settings)
+                message += f"\n\n**Note:** Changes have been saved and will take effect immediately."
+                
+                return True, message
+            else:
+                return False, "❌ Failed to update configuration. Please try again."
+                
+        except Exception as e:
+            print(f"Error updating guild configuration: {e}")
+            return False, f"❌ Configuration update failed: {str(e)}"
