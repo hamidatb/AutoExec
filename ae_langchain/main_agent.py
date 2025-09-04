@@ -160,9 +160,17 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
     
     try:
         # Get guild configurations from the setup manager instead of bot.club_configs
+        print(f"🔍 [DEBUG] Getting guild configurations from setup manager")
         all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        print(f"🔍 [DEBUG] Found {len(all_guilds) if all_guilds else 0} guild configurations")
+        
         if not all_guilds:
-            meetings_info += "❌ No club configuration found. Please run `/setup` first."
+            meetings_info += "❌ **No club configuration found.**\n\n"
+            meetings_info += "**Possible causes:**\n"
+            meetings_info += "• The guild_setup_status.json file was deleted or corrupted\n"
+            meetings_info += "• The setup process was never completed\n"
+            meetings_info += "• Permission issues accessing the configuration file\n\n"
+            meetings_info += "**Solution:** Please run `/setup` to configure the bot for your server."
             return meetings_info
         
         # Get meetings from the first available guild (in a real scenario, we'd get the current guild)
@@ -176,28 +184,42 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
                     meetings_sheet_id = guild_config['meetings_sheet_id']
                 
                 if meetings_sheet_id:
-                    # Get upcoming meetings using the meeting manager
-                    upcoming_meetings = BOT_INSTANCE.meeting_manager.get_upcoming_meetings(
-                        meetings_sheet_id, 
-                        limit=amount_of_meetings_to_return
-                    )
+                    print(f"🔍 [DEBUG] Getting meetings from sheet ID: {meetings_sheet_id}")
                     
-                    if not upcoming_meetings:
-                        meetings_info += "📅 **No upcoming meetings scheduled.**\n\n"
-                        meetings_info += "Use `/meeting set` to schedule a new meeting."
-                    else:
-                        for meeting in upcoming_meetings:
-                            title = meeting.get('title', 'Untitled Meeting')
-                            start_time = meeting.get('start_at_local', meeting.get('start_at_utc', 'Time TBD'))
-                            location = meeting.get('location', 'Location TBD')
-                            meeting_link = meeting.get('meeting_link', '')
-                            
-                            meetings_info += f"**{title}**\n"
-                            meetings_info += f"🕐 {start_time}\n"
-                            meetings_info += f"📍 {location}\n"
-                            if meeting_link:
-                                meetings_info += f"🔗 {meeting_link}\n"
-                            meetings_info += "\n"
+                    try:
+                        # Get upcoming meetings using the meeting manager
+                        upcoming_meetings = BOT_INSTANCE.meeting_manager.get_upcoming_meetings(
+                            meetings_sheet_id, 
+                            limit=amount_of_meetings_to_return
+                        )
+                        
+                        print(f"🔍 [DEBUG] Found {len(upcoming_meetings) if upcoming_meetings else 0} upcoming meetings")
+                        
+                        if not upcoming_meetings:
+                            meetings_info += "📅 **No upcoming meetings scheduled.**\n\n"
+                            meetings_info += "Use `/meeting set` to schedule a new meeting."
+                        else:
+                            for meeting in upcoming_meetings:
+                                title = meeting.get('title', 'Untitled Meeting')
+                                start_time = meeting.get('start_at_local', meeting.get('start_at_utc', 'Time TBD'))
+                                location = meeting.get('location', 'Location TBD')
+                                meeting_link = meeting.get('meeting_link', '')
+                                
+                                meetings_info += f"**{title}**\n"
+                                meetings_info += f"🕐 {start_time}\n"
+                                meetings_info += f"📍 {location}\n"
+                                if meeting_link:
+                                    meetings_info += f"🔗 {meeting_link}\n"
+                                meetings_info += "\n"
+                    except Exception as sheet_error:
+                        print(f"❌ [ERROR] Failed to get meetings from Google Sheets: {sheet_error}")
+                        meetings_info += f"❌ **Error retrieving meetings from Google Sheets:**\n"
+                        meetings_info += f"Error: {str(sheet_error)}\n\n"
+                        meetings_info += "**Possible causes:**\n"
+                        meetings_info += "• Google Sheets file was deleted or moved\n"
+                        meetings_info += "• Permission issues with the spreadsheet\n"
+                        meetings_info += "• Network connectivity issues\n\n"
+                        meetings_info += "**Solution:** Please run `/setup` again to reconfigure the meeting spreadsheet."
                     break
         else:
             meetings_info += "❌ No meetings spreadsheet configured. Please run `/setup` first."
@@ -371,15 +393,26 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
                 }
                 
                 # Schedule meeting
-                success = BOT_INSTANCE.meeting_manager.schedule_meeting(
-                    meeting_data, 
-                    meetings_sheet_id
-                )
+                print(f"🔍 [DEBUG] Scheduling meeting '{meeting_title}' to sheet ID: {meetings_sheet_id}")
+                print(f"🔍 [DEBUG] Meeting data: {meeting_data}")
                 
-                if success:
-                    return f"✅ Meeting '{meeting_title}' scheduled successfully!\n\n**Details:**\n🕐 {meeting_data['start_at_local']}\n📍 {location if location else 'Location TBD'}\n{f'🔗 {meeting_link}' if meeting_link else ''}\n\nMeeting has been added to your Google Sheets and automatic reminders will be sent."
-                else:
-                    return "❌ Failed to schedule meeting. Please try again or use `/meeting set` command."
+                try:
+                    import asyncio
+                    success = asyncio.run(BOT_INSTANCE.meeting_manager.schedule_meeting(
+                        meeting_data, 
+                        meetings_sheet_id
+                    ))
+                    
+                    print(f"🔍 [DEBUG] Meeting scheduling result: {success}")
+                    
+                    if success:
+                        return f"✅ Meeting '{meeting_title}' scheduled successfully!\n\n**Details:**\n🕐 {meeting_data['start_at_local']}\n📍 {location if location else 'Location TBD'}\n{f'🔗 {meeting_link}' if meeting_link else ''}\n\nMeeting has been added to your Google Sheets and automatic reminders will be sent."
+                    else:
+                        return "❌ Failed to schedule meeting. The meeting manager returned False. Please try again or use `/meeting set` command."
+                        
+                except Exception as schedule_error:
+                    print(f"❌ [ERROR] Exception during meeting scheduling: {schedule_error}")
+                    return f"❌ **Error scheduling meeting:**\n\nError: {str(schedule_error)}\n\n**Possible causes:**\n• Google Sheets file was deleted or moved\n• Permission issues with the spreadsheet\n• Network connectivity issues\n• Invalid meeting data format\n\n**Solution:** Please run `/setup` again to reconfigure the meeting spreadsheet, or use `/meeting set` command."
                 
                 break
         else:
