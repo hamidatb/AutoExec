@@ -16,15 +16,17 @@ class ClubSheetsManager:
         """Initialize the sheets manager with credentials."""
         creds = get_credentials()
         self.sheets_service = build("sheets", "v4", credentials=creds)
+        self.drive_service = build("drive", "v3", credentials=creds)
         self.config = Config()
         
-    def create_master_config_sheet(self, club_name: str, admin_discord_id: str) -> str:
+    def create_master_config_sheet(self, club_name: str, admin_discord_id: str, folder_id: str = None) -> str:
         """
         Creates the master configuration sheet for the club.
         
         Args:
             club_name: Name of the club
             admin_discord_id: Discord ID of the admin
+            folder_id: Optional Google Drive folder ID to place the sheet in
             
         Returns:
             str: Spreadsheet ID of the created sheet
@@ -97,19 +99,32 @@ class ClubSheetsManager:
                 body={'values': logs_headers}
             ).execute()
             
+            # Move sheet to specified folder if provided
+            if folder_id:
+                try:
+                    # Remove from root and add to specified folder
+                    self.drive_service.files().update(
+                        fileId=spreadsheet_id,
+                        addParents=folder_id,
+                        removeParents='root'
+                    ).execute()
+                except Exception as e:
+                    print(f"Warning: Could not move config sheet to folder {folder_id}: {e}")
+            
             return spreadsheet_id
             
         except HttpError as error:
             print(f"Error creating master config sheet: {error}")
             return None
     
-    def create_monthly_sheets(self, club_name: str, month_year: str) -> Dict[str, str]:
+    def create_monthly_sheets(self, club_name: str, month_year: str, folder_id: str = None) -> Dict[str, str]:
         """
         Creates monthly task and meeting sheets.
         
         Args:
             club_name: Name of the club
             month_year: Month and year (e.g., "September 2025")
+            folder_id: Optional Google Drive folder ID to place the sheets in
             
         Returns:
             Dict with spreadsheet IDs for tasks and meetings
@@ -146,6 +161,17 @@ class ClubSheetsManager:
                 body={'values': tasks_headers}
             ).execute()
             
+            # Move tasks sheet to specified folder if provided
+            if folder_id:
+                try:
+                    self.drive_service.files().update(
+                        fileId=tasks_id,
+                        addParents=folder_id,
+                        removeParents='root'
+                    ).execute()
+                except Exception as e:
+                    print(f"Warning: Could not move tasks sheet to folder {folder_id}: {e}")
+            
             # Create meetings sheet
             meetings_spreadsheet = {
                 'properties': {
@@ -176,6 +202,17 @@ class ClubSheetsManager:
                 valueInputOption='RAW',
                 body={'values': meetings_headers}
             ).execute()
+            
+            # Move meetings sheet to specified folder if provided
+            if folder_id:
+                try:
+                    self.drive_service.files().update(
+                        fileId=meetings_id,
+                        addParents=folder_id,
+                        removeParents='root'
+                    ).execute()
+                except Exception as e:
+                    print(f"Warning: Could not move meetings sheet to folder {folder_id}: {e}")
             
             return {
                 'tasks': tasks_id,

@@ -35,6 +35,8 @@ class SetupManager:
                 'step': 'club_name',
                 'club_name': None,
                 'admin_discord_id': None,
+                'config_folder_id': None,
+                'monthly_folder_id': None,
                 'config_spreadsheet_id': None,
                 'monthly_sheets': None,
                 'channels_configured': False
@@ -42,6 +44,10 @@ class SetupManager:
             
             message = "🎉 **Welcome to the Club Exec Task Manager Bot!** 🎉\n\n"
             message += "I'll help you set up task management for your club. Let's get started!\n\n"
+            message += "**IMPORTANT**: Before we begin, make sure you have:\n"
+            message += "1. Created Google Drive folders for your club's documents\n"
+            message += "2. Shared these folders with the AutoExec service account: **autoexec-af693@appspot.gserviceaccount.com**\n"
+            message += "3. Given the service account 'Editor' permissions\n\n"
             message += "**Step 1: Club Information**\n"
             message += "What is the name of your club or group?"
             
@@ -73,6 +79,8 @@ class SetupManager:
                 return await self._handle_club_name(user_id, message_content)
             elif current_step == 'admin_selection':
                 return await self._handle_admin_selection(user_id, message_content)
+            elif current_step == 'folder_selection':
+                return await self._handle_folder_selection(user_id, message_content)
             elif current_step == 'sheets_initialization':
                 return await self._handle_sheets_initialization(user_id, message_content)
             elif current_step == 'channel_configuration':
@@ -134,9 +142,66 @@ class SetupManager:
             
             # Store admin Discord ID
             self.setup_states[user_id]['admin_discord_id'] = admin_discord_id
-            self.setup_states[user_id]['step'] = 'sheets_initialization'
+            self.setup_states[user_id]['step'] = 'folder_selection'
             
             message = f"✅ **Admin Set: <@{admin_discord_id}>**\n\n"
+            message += "**Step 3: Google Sheets Initialization**\n"
+            message += "Before I create the Google Sheets, I need to know where to put them.\n\n"
+            message += "**IMPORTANT**: Please make sure you have shared these folders with the AutoExec service account: **autoexec-af693@appspot.gserviceaccount.com**!\n\n"
+            message += "Please provide the Google Drive folder links for:\n"
+            message += "• **Main Config Folder** - Where to store the Task Manager Config sheet\n"
+            message += "• **Monthly Sheets Folder** - Where to store monthly task and meeting sheets\n\n"
+            message += "You can get folder links by:\n"
+            message += "1. Right-clicking the folder in Google Drive\n"
+            message += "2. Selecting 'Get link'\n"
+            message += "3. Copying the link\n\n"
+            message += "**Format**: Please provide both links separated by a new line or comma."
+            
+            # Get current month
+            current_month = datetime.now().strftime("%B %Y")
+            message = message.format(club_name=self.setup_states[user_id]['club_name'], 
+                                   current_month=current_month)
+            
+            return message
+            
+        except Exception as e:
+            print(f"Error handling admin selection: {e}")
+            return "❌ Error setting admin. Please try again."
+    
+    async def _handle_folder_selection(self, user_id: str, message_content: str) -> str:
+        """
+        Handles folder selection for Google Sheets placement.
+        
+        Args:
+            user_id: Discord ID of the user
+            message_content: User's response containing folder links
+            
+        Returns:
+            Next setup message
+        """
+        try:
+            # Parse folder links from message
+            # Split by newline or comma
+            folder_links = [link.strip() for link in message_content.replace('\n', ',').split(',') if link.strip()]
+            
+            if len(folder_links) < 2:
+                return "❌ Please provide both folder links (config folder and monthly sheets folder)."
+            
+            # Extract folder IDs from Google Drive links
+            config_folder_id = self._extract_folder_id(folder_links[0])
+            monthly_folder_id = self._extract_folder_id(folder_links[1])
+            
+            if not config_folder_id or not monthly_folder_id:
+                return "❌ Invalid folder links. Please make sure you're providing Google Drive folder links."
+            
+            # Store folder IDs
+            self.setup_states[user_id]['config_folder_id'] = config_folder_id
+            self.setup_states[user_id]['monthly_folder_id'] = monthly_folder_id
+            
+            # Move to sheets initialization
+            self.setup_states[user_id]['step'] = 'sheets_initialization'
+            
+            message = "✅ **Folders Selected Successfully!**\n\n"
             message += "**Step 3: Google Sheets Initialization**\n"
             message += "I'll now create the necessary Google Sheets for your club:\n\n"
             message += "• **{club_name} Task Manager Config** - Main configuration\n"
@@ -152,8 +217,33 @@ class SetupManager:
             return message
             
         except Exception as e:
-            print(f"Error handling admin selection: {e}")
-            return "❌ Error setting admin. Please try again."
+            print(f"Error handling folder selection: {e}")
+            return "❌ Error processing folder links. Please try again."
+    
+    def _extract_folder_id(self, folder_link: str) -> str:
+        """
+        Extracts folder ID from Google Drive folder link.
+        
+        Args:
+            folder_link: Google Drive folder link
+            
+        Returns:
+            str: Folder ID or empty string if invalid
+        """
+        try:
+            # Google Drive folder links typically look like:
+            # https://drive.google.com/drive/folders/FOLDER_ID
+            if 'drive.google.com/drive/folders/' in folder_link:
+                folder_id = folder_link.split('drive.google.com/drive/folders/')[1].split('?')[0]
+                return folder_id
+            elif 'drive.google.com/folders/' in folder_link:
+                folder_id = folder_link.split('drive.google.com/folders/')[1].split('?')[0]
+                return folder_id
+            else:
+                return ""
+        except Exception as e:
+            print(f"Error extracting folder ID: {e}")
+            return ""
     
     async def _handle_sheets_initialization(self, user_id: str, message_content: str) -> str:
         """
@@ -172,8 +262,8 @@ class SetupManager:
             admin_discord_id = current_state['admin_discord_id']
             
             # Create master config sheet
-            config_spreadsheet_id = await self.sheets_manager.create_master_config_sheet(
-                club_name, admin_discord_id
+            config_spreadsheet_id = self.sheets_manager.create_master_config_sheet(
+                club_name, admin_discord_id, current_state['config_folder_id']
             )
             
             if not config_spreadsheet_id:
@@ -184,7 +274,9 @@ class SetupManager:
             
             # Create monthly sheets
             current_month = datetime.now().strftime("%B %Y")
-            monthly_sheets = await self.sheets_manager.create_monthly_sheets(club_name, current_month)
+            monthly_sheets = self.sheets_manager.create_monthly_sheets(
+                club_name, current_month, current_state['monthly_folder_id']
+            )
             
             if not monthly_sheets:
                 return "❌ Failed to create monthly sheets. Please check your Google Drive permissions."
