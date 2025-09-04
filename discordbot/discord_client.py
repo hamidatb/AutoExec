@@ -1001,8 +1001,11 @@ async def reset_config_command(interaction: discord.Interaction):
     guild_id = str(interaction.guild.id)
     user_id = str(interaction.user.id)
     
-    # Check if the bot is configured for this server
-    if guild_id not in bot.club_configs:
+    # Get club config from setup manager (persistent storage)
+    all_guilds = bot.setup_manager.status_manager.get_all_guilds()
+    club_config = all_guilds.get(guild_id)
+    
+    if not club_config or not club_config.get('setup_complete', False):
         await interaction.response.send_message(
             "❌ **Reset Failed**\n\nNo configuration found for this server.\n\n**To get started:**\n• Run `/setup` in DMs to configure the bot",
             ephemeral=True
@@ -1010,9 +1013,8 @@ async def reset_config_command(interaction: discord.Interaction):
         return
     
     # Check if the user is the admin
-    if not bot.setup_manager.is_admin(user_id, guild_id, bot.club_configs):
-        club_config = bot.club_configs[guild_id]
-        admin_id = club_config.get('admin_discord_id', 'Unknown')
+    if str(interaction.user.id) != club_config.get('admin_user_id'):
+        admin_id = club_config.get('admin_user_id', 'Unknown')
         await interaction.response.send_message(
             f"❌ **Reset Failed**\n\nOnly the admin can reset the club configuration.\n\n**Current Admin:** <@{admin_id}>\n\n**Need help?** Contact the admin or run `/setup` in DMs to reconfigure.",
             ephemeral=True
@@ -1020,7 +1022,7 @@ async def reset_config_command(interaction: discord.Interaction):
         return
     
     # Confirm the reset action
-    response = bot.setup_manager.reset_club_configuration(guild_id, user_id, bot.club_configs)
+    response = bot.setup_manager.reset_club_configuration(guild_id, user_id, all_guilds)
     await interaction.response.send_message(response, ephemeral=True)
 
 @bot.tree.command(name="serverconfig", description="Update server configuration (admin only)")

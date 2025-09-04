@@ -990,7 +990,7 @@ class SetupManager:
         Args:
             guild_id: The Discord guild/server ID to reset
             admin_user_id: Discord ID of the user requesting the reset
-            club_configs: Current club configurations dictionary
+            club_configs: Current club configurations dictionary (from persistent storage)
             
         Returns:
             Reset confirmation message or error message
@@ -1002,14 +1002,17 @@ class SetupManager:
             
             # Verify the user is the admin
             guild_config = club_configs[guild_id]
-            if str(admin_user_id) != guild_config.get('admin_discord_id'):
-                return f"❌ **Reset Failed**\n\nOnly the admin can reset the club configuration.\n\n**Current Admin:** <@{guild_config.get('admin_discord_id')}>"
+            if str(admin_user_id) != guild_config.get('admin_user_id'):
+                return f"❌ **Reset Failed**\n\nOnly the admin can reset the club configuration.\n\n**Current Admin:** <@{guild_config.get('admin_user_id')}>"
             
             # Get club name for confirmation
             club_name = guild_config.get('club_name', 'Unknown Club')
             
-            # Remove the configuration
-            del club_configs[guild_id]
+            # Remove the configuration from persistent storage
+            success = self.status_manager.remove_guild(guild_id, admin_user_id)
+            
+            if not success:
+                return f"❌ **Reset Failed**\n\nFailed to remove configuration from storage."
             
             # TODO: In the future, this could also clean up Google Sheets and other resources
             
