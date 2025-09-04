@@ -25,8 +25,8 @@ class Config:
     MEETING_SCHEDULE_SPREADSHEET_ID = os.getenv("MEETING_SCHEDULE_SPREADSHEET_ID")
     MEETING_MINS_SCHEDULE_RANGE = os.getenv("MEETING_MINS_SCHEDULE_RANGE")
     
-    # Google Calendar Configuration
-    SHARED_CALENDAR_ID = os.getenv("SHARED_CALENDAR_ID")
+    # Google Calendar Configuration (REMOVED - no longer needed)
+    # SHARED_CALENDAR_ID = os.getenv("SHARED_CALENDAR_ID")
     
     # Club Exec Task Manager Bot Configuration
     CLUB_NAME = os.getenv("CLUB_NAME", "Club")

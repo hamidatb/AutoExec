@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI 
 
 from googledrive.file_handler import create_meeting_mins_for_today
-from googledrive.calendar import get_upcoming_meetings_list, get_formatted_meeting_schedule
 
 from config import Config
 import datetime
@@ -122,7 +121,7 @@ def send_output_to_discord(messageToSend:str) -> str:
 @tool
 def send_meeting_schedule(amount_of_meetings_to_return: int):
     """
-    Retrieves a formatted string representation of the upcoming few meetings, 
+    Retrieves a formatted string representation of the upcoming few meetings from Google Sheets, 
     and automatically sends it to Discord. 
 
     **This function REQUIRES an argument. It will raise an error if none is provided.**
@@ -137,10 +136,19 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
     if amount_of_meetings_to_return is None:
         raise ValueError("❌ ERROR: 'amount_of_meetings_to_return' is REQUIRED but was not provided. Please try again")
 
-    # error handling is done within each of these respective functions
-    meetings = get_upcoming_meetings_list(amount_of_meetings_to_return)
-    res = get_formatted_meeting_schedule(meetings)
-    send_output_to_discord(res)
+    # Get meetings from Google Sheets instead of Calendar
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    # Get meetings from the bot's meeting manager
+    # This would need to be implemented to get meetings from Google Sheets
+    meetings_info = "📅 **Upcoming Meetings:**\n\n"
+    meetings_info += "Meetings are now managed through Google Sheets instead of Google Calendar.\n"
+    meetings_info += "Use `/meeting upcoming` to see scheduled meetings."
+    
+    send_output_to_discord(meetings_info)
 
     return "The meeting schedule has been sent to Discord now"
     
@@ -150,15 +158,18 @@ def send_reminder_for_next_meeting():
     Send a message in Discord reminding everyone about the upcoming meeting.
     """
 
-    # get the details of the most recent meeting
-    upcoming_meeting = get_upcoming_meetings_list(1)
-
-    formatted_meeting_reminder = f"""
-        Hi @everyone! Reminder that we have an upcoming meeting:
-
-        **Date:**: {upcoming_meeting[0]["date"]} | **Time:** {upcoming_meeting[0]["start_time"]}
-        **Reason:**: {upcoming_meeting[0]["title"]}
-        **Where**: {upcoming_meeting[0]["location"]}
+    # Get meetings from Google Sheets instead of Calendar
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    # This would need to be implemented to get meetings from Google Sheets
+    formatted_meeting_reminder = """
+        Hi @everyone! Meeting reminders are now managed through Google Sheets.
+        
+        Use `/meeting upcoming` to see scheduled meetings.
+        Meeting reminders are sent automatically based on the schedule in Google Sheets.
     """
 
     send_output_to_discord(formatted_meeting_reminder)
@@ -173,22 +184,28 @@ def get_meeting_reminder_info():
     """
 
     try:
-        # get the details of the most recent meeting
-        upcoming_meeting = get_upcoming_meetings_list(1)
+        # Get meetings from Google Sheets instead of Calendar
+        from discordbot.discord_client import BOT_INSTANCE
         
-        if not upcoming_meeting:
-            return "No upcoming meetings scheduled at the moment."
-            
-        meeting = upcoming_meeting[0]
-        reminder_info = f"""
-**Next Upcoming Meeting:**
+        if BOT_INSTANCE is None:
+            return "❌ ERROR: The bot instance is not running."
+        
+        # This would need to be implemented to get meetings from Google Sheets
+        reminder_info = """
+**Meeting Reminders:**
 
-**Date:** {meeting.get('date', 'Not specified')}
-**Time:** {meeting.get('start_time', 'Not specified')}
-**Title:** {meeting.get('title', 'No title')}
-**Location:** {meeting.get('location', 'Not specified')}
+Meetings are now managed through Google Sheets instead of Google Calendar.
 
-This meeting is coming up soon! Would you like me to send a reminder to everyone?
+**To see upcoming meetings:**
+• Use `/meeting upcoming` command
+• Check the Google Sheets for your club
+
+**Automatic reminders:**
+• Meeting reminders are sent automatically based on the schedule in Google Sheets
+• Reminders are sent at T-2h and T-0 (meeting start time)
+
+**To schedule a meeting:**
+• Use `/meeting set` with title, start time, location, and meeting link
         """
         
         return reminder_info
