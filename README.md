@@ -250,7 +250,6 @@ I'm always excited to discuss:
 Feel free to reach out:
 - **GitHub**: [@hamidatb](https://github.com/hamidatb)
 - **LinkedIn**: [Connect with me](https://linkedin.com/in/hamidatb)
-- **Email**: [Get in touch](mailto:your-email@example.com)
 
 ---
 
