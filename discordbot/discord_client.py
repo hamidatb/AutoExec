@@ -967,6 +967,215 @@ async def reset_config_command(interaction: discord.Interaction):
     response = bot.setup_manager.reset_club_configuration(guild_id, user_id, bot.club_configs)
     await interaction.response.send_message(response, ephemeral=True)
 
+@bot.tree.command(name="config", description="Update server configuration (admin only)")
+@app_commands.describe(
+    action="Action to perform",
+    setting="Configuration setting to update",
+    value="New value for the setting"
+)
+async def config_command(
+    interaction: discord.Interaction,
+    action: str,
+    setting: Optional[str] = None,
+    value: Optional[str] = None
+):
+    """Handle configuration update commands."""
+    # Check if this is a server (guild) interaction
+    if not interaction.guild:
+        await interaction.response.send_message(
+            "❌ This command can only be used in a server, not in DMs.",
+            ephemeral=True
+        )
+        return
+        
+    guild_id = str(interaction.guild.id)
+    user_id = str(interaction.user.id)
+    
+    # Get club config from setup manager
+    all_guilds = bot.setup_manager.status_manager.get_all_guilds()
+    club_config = all_guilds.get(guild_id)
+    
+    if not club_config or not club_config.get('setup_complete', False):
+        await interaction.response.send_message(
+            "❌ No club configuration found for this server. Please run `/setup` first.",
+            ephemeral=True
+        )
+        return
+    
+    # Check if the user is the admin
+    if str(interaction.user.id) != club_config.get('admin_user_id'):
+        admin_id = club_config.get('admin_user_id', 'Unknown')
+        await interaction.response.send_message(
+            f"❌ Only the admin can update server configuration.\n\n**Current Admin:** <@{admin_id}>",
+            ephemeral=True
+        )
+        return
+    
+    try:
+        if action.lower() == "view":
+            # Show current configuration
+            config_text = f"**Current Configuration for {club_config.get('club_name', 'Unknown Club')}**\n\n"
+            config_text += f"**Club Name:** {club_config.get('club_name', 'Not set')}\n"
+            config_text += f"**Admin:** <@{club_config.get('admin_user_id', 'Unknown')}>\n\n"
+            config_text += f"**Google Drive Folders:**\n"
+            config_text += f"• Config Folder: `{club_config.get('config_folder_id', 'Not set')}`\n"
+            config_text += f"• Monthly Folder: `{club_config.get('monthly_folder_id', 'Not set')}`\n"
+            config_text += f"• Meeting Minutes Folder: `{club_config.get('meeting_minutes_folder_id', 'Not set')}`\n\n"
+            config_text += f"**Discord Channels:**\n"
+            config_text += f"• Task Reminders: <#{club_config.get('task_reminders_channel_id', 'Not set')}>\n"
+            config_text += f"• Meeting Reminders: <#{club_config.get('meeting_reminders_channel_id', 'Not set')}>\n"
+            config_text += f"• Escalations: <#{club_config.get('escalation_channel_id', 'Not set')}>\n\n"
+            config_text += f"**Google Sheets:**\n"
+            config_text += f"• Config Sheet: `{club_config.get('config_spreadsheet_id', 'Not set')}`\n"
+            monthly_sheets = club_config.get('monthly_sheets', {})
+            if monthly_sheets:
+                config_text += f"• Tasks Sheet: `{monthly_sheets.get('tasks', 'Not set')}`\n"
+                config_text += f"• Meetings Sheet: `{monthly_sheets.get('meetings', 'Not set')}`\n"
+            else:
+                config_text += "• Monthly Sheets: Not set\n"
+            
+            await interaction.response.send_message(config_text, ephemeral=True)
+            
+        elif action.lower() == "update":
+            if not setting or not value:
+                await interaction.response.send_message(
+                    "❌ **Invalid Parameters**\n\nUsage: `/config update <setting> <value>`\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations",
+                    ephemeral=True
+                )
+                return
+            
+            # Handle different setting types
+            updates = {}
+            
+            if setting.lower() == "config_folder":
+                folder_id = bot.setup_manager._extract_folder_id(value)
+                if not folder_id:
+                    await interaction.response.send_message(
+                        "❌ **Invalid Folder Link**\n\nPlease provide a valid Google Drive folder link.",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Verify folder access
+                await interaction.response.defer(ephemeral=True)
+                is_accessible, access_message = await bot.setup_manager.verify_folder_access_for_update(folder_id)
+                if not is_accessible:
+                    await interaction.followup.send(access_message, ephemeral=True)
+                    return
+                
+                updates['config_folder_id'] = folder_id
+                
+            elif setting.lower() == "monthly_folder":
+                folder_id = bot.setup_manager._extract_folder_id(value)
+                if not folder_id:
+                    await interaction.response.send_message(
+                        "❌ **Invalid Folder Link**\n\nPlease provide a valid Google Drive folder link.",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Verify folder access
+                await interaction.response.defer(ephemeral=True)
+                is_accessible, access_message = await bot.setup_manager.verify_folder_access_for_update(folder_id)
+                if not is_accessible:
+                    await interaction.followup.send(access_message, ephemeral=True)
+                    return
+                
+                updates['monthly_folder_id'] = folder_id
+                
+            elif setting.lower() == "meeting_minutes_folder":
+                folder_id = bot.setup_manager._extract_folder_id(value)
+                if not folder_id:
+                    await interaction.response.send_message(
+                        "❌ **Invalid Folder Link**\n\nPlease provide a valid Google Drive folder link.",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Verify folder access
+                await interaction.response.defer(ephemeral=True)
+                is_accessible, access_message = await bot.setup_manager.verify_folder_access_for_update(folder_id)
+                if not is_accessible:
+                    await interaction.followup.send(access_message, ephemeral=True)
+                    return
+                
+                updates['meeting_minutes_folder_id'] = folder_id
+                
+            elif setting.lower() == "task_reminders_channel":
+                if not value.isdigit():
+                    await interaction.response.send_message(
+                        "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).",
+                        ephemeral=True
+                    )
+                    return
+                updates['task_reminders_channel_id'] = value
+                
+            elif setting.lower() == "meeting_reminders_channel":
+                if not value.isdigit():
+                    await interaction.response.send_message(
+                        "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).",
+                        ephemeral=True
+                    )
+                    return
+                updates['meeting_reminders_channel_id'] = value
+                
+            elif setting.lower() == "escalation_channel":
+                if not value.isdigit():
+                    await interaction.response.send_message(
+                        "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).",
+                        ephemeral=True
+                    )
+                    return
+                updates['escalation_channel_id'] = value
+                
+            else:
+                await interaction.response.send_message(
+                    "❌ **Unknown Setting**\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations",
+                    ephemeral=True
+                )
+                return
+            
+            # Update the configuration using the new method
+            success, message = bot.setup_manager.update_guild_configuration(guild_id, user_id, updates)
+            
+            if success:
+                # If updating channels, also update the Google Sheets config
+                if any(key.endswith('_channel_id') for key in updates.keys()):
+                    try:
+                        bot.sheets_manager.update_config_channels(
+                            club_config.get('config_spreadsheet_id'),
+                            updates.get('task_reminders_channel_id', club_config.get('task_reminders_channel_id')),
+                            updates.get('meeting_reminders_channel_id', club_config.get('meeting_reminders_channel_id')),
+                            updates.get('escalation_channel_id', club_config.get('escalation_channel_id'))
+                        )
+                    except Exception as e:
+                        print(f"Warning: Failed to update Google Sheets config: {e}")
+                
+                # Use deferred response if we haven't responded yet
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(message, ephemeral=True)
+                else:
+                    await interaction.followup.send(message, ephemeral=True)
+            else:
+                # Use deferred response if we haven't responded yet
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(message, ephemeral=True)
+                else:
+                    await interaction.followup.send(message, ephemeral=True)
+                
+        else:
+            await interaction.response.send_message(
+                "❌ **Invalid Action**\n\n**Available actions:**\n• `view` - Show current configuration\n• `update` - Update a configuration setting\n\n**Examples:**\n• `/config view`\n• `/config update config_folder https://drive.google.com/drive/folders/...`\n• `/config update task_reminders_channel 123456789012345678`",
+                ephemeral=True
+            )
+            
+    except Exception as e:
+        print(f"Error in config command: {e}")
+        await interaction.response.send_message(
+            f"❌ **Configuration Error**\n\nAn error occurred: {str(e)}",
+            ephemeral=True
+        )
+
 @bot.tree.command(name="help", description="Show help information and available commands")
 async def help_command(interaction: discord.Interaction):
     """Show help information and available commands."""
@@ -978,6 +1187,8 @@ async def help_command(interaction: discord.Interaction):
 
 **Server Commands:**
 • `/reset` - Reset club configuration (admin only)
+• `/config view` - View current server configuration (admin only)
+• `/config update` - Update server configuration (admin only)
 • `/help` - Show this help message
 
 **Meeting Management:**
@@ -992,6 +1203,15 @@ async def help_command(interaction: discord.Interaction):
 **Natural Language:**
 • Use `$AE` followed by your question for AI-powered assistance
 • Use `$AEmm` to request meeting minutes
+
+**Configuration Updates:**
+• `/config view` - See all current settings
+• `/config update config_folder <link>` - Update Google Drive config folder
+• `/config update monthly_folder <link>` - Update Google Drive monthly folder
+• `/config update meeting_minutes_folder <link>` - Update Google Drive meeting minutes folder
+• `/config update task_reminders_channel <channel_id>` - Update task reminders channel
+• `/config update meeting_reminders_channel <channel_id>` - Update meeting reminders channel
+• `/config update escalation_channel <channel_id>` - Update escalation channel
 
 **Setup Process:**
 1. Send me a DM and use `/setup`
