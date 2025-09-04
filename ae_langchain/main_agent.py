@@ -119,7 +119,6 @@ def send_output_to_discord(messageToSend:str) -> str:
             asyncio.run(BOT_INSTANCE.send_any_message(str(messageToSend)))
     except RuntimeError:
         # No event loop in current thread - use the bot's event loop
-        import asyncio
         import threading
         
         def run_in_main_loop():
