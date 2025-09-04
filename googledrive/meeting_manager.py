@@ -16,13 +16,16 @@ class MeetingManager:
         self.minutes_parser = MinutesParser()
         
     async def schedule_meeting(self, meeting_data: Dict[str, Any], 
-                              meetings_spreadsheet_id: str) -> bool:
+                              meetings_spreadsheet_id: str, 
+                              club_name: str = None, folder_id: str = None) -> bool:
         """
         Schedules a new meeting.
         
         Args:
             meeting_data: Dictionary containing meeting information
             meetings_spreadsheet_id: ID of the meetings spreadsheet
+            club_name: Name of the club (for automatic sheet creation)
+            folder_id: Folder ID for automatic sheet creation
             
         Returns:
             bool: True if successful, False otherwise
@@ -44,6 +47,17 @@ class MeetingManager:
             except ValueError:
                 print("Invalid time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)")
                 return False
+            
+            # Determine the month for the meeting
+            current_month = datetime.now().strftime("%B %Y")
+            
+            # Ensure monthly sheets exist for this month
+            if club_name and folder_id:
+                monthly_sheets = self.sheets_manager.get_or_create_monthly_sheets(
+                    club_name, current_month, folder_id
+                )
+                if monthly_sheets and 'meetings' in monthly_sheets:
+                    meetings_spreadsheet_id = monthly_sheets['meetings']
             
             # Add meeting to spreadsheet
             success = self.sheets_manager.add_meeting(meetings_spreadsheet_id, meeting_data)
@@ -195,23 +209,54 @@ class MeetingManager:
             return None
     
     async def _schedule_meeting_reminders(self, meeting_data: Dict[str, Any],
-                                         meetings_spreadsheet_id: str):
+                                         meetings_spreadsheet_id: str, config_spreadsheet_id: str = None):
         """
-        Schedules reminders for a meeting.
+        Schedules reminders for a meeting using the Timers tab.
         
         Args:
             meeting_data: Meeting data dictionary
             meetings_spreadsheet_id: ID of the meetings spreadsheet
+            config_spreadsheet_id: ID of the config spreadsheet (for timers)
         """
         try:
-            # This would integrate with a proper scheduling system
-            # For now, we'll just log the reminder scheduling
-            print(f"Scheduling reminders for meeting: {meeting_data.get('title')}")
+            if not config_spreadsheet_id:
+                print("No config spreadsheet ID provided for timer scheduling")
+                return
+                
+            meeting_id = meeting_data.get('meeting_id', '')
+            start_at = meeting_data.get('start_at_utc', '')
             
-            # Schedule reminders at:
-            # T-2h: "Meeting starts in 2 hours"
-            # T0: "Meeting starting now. Minutes: <link>"
-            # T+30m: Parse minutes and create tasks
+            if not start_at:
+                print(f"No start time for meeting {meeting_id}, skipping reminder scheduling")
+                return
+            
+            # Parse start time
+            try:
+                start_time = datetime.fromisoformat(start_at)
+            except ValueError:
+                print(f"Invalid start time format for meeting {meeting_id}: {start_at}")
+                return
+            
+            # Schedule reminders at T-2h and T-0
+            reminders = [
+                {'type': 'meeting_reminder_2h', 'fire_at': start_time - timedelta(hours=2)},
+                {'type': 'meeting_start', 'fire_at': start_time}
+            ]
+            
+            for reminder in reminders:
+                timer_data = {
+                    'id': f"{meeting_id}_{reminder['type']}",
+                    'guild_id': '',  # Will be set by caller
+                    'type': reminder['type'],
+                    'ref_type': 'meeting',
+                    'ref_id': meeting_id,
+                    'fire_at_utc': reminder['fire_at'].isoformat(),
+                    'channel_id': meeting_data.get('channel_id', ''),
+                    'state': 'active'
+                }
+                
+                self.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
+                print(f"Scheduled {reminder['type']} reminder for meeting {meeting_id}")
             
         except Exception as e:
             print(f"Error scheduling meeting reminders: {e}")
