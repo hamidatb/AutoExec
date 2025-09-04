@@ -27,8 +27,9 @@ CLUB_NAME=Your Club Name
 ```
 
 ### 3. **Google Setup**
-- Place your `servicekey.json` in `googledrive/` folder
-- Share a Google Drive folder with the service account email
+- Download service account key for `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`
+- Save it as `googledrive/service_account_key.json`
+- Share your Google Drive folders with the service account email
 
 ### 4. **Run Bot**
 ```bash
@@ -56,11 +57,11 @@ python start_bot.py
    - Google Drive API
    - Google Sheets API
    - Google Docs API
-4. Create Service Account:
-   - IAM & Admin → Service Accounts
-   - Create Service Account
-   - Download JSON key
-   - Place in `googledrive/servicekey.json`
+4. Download Service Account Key:
+   - Go to IAM & Admin → Service Accounts
+   - Find `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`
+   - Click on it → Keys → Add Key → Create new key → JSON
+   - Save as `googledrive/service_account_key.json`
 
 ---
 
@@ -79,6 +80,11 @@ python start_bot.py
 - `{Club Name} Task Manager Config` - Main settings
 - `{Club Name} Tasks - {Month Year}` - Task tracking
 - `{Club Name} Meetings - {Month Year}` - Meeting management
+
+### **No OAuth Required!**
+- Users only need to share specific Google Drive folders
+- Bot uses service account authentication
+- Much simpler and more secure setup
 
 ---
 

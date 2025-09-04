@@ -9,6 +9,7 @@ logs/
 
 # google cloud credentials
 credentials.json
+googledrive/service_account_key.json
 
 # the google drive authentification information that gets stored on the computer
 token.json
