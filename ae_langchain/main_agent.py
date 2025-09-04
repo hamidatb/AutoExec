@@ -228,6 +228,85 @@ def handle_misc_questions() -> str:
     return "I'm AutoExec, your AI-powered club executive task manager! I'm here to help with meetings, tasks, scheduling, and organization. I can help you with specific questions about meetings, create meeting minutes, manage tasks, and more. What would you like to know?"
 
 @tool
+def get_user_setup_status(user_id: str) -> str:
+    """
+    Check if a specific user is admin of any configured guild.
+    
+    Args:
+        user_id: Discord user ID to check
+        
+    Returns:
+        string: Setup status for the user
+    """
+    try:
+        from discordbot.discord_client import BOT_INSTANCE
+        
+        if BOT_INSTANCE is None:
+            return "❌ **Setup Status: ERROR**\n\nI cannot check setup status because the Discord bot is not running."
+        
+        if not hasattr(BOT_INSTANCE, 'setup_manager') or not BOT_INSTANCE.setup_manager:
+            return "❌ **Setup Status: ERROR**\n\nI cannot check setup status because the setup manager is not available."
+        
+        # Check if user is admin of any guild
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        user_guilds = []
+        
+        for guild_id, config in all_guilds.items():
+            if config.get('admin_user_id') == user_id and config.get('setup_complete', False):
+                user_guilds.append((guild_id, config))
+        
+        if not user_guilds:
+            return """❌ **Setup Status: NOT CONFIGURED**\n\nYou are not an admin of any configured student groups.
+
+**What this means:**
+• You haven't set up the bot for any servers yet
+• Or you're not the admin of any configured servers
+
+**To get started:**
+• Run `/setup` in a Discord server where you're an admin
+• This will configure the bot for that server
+• You can be admin of multiple servers
+
+**Current Status:** No configured servers found for your account."""
+        
+        # User is admin of one or more guilds
+        if len(user_guilds) == 1:
+            guild_id, config = user_guilds[0]
+            guild_name = config.get('guild_name', 'Unknown Server')
+            club_name = config.get('club_name', 'Unknown Club')
+            
+            return f"""✅ **Setup Status: CONFIGURED**\n\nYou are the admin of **{club_name}** in server **{guild_name}**.
+
+**Your Configuration:**
+• Server: {guild_name} (ID: {guild_id})
+• Club: {club_name}
+• Admin: <@{user_id}>
+
+**What you can do:**
+• Schedule and manage meetings
+• Create and track meeting minutes
+• Assign and monitor tasks
+• Send automated reminders
+• Process natural language requests
+
+**Current Status:** Fully operational! 🎉"""
+        else:
+            # User is admin of multiple guilds
+            response = f"""✅ **Setup Status: CONFIGURED**\n\nYou are the admin of **{len(user_guilds)}** configured student groups!\n\n"""
+            
+            for guild_id, config in user_guilds:
+                guild_name = config.get('guild_name', 'Unknown Server')
+                club_name = config.get('club_name', 'Unknown Club')
+                response += f"**{club_name}** (Server: {guild_name})\n"
+            
+            response += "\n**What you can do:**\n• Schedule and manage meetings\n• Create and track meeting minutes\n• Assign and monitor tasks\n• Send automated reminders\n• Process natural language requests\n\n**Current Status:** Fully operational for all your groups! 🎉"
+            
+            return response
+            
+    except Exception as e:
+        return f"❌ **Setup Status: ERROR**\n\nError checking setup status: {str(e)}"
+
+@tool
 def get_club_setup_info() -> str:
     """
     Get information about the bot's actual setup status and configuration.
@@ -247,8 +326,15 @@ def get_club_setup_info() -> str:
         if BOT_INSTANCE is None:
             return "❌ **Setup Status: ERROR**\n\nI cannot check my setup status because the Discord bot is not running."
         
-        # Check if there are any club configurations
-        if not hasattr(BOT_INSTANCE, 'club_configs') or not BOT_INSTANCE.club_configs:
+        # Check if there are any guild configurations using the new guild-based system
+        if not hasattr(BOT_INSTANCE, 'setup_manager') or not BOT_INSTANCE.setup_manager:
+            return """❌ **Setup Status: ERROR**\n\nI cannot check my setup status because the setup manager is not available."""
+        
+        # Get all guild configurations
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        configured_guilds = [guild for guild in all_guilds.values() if guild.get('setup_complete', False)]
+        
+        if not configured_guilds:
             return """❌ **Setup Status: NOT CONFIGURED**\n\nI am **NOT** set up for any student groups yet.
 
 **What this means:**
@@ -265,37 +351,18 @@ def get_club_setup_info() -> str:
 
 **Current Status:** Waiting for initial setup by an administrator."""
         
-        # Get the actual club configurations
-        club_configs = BOT_INSTANCE.club_configs
-        num_clubs = len(club_configs)
+        # Show actual configured guilds
+        num_guilds = len(configured_guilds)
+        setup_info = f"""✅ **Setup Status: CONFIGURED**\n\nI am set up for **{num_guilds}** student group(s)!\n\n"""
         
-        if num_clubs == 0:
-            return """❌ **Setup Status: NOT CONFIGURED**\n\nI am **NOT** set up for any student groups yet.
-
-**What this means:**
-• No clubs or student groups have been configured
-• No Google Sheets are linked
-• No admin users are set up
-• I cannot manage meetings or tasks
-
-**To get started:**
-• An admin needs to run `/setup` to configure me for your group
-• This will set up Google Sheets integration
-• Configure admin permissions and channels
-• Link your group's meeting and task systems
-
-**Current Status:** Waiting for initial setup by an administrator."""
-        
-        # Show actual configured clubs
-        setup_info = f"""✅ **Setup Status: CONFIGURED**\n\nI am set up for **{num_clubs}** student group(s)!\n\n"""
-        
-        for guild_id, config in club_configs.items():
+        for guild_id, config in configured_guilds.items():
+            guild_name = config.get('guild_name', 'Unknown Server')
             club_name = config.get('club_name', 'Unknown Club')
-            admin_id = config.get('admin_discord_id', 'Unknown')
-            has_meetings = 'meetings_sheet_id' in config
-            has_tasks = 'tasks_sheet_id' in config
+            admin_id = config.get('admin_user_id', 'Unknown')
+            has_meetings = 'monthly_sheets' in config and 'meetings' in config.get('monthly_sheets', {})
+            has_tasks = 'monthly_sheets' in config and 'tasks' in config.get('monthly_sheets', {})
             
-            setup_info += f"**Group: {club_name}**\n"
+            setup_info += f"**Group: {club_name}** (Server: {guild_name})\n"
             setup_info += f"• Admin: <@{admin_id}>\n"
             setup_info += f"• Meetings: {'✅ Configured' if has_meetings else '❌ Not configured'}\n"
             setup_info += f"• Tasks: {'✅ Configured' if has_tasks else '❌ Not configured'}\n\n"

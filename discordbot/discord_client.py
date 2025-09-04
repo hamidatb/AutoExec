@@ -121,11 +121,30 @@ class ClubExecBot(discord.Client):
         print(f"🔍 [SETUP CHECK] Setup complete: {setup_complete}")
         
         if not setup_complete:
-            await message.channel.send(
-                "❌ **Setup Required**\n\n"
-                "Setup is not complete. Please ask your admin to run `/setup` in DM with me."
-            )
-            return
+            # Check if this is a setup-related question
+            content_lower = message.content.lower()
+            setup_keywords = ['setup', 'set up', 'configured', 'configuration', 'are you set up', 'setup status', 'am i set up']
+            
+            if any(keyword in content_lower for keyword in setup_keywords):
+                # Handle setup status check directly
+                if guild_id:
+                    # Server context - check this specific guild
+                    await message.channel.send(
+                        f"❌ **Setup Required**\n\n"
+                        f"I am not set up for the guild with ID {guild_id}. If you would like to set up the bot for this guild, please follow the setup instructions."
+                    )
+                else:
+                    # DM context - check if user is admin of any guild
+                    from ae_langchain.main_agent import get_user_setup_status
+                    response = get_user_setup_status(user_id)
+                    await message.channel.send(response)
+                return
+            else:
+                await message.channel.send(
+                    "❌ **Setup Required**\n\n"
+                    "Setup is not complete. Please ask your admin to run `/setup` in DM with me."
+                )
+                return
             
         content = message.content.strip()
         
@@ -330,6 +349,17 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             
             user_id = str(message.author.id)
             print(f"🔍 Processing query for user {user_id}")
+            
+            # Check for setup-related questions first
+            content_lower = message.content.lower()
+            setup_keywords = ['setup', 'set up', 'configured', 'configuration', 'are you set up', 'setup status', 'am i set up']
+            
+            if any(keyword in content_lower for keyword in setup_keywords):
+                # Handle setup status check directly
+                from ae_langchain.main_agent import get_user_setup_status
+                response = get_user_setup_status(user_id)
+                await message.channel.send(response)
+                return
             
             # Use LangChain agent for natural language understanding
             # Run in a thread to avoid blocking the event loop
