@@ -147,20 +147,57 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
     if amount_of_meetings_to_return is None:
         raise ValueError("❌ ERROR: 'amount_of_meetings_to_return' is REQUIRED but was not provided. Please try again")
 
-    # Get meetings from Google Sheets instead of Calendar
+    # Get meetings from Google Sheets using the bot's meeting manager
     from discordbot.discord_client import BOT_INSTANCE
     
     if BOT_INSTANCE is None:
         return "❌ ERROR: The bot instance is not running."
     
-    # Get meetings from the bot's meeting manager
-    # This would need to be implemented to get meetings from Google Sheets
+    # Get the current guild's club configuration
+    # We need to get the guild ID from the current context
+    # For now, we'll try to get meetings from the first available guild config
     meetings_info = "📅 **Upcoming Meetings:**\n\n"
-    meetings_info += "Meetings are now managed through Google Sheets instead of Google Calendar.\n"
-    meetings_info += "Use `/meeting upcoming` to see scheduled meetings."
     
-    # Return the meeting info directly instead of sending to Discord
-    # The LangChain agent will handle sending this to Discord
+    try:
+        # Try to get meetings from any available guild configuration
+        guild_configs = BOT_INSTANCE.club_configs
+        if not guild_configs:
+            meetings_info += "❌ No club configuration found. Please run `/setup` first."
+            return meetings_info
+        
+        # Get meetings from the first available guild (in a real scenario, we'd get the current guild)
+        for guild_id, club_config in guild_configs.items():
+            if 'meetings_sheet_id' in club_config:
+                # Get upcoming meetings using the meeting manager
+                upcoming_meetings = BOT_INSTANCE.meeting_manager.get_upcoming_meetings(
+                    club_config['meetings_sheet_id'], 
+                    limit=amount_of_meetings_to_return
+                )
+                
+                if not upcoming_meetings:
+                    meetings_info += "📅 **No upcoming meetings scheduled.**\n\n"
+                    meetings_info += "Use `/meeting set` to schedule a new meeting."
+                else:
+                    for meeting in upcoming_meetings:
+                        title = meeting.get('title', 'Untitled Meeting')
+                        start_time = meeting.get('start_at_local', meeting.get('start_at_utc', 'Time TBD'))
+                        location = meeting.get('location', 'Location TBD')
+                        meeting_link = meeting.get('meeting_link', '')
+                        
+                        meetings_info += f"**{title}**\n"
+                        meetings_info += f"🕐 {start_time}\n"
+                        meetings_info += f"📍 {location}\n"
+                        if meeting_link:
+                            meetings_info += f"🔗 {meeting_link}\n"
+                        meetings_info += "\n"
+                break
+        else:
+            meetings_info += "❌ No meetings spreadsheet configured. Please run `/setup` first."
+            
+    except Exception as e:
+        print(f"Error getting upcoming meetings: {e}")
+        meetings_info += f"❌ Error retrieving meetings: {str(e)}"
+    
     return meetings_info
     
 @tool
