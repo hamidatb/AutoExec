@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from .sheets_manager import ClubSheetsManager
+from .setup_status_manager import SetupStatusManager
 from .meeting_manager import MeetingManager
 from .task_manager import TaskManager
 
@@ -16,7 +17,45 @@ class SetupManager:
         self.sheets_manager = ClubSheetsManager()
         self.meeting_manager = MeetingManager()
         self.task_manager = TaskManager()
+        self.status_manager = SetupStatusManager()
         self.setup_states = {}  # Track setup progress for each user
+    
+    def is_setup_complete(self, user_id: str) -> bool:
+        """
+        Check if setup is complete for a user.
+        
+        Args:
+            user_id: Discord user ID
+            
+        Returns:
+            True if setup is complete, False otherwise
+        """
+        return self.status_manager.is_setup_complete(user_id)
+    
+    def get_club_config(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get club configuration for a user.
+        
+        Args:
+            user_id: Discord user ID
+            
+        Returns:
+            Club configuration dict or None if not found
+        """
+        return self.status_manager.get_club_config(user_id)
+    
+    def can_modify_config(self, user_id: str, target_club_user_id: str) -> bool:
+        """
+        Check if a user can modify a club's configuration.
+        
+        Args:
+            user_id: User ID requesting to modify
+            target_club_user_id: Club's admin user ID
+            
+        Returns:
+            True if user can modify, False otherwise
+        """
+        return self.status_manager.can_modify_config(user_id, target_club_user_id)
         
     async def start_setup(self, user_id: str, user_name: str) -> str:
         """
@@ -604,6 +643,26 @@ class SetupManager:
                 print(f"⚠️ [SETUP WARNING] Failed to log setup completion: {e}")
                 # Don't fail the setup for logging errors
             
+            # Save setup completion to persistent storage
+            try:
+                club_config = {
+                    'club_name': current_state['club_name'],
+                    'admin_id': current_state['admin_discord_id'],
+                    'config_spreadsheet_id': current_state['config_spreadsheet_id'],
+                    'task_reminders_channel_id': current_state['task_reminders_channel_id'],
+                    'meeting_reminders_channel_id': current_state['meeting_reminders_channel_id'],
+                    'escalation_channel_id': current_state['escalation_channel_id'],
+                    'config_folder_id': current_state['config_folder_id'],
+                    'monthly_folder_id': current_state['monthly_folder_id'],
+                    'monthly_sheets': current_state.get('monthly_sheets', {})
+                }
+                
+                self.status_manager.mark_setup_complete(user_id, club_config)
+                print(f"🔍 [SETUP] Setup completion saved to persistent storage")
+            except Exception as e:
+                print(f"❌ [SETUP ERROR] Failed to save setup completion: {e}")
+                return f"❌ **Setup Completion Failed**\n\nError saving setup status: {str(e)}\n\n**Please contact support.**"
+            
             # Clean up setup state
             del self.setup_states[user_id]
             
@@ -707,6 +766,26 @@ class SetupManager:
             except Exception as e:
                 print(f"⚠️ [SETUP WARNING] Failed to log setup completion: {e}")
                 # Don't fail the setup for logging errors
+            
+            # Save setup completion to persistent storage
+            try:
+                club_config = {
+                    'club_name': current_state['club_name'],
+                    'admin_id': current_state['admin_discord_id'],
+                    'config_spreadsheet_id': current_state['config_spreadsheet_id'],
+                    'task_reminders_channel_id': current_state['task_reminders_channel_id'],
+                    'meeting_reminders_channel_id': current_state['meeting_reminders_channel_id'],
+                    'escalation_channel_id': current_state['escalation_channel_id'],
+                    'config_folder_id': current_state['config_folder_id'],
+                    'monthly_folder_id': current_state['monthly_folder_id'],
+                    'monthly_sheets': current_state.get('monthly_sheets', {})
+                }
+                
+                self.status_manager.mark_setup_complete(user_id, club_config)
+                print(f"🔍 [SETUP] Setup completion saved to persistent storage")
+            except Exception as e:
+                print(f"❌ [SETUP ERROR] Failed to save setup completion: {e}")
+                return f"❌ **Setup Completion Failed**\n\nError saving setup status: {str(e)}\n\n**Please contact support.**"
             
             # Clean up setup state
             del self.setup_states[user_id]
