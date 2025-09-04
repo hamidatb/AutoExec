@@ -55,8 +55,13 @@ class ClubExecBot(discord.Client):
         
     async def setup_hook(self):
         """Set up slash commands when the bot starts."""
-        await self.tree.sync()
-        print("✅ Slash commands synced!")
+        try:
+            synced = await self.tree.sync()
+            print(f"✅ Slash commands synced! {len(synced)} commands registered:")
+            for cmd in synced:
+                print(f"  - /{cmd.name}: {cmd.description}")
+        except Exception as e:
+            print(f"❌ Error syncing slash commands: {e}")
         
         # Start background tasks
         asyncio.create_task(self.reminder_loop())
@@ -175,6 +180,11 @@ class ClubExecBot(discord.Client):
         # Check for meeting minutes request
         if content.startswith('$AEmm'):
             await self.handle_meeting_minutes_request(message)
+            return
+            
+        # Check for config command usage as regular message (should be slash command)
+        if content.startswith('/config') or content.startswith('/serverconfig'):
+            await self.handle_config_command_usage(message)
             return
             
         # Check for general natural language queries
@@ -336,6 +346,52 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
         except Exception as e:
             print(f"Error in meeting minutes request: {e}")
             await message.channel.send("❌ Sorry, I encountered an error processing your request.")
+
+    async def handle_config_command_usage(self, message: discord.Message):
+        """Handle when users try to use /config as a regular message instead of slash command."""
+        try:
+            print(f"🔍 [CONFIG COMMAND] User {message.author.id} tried to use /config as regular message")
+            
+            # Check if this is in a DM
+            if isinstance(message.channel, discord.DMChannel):
+                response = """❌ **Configuration commands can't be used in DMs**
+
+The `/serverconfig` command is a **slash command** that must be used in your **server channels**, not in DMs.
+
+**How to use configuration commands:**
+
+1. **Go to your Discord server** (not DMs)
+2. **Type `/serverconfig`** in any channel where the bot has access
+3. **Choose your action:**
+   - `/serverconfig view` - See current server settings
+   - `/serverconfig update <setting> <value>` - Update a setting
+
+**Examples:**
+- `/serverconfig view`
+- `/serverconfig update task_reminders_channel 123456789012345678`
+- `/serverconfig update config_folder https://drive.google.com/drive/folders/...`
+
+**Note:** Only the server admin can use these commands."""
+            else:
+                response = """❌ **Use slash commands, not regular messages**
+
+The `/serverconfig` command is a **slash command**. Please use the Discord slash command interface:
+
+1. **Type `/serverconfig`** and Discord will show you the available options
+2. **Select the action** (view or update)
+3. **Fill in the parameters** as prompted
+
+**Available slash commands:**
+- `/serverconfig view` - See current server settings  
+- `/serverconfig update` - Update server configuration
+
+**Note:** Only the server admin can use these commands."""
+            
+            await message.channel.send(response)
+            
+        except Exception as e:
+            print(f"Error handling config command usage: {e}")
+            await message.channel.send("❌ An error occurred while processing your request.")
             
     async def handle_langchain_query(self, message: discord.Message):
         """Handle general natural language queries using LangChain."""
@@ -967,15 +1023,15 @@ async def reset_config_command(interaction: discord.Interaction):
     response = bot.setup_manager.reset_club_configuration(guild_id, user_id, bot.club_configs)
     await interaction.response.send_message(response, ephemeral=True)
 
-@bot.tree.command(name="config", description="Update server configuration (admin only)")
+@bot.tree.command(name="serverconfig", description="Update server configuration (admin only)")
 @app_commands.describe(
-    action="Action to perform",
+    action="Action to perform (view or update)",
     setting="Configuration setting to update",
     value="New value for the setting"
 )
 async def config_command(
     interaction: discord.Interaction,
-    action: str,
+    action: str = "view",
     setting: Optional[str] = None,
     value: Optional[str] = None
 ):
@@ -1012,6 +1068,8 @@ async def config_command(
         return
     
     try:
+        print(f"🔍 [SERVERCONFIG] Command called with action='{action}', setting='{setting}', value='{value}'")
+        
         if action.lower() == "view":
             # Show current configuration
             config_text = f"**Current Configuration for {club_config.get('club_name', 'Unknown Club')}**\n\n"
@@ -1176,6 +1234,55 @@ async def config_command(
             ephemeral=True
         )
 
+@bot.tree.command(name="sync", description="Sync slash commands (admin only)")
+async def sync_command(interaction: discord.Interaction):
+    """Sync slash commands with Discord."""
+    # Check if this is a server (guild) interaction
+    if not interaction.guild:
+        await interaction.response.send_message(
+            "❌ This command can only be used in a server, not in DMs.",
+            ephemeral=True
+        )
+        return
+        
+    guild_id = str(interaction.guild.id)
+    user_id = str(interaction.user.id)
+    
+    # Get club config from setup manager
+    all_guilds = bot.setup_manager.status_manager.get_all_guilds()
+    club_config = all_guilds.get(guild_id)
+    
+    if not club_config or not club_config.get('setup_complete', False):
+        await interaction.response.send_message(
+            "❌ No club configuration found for this server. Please run `/setup` first.",
+            ephemeral=True
+        )
+        return
+    
+    # Check if the user is the admin
+    if str(interaction.user.id) != club_config.get('admin_user_id'):
+        admin_id = club_config.get('admin_user_id', 'Unknown')
+        await interaction.response.send_message(
+            f"❌ Only the admin can sync commands.\n\n**Current Admin:** <@{admin_id}>",
+            ephemeral=True
+        )
+        return
+    
+    try:
+        # Sync commands
+        synced = await bot.tree.sync()
+        await interaction.response.send_message(
+            f"✅ **Slash Commands Synced!**\n\n**Synced {len(synced)} commands:**\n" + 
+            "\n".join([f"• `/{cmd.name}` - {cmd.description}" for cmd in synced]) +
+            "\n\n**Note:** It may take a few minutes for commands to appear in Discord.",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ **Sync Failed**\n\nError: {str(e)}",
+            ephemeral=True
+        )
+
 @bot.tree.command(name="help", description="Show help information and available commands")
 async def help_command(interaction: discord.Interaction):
     """Show help information and available commands."""
@@ -1187,8 +1294,9 @@ async def help_command(interaction: discord.Interaction):
 
 **Server Commands:**
 • `/reset` - Reset club configuration (admin only)
-• `/config view` - View current server configuration (admin only)
-• `/config update` - Update server configuration (admin only)
+• `/serverconfig view` - View current server configuration (admin only)
+• `/serverconfig update` - Update server configuration (admin only)
+• `/sync` - Sync slash commands (admin only)
 • `/help` - Show this help message
 
 **Meeting Management:**
@@ -1205,13 +1313,13 @@ async def help_command(interaction: discord.Interaction):
 • Use `$AEmm` to request meeting minutes
 
 **Configuration Updates:**
-• `/config view` - See all current settings
-• `/config update config_folder <link>` - Update Google Drive config folder
-• `/config update monthly_folder <link>` - Update Google Drive monthly folder
-• `/config update meeting_minutes_folder <link>` - Update Google Drive meeting minutes folder
-• `/config update task_reminders_channel <channel_id>` - Update task reminders channel
-• `/config update meeting_reminders_channel <channel_id>` - Update meeting reminders channel
-• `/config update escalation_channel <channel_id>` - Update escalation channel
+• `/serverconfig view` - See all current settings
+• `/serverconfig update config_folder <link>` - Update Google Drive config folder
+• `/serverconfig update monthly_folder <link>` - Update Google Drive monthly folder
+• `/serverconfig update meeting_minutes_folder <link>` - Update Google Drive meeting minutes folder
+• `/serverconfig update task_reminders_channel <channel_id>` - Update task reminders channel
+• `/serverconfig update meeting_reminders_channel <channel_id>` - Update meeting reminders channel
+• `/serverconfig update escalation_channel <channel_id>` - Update escalation channel
 
 **Setup Process:**
 1. Send me a DM and use `/setup`
