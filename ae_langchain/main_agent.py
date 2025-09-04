@@ -464,8 +464,8 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
                 if not channel_id:
                     return f"❌ No {channel_name} channel configured. Please run `/setup` first."
                 
-                # Send the announcement to the specific channel
-                formatted_message = f"📢 **{announcement_type.upper()} ANNOUNCEMENT**\n\n{announcement_message}"
+                # Send the announcement to the specific channel with @everyone tag
+                formatted_message = f"@everyone 📢 **{announcement_type.upper()} ANNOUNCEMENT**\n\n{announcement_message}"
                 
                 # Since we're running in a thread pool, we can't directly send Discord messages
                 # Instead, we'll use a thread-safe approach by storing the message to be sent

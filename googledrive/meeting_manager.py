@@ -297,7 +297,7 @@ class MeetingManager:
                     
                     if timedelta(hours=1, minutes=55) <= time_until <= timedelta(hours=2, minutes=5):
                         # T-2h reminder
-                        message = f"📅 **Meeting Reminder** 📅\n"
+                        message = f"@everyone 📅 **Meeting Reminder** 📅\n"
                         message += f"**{meeting['title']}** starts in 2 hours\n"
                         message += f"Time: {meeting.get('start_at_local', meeting['start_at_utc'])}\n"
                         message += f"Channel: <#{meeting.get('channel_id', '')}>"
@@ -306,7 +306,7 @@ class MeetingManager:
                     
                     elif timedelta(minutes=-5) <= time_until <= timedelta(minutes=5):
                         # T0 reminder
-                        message = f"🚀 **Meeting Starting Now** 🚀\n"
+                        message = f"@everyone 🚀 **Meeting Starting Now** 🚀\n"
                         message += f"**{meeting['title']}**\n"
                         if meeting.get('minutes_doc_url'):
                             message += f"Minutes: {meeting['minutes_doc_url']}"
