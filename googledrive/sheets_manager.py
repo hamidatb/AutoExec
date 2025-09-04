@@ -78,7 +78,7 @@ class ClubSheetsManager:
                 spreadsheetId=spreadsheet_id,
                 range='config!A1',
                 valueInputOption='RAW',
-                body={'values': [config_data]}
+                body={'values': config_data}
             ).execute()
             
             # Initialize people sheet headers
