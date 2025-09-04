@@ -78,6 +78,7 @@ class SetupManager:
                 'guild_name': guild_name,
                 'config_folder_id': None,
                 'monthly_folder_id': None,
+                'meeting_minutes_folder_id': None,
                 'config_spreadsheet_id': None,
                 'monthly_sheets': None,
                 'channels_configured': False
@@ -258,12 +259,13 @@ class SetupManager:
             message += "**No OAuth needed** - the bot will access only the folders you specifically share.\n\n"
             message += "Please provide the Google Drive folder links for:\n"
             message += "• **Main Config Folder** - Where to store the Task Manager Config sheet\n"
-            message += "• **Monthly Sheets Folder** - Where to store monthly task and meeting sheets\n\n"
+            message += "• **Monthly Sheets Folder** - Where to store monthly task and meeting sheets\n"
+            message += "• **Meeting Minutes Folder** - Where to store meeting minutes documents\n\n"
             message += "You can get folder links by:\n"
             message += "1. Right-clicking the folder in Google Drive\n"
             message += "2. Selecting 'Get link'\n"
             message += "3. Copying the link\n\n"
-            message += "**Format**: Please provide both links separated by a new line or comma."
+            message += "**Format**: Please provide all three links separated by a new line or comma."
             
             # Get current month
             current_month = datetime.now().strftime("%B %Y")
@@ -296,21 +298,23 @@ class SetupManager:
             folder_links = [link.strip() for link in message_content.replace('\n', ',').split(',') if link.strip()]
             print(f"🔍 [SETUP] Extracted {len(folder_links)} folder links")
             
-            if len(folder_links) < 2:
-                return "❌ Please provide both folder links (config folder and monthly sheets folder)."
+            if len(folder_links) < 3:
+                return "❌ Please provide all three folder links (config folder, monthly sheets folder, and meeting minutes folder)."
             
             # Extract folder IDs from Google Drive links
             config_folder_id = self._extract_folder_id(folder_links[0])
             monthly_folder_id = self._extract_folder_id(folder_links[1])
+            meeting_minutes_folder_id = self._extract_folder_id(folder_links[2])
             
-            print(f"🔍 [SETUP] Extracted folder IDs - Config: {config_folder_id}, Monthly: {monthly_folder_id}")
+            print(f"🔍 [SETUP] Extracted folder IDs - Config: {config_folder_id}, Monthly: {monthly_folder_id}, Meeting Minutes: {meeting_minutes_folder_id}")
             
-            if not config_folder_id or not monthly_folder_id:
+            if not config_folder_id or not monthly_folder_id or not meeting_minutes_folder_id:
                 return "❌ Invalid folder links. Please make sure you're providing Google Drive folder links."
             
             # Store folder IDs
             self.setup_states[user_id]['config_folder_id'] = config_folder_id
             self.setup_states[user_id]['monthly_folder_id'] = monthly_folder_id
+            self.setup_states[user_id]['meeting_minutes_folder_id'] = meeting_minutes_folder_id
             
             # Immediately verify folder access instead of waiting for user input
             print(f"🔍 [SETUP] Starting immediate folder verification for user {user_id}")
@@ -331,6 +335,14 @@ class SetupManager:
                 print(f"❌ [SETUP ERROR] Monthly folder verification failed: {e}")
                 monthly_access = False
             
+            # Test access to meeting minutes folder
+            try:
+                meeting_minutes_access = await self._verify_folder_access(meeting_minutes_folder_id)
+                print(f"🔍 [SETUP] Meeting minutes folder access result: {meeting_minutes_access}")
+            except Exception as e:
+                print(f"❌ [SETUP ERROR] Meeting minutes folder verification failed: {e}")
+                meeting_minutes_access = False
+            
             # Check results and proceed accordingly
             if not config_access:
                 return f"❌ **Config Folder Access Failed**\n\nI cannot access the config folder `{config_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
@@ -338,13 +350,17 @@ class SetupManager:
             if not monthly_access:
                 return f"❌ **Monthly Folder Access Failed**\n\nI cannot access the monthly folder `{monthly_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
             
+            if not meeting_minutes_access:
+                return f"❌ **Meeting Minutes Folder Access Failed**\n\nI cannot access the meeting minutes folder `{meeting_minutes_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
+            
             # Both folders accessible, proceed directly to sheets initialization
             print(f"🔍 [SETUP] Both folders verified, proceeding to sheets initialization")
             
             # Send initial message about folder verification
             initial_message = "✅ **Folders Selected and Verified Successfully!**\n\n"
             initial_message += f"• Config Folder ID: `{config_folder_id}` ✅ Accessible\n"
-            initial_message += f"• Monthly Folder ID: `{monthly_folder_id}` ✅ Accessible\n\n"
+            initial_message += f"• Monthly Folder ID: `{monthly_folder_id}` ✅ Accessible\n"
+            initial_message += f"• Meeting Minutes Folder ID: `{meeting_minutes_folder_id}` ✅ Accessible\n\n"
             initial_message += "**Step 5: Google Sheets Initialization**\n"
             initial_message += "I'll now create the necessary Google Sheets for your club:\n\n"
             initial_message += f"• **{self.setup_states[user_id]['club_name']} Task Manager Config** - Main configuration\n"
@@ -712,6 +728,7 @@ class SetupManager:
                     'escalation_channel_id': current_state['escalation_channel_id'],
                     'config_folder_id': current_state['config_folder_id'],
                     'monthly_folder_id': current_state['monthly_folder_id'],
+                    'meeting_minutes_folder_id': current_state['meeting_minutes_folder_id'],
                     'monthly_sheets': current_state.get('monthly_sheets', {})
                 }
                 
@@ -841,6 +858,7 @@ class SetupManager:
                     'escalation_channel_id': current_state['escalation_channel_id'],
                     'config_folder_id': current_state['config_folder_id'],
                     'monthly_folder_id': current_state['monthly_folder_id'],
+                    'meeting_minutes_folder_id': current_state['meeting_minutes_folder_id'],
                     'monthly_sheets': current_state.get('monthly_sheets', {})
                 }
                 
