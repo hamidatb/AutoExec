@@ -82,18 +82,13 @@ class ClubExecBot(discord.Client):
             
         # Handle DM setup process FIRST - this takes priority
         if isinstance(message.channel, discord.DMChannel):
-            # Check if user is in setup process first
-            if self.setup_manager.is_in_setup(str(message.author.id)):
-                # User is in setup - ONLY handle setup responses
-                await self.handle_dm_setup(message)
-                return
-            else:
-                # User is not in setup - handle setup commands or general queries
-                await self.handle_dm_setup(message)
-                # Only process natural language if setup manager didn't handle it
-                if not self.setup_manager.is_in_setup(str(message.author.id)):
-                    await self.handle_natural_language(message)
-                return
+            # Always handle setup-related commands and questions first
+            await self.handle_dm_setup(message)
+            
+            # Only process natural language if setup manager didn't handle it
+            if not self.setup_manager.is_in_setup(str(message.author.id)):
+                await self.handle_natural_language(message)
+            return
             
         # Handle natural language commands and queries in public channels
         await self.handle_natural_language(message)
@@ -341,15 +336,19 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
         if len(content.strip()) <= 3:
             return False
             
+        # Skip setup-related questions that are handled by setup manager
+        content_lower = content.lower()
+        setup_keywords = ['setup', 'configure', 'are you set up', 'what club', 'admin', 'permission', 'set up']
+        if any(keyword in content_lower for keyword in setup_keywords):
+            return False
+            
         # Check for natural language patterns
         natural_language_indicators = [
             'can you', 'could you', 'please', 'help me', 'how do i',
             'what is', 'when is', 'where is', 'why', 'how',
             'i need', 'i want', 'i would like', 'tell me', 'show me',
-            'are you', 'what can you', 'how do you work'
+            'what can you', 'how do you work'
         ]
-        
-        content_lower = content.lower()
         
         # Check for natural language patterns
         for indicator in natural_language_indicators:
@@ -422,6 +421,7 @@ I am **NOT** set up for any student groups yet.
             
         # If not a setup command and not in setup process, and not a setup question,
         # let natural language processing handle it
+        return
                 
     async def handle_task_reply(self, message: discord.Message):
         """Handle user replies to task reminders."""
