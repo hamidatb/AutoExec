@@ -949,9 +949,19 @@ async def meeting_command(
     
     # Check if user is admin
     guild_id = str(interaction.guild.id)
-    club_config = bot.club_configs.get(guild_id)
+    
+    # Get club config from setup manager instead of bot.club_configs
+    all_guilds = bot.setup_manager.status_manager.get_all_guilds()
+    club_config = all_guilds.get(guild_id)
+    
+    if not club_config or not club_config.get('setup_complete', False):
+        await interaction.response.send_message(
+            "❌ No club configuration found for this server. Please run `/setup` first.",
+            ephemeral=True
+        )
+        return
         
-    if str(interaction.user.id) != club_config.get('admin_discord_id'):
+    if str(interaction.user.id) != club_config.get('admin_user_id'):
         await interaction.response.send_message(
             "❌ Only the admin can manage meetings.",
             ephemeral=True
@@ -991,10 +1001,24 @@ async def meeting_command(
                 'created_by': str(interaction.user.id)
             }
             
+            # Get the meetings sheet ID from the monthly_sheets structure
+            meetings_sheet_id = None
+            if 'monthly_sheets' in club_config and 'meetings' in club_config['monthly_sheets']:
+                meetings_sheet_id = club_config['monthly_sheets']['meetings']
+            elif 'meetings_sheet_id' in club_config:
+                meetings_sheet_id = club_config['meetings_sheet_id']
+            
+            if not meetings_sheet_id:
+                await interaction.response.send_message(
+                    "❌ No meetings spreadsheet configured. Please run `/setup` first.",
+                    ephemeral=True
+                )
+                return
+            
             # Schedule meeting
             success = await bot.meeting_manager.schedule_meeting(
                 meeting_data, 
-                club_config['meetings_sheet_id']
+                meetings_sheet_id
             )
             
             if success:
