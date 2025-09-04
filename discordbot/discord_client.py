@@ -87,10 +87,10 @@ class ClubExecBot(discord.Client):
         # Handle DM setup process FIRST - this takes priority
         if isinstance(message.channel, discord.DMChannel):
             # Always handle setup-related commands and questions first
-            await self.handle_dm_setup(message)
+            handled = await self.handle_dm_setup(message)
             
-            # Only process natural language if setup manager didn't handle it
-            if not self.setup_manager.is_in_setup(str(message.author.id)):
+            # Only process natural language if setup manager didn't handle it AND dm_setup didn't handle it
+            if not handled and not self.setup_manager.is_in_setup(str(message.author.id)):
                 await self.handle_natural_language(message)
             return
             
@@ -150,8 +150,7 @@ class ClubExecBot(discord.Client):
                     )
             else:
                 # DM context - check if user is admin of any guild
-                from ae_langchain.main_agent import get_user_setup_status
-                response = get_user_setup_status(user_id)
+                response = self._get_user_setup_status_direct(user_id)
                 await message.channel.send(response)
             return
         
@@ -436,8 +435,12 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             
         return False
             
-    async def handle_dm_setup(self, message: discord.Message):
-        """Handle setup process in DMs."""
+    async def handle_dm_setup(self, message: discord.Message) -> bool:
+        """Handle setup process in DMs.
+        
+        Returns:
+            bool: True if message was handled, False if it should be processed by other handlers
+        """
         user_id = str(message.author.id)
         
         if message.content.lower() == '/setup':
@@ -446,13 +449,23 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             guild_name = message.guild.name if message.guild else None
             response = await self.setup_manager.start_setup(user_id, message.author.name, guild_id, guild_name)
             await message.channel.send(response)
-            return
+            return True
             
         if message.content.lower() == '/cancel':
             # Cancel setup
             response = self.setup_manager.cancel_setup(user_id)
             await message.channel.send(response)
-            return
+            return True
+        
+        # Handle setup-related questions in DMs
+        content_lower = message.content.lower()
+        setup_keywords = ['setup', 'set up', 'configured', 'configuration', 'are you set up', 'setup status', 'am i set up']
+        
+        if any(keyword in content_lower for keyword in setup_keywords):
+            # Handle setup status check directly
+            response = self._get_user_setup_status_direct(user_id)
+            await message.channel.send(response)
+            return True
             
         # Check if user is in setup process
         if self.setup_manager.is_in_setup(user_id):
@@ -462,7 +475,7 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             # If setup is complete, load the new configuration
             if not self.setup_manager.is_in_setup(user_id):
                 await self.load_club_configurations()
-            return
+            return True
             
         # If not in setup process, check if this is a setup-related question
         # that should be handled by the setup manager instead of LangChain
@@ -490,11 +503,11 @@ I am **NOT** set up for any student groups yet.
 **Current Status:** Waiting for initial setup by an administrator."""
             
             await message.channel.send(response)
-            return
+            return True
             
         # If not a setup command and not in setup process, and not a setup question,
         # let natural language processing handle it
-        return
+        return False
                 
     async def handle_task_reply(self, message: discord.Message):
         """Handle user replies to task reminders."""
@@ -552,6 +565,76 @@ I am **NOT** set up for any student groups yet.
                 return True
         print(f"🔍 [SETUP CHECK] User {user_id} is not admin of any guild")
         return False
+    
+    def _get_user_setup_status_direct(self, user_id: str) -> str:
+        """
+        Get setup status for a user directly (without LangChain).
+        
+        Args:
+            user_id: Discord user ID to check
+            
+        Returns:
+            Setup status message
+        """
+        try:
+            # Check if user is admin of any guild
+            all_guilds = self.setup_manager.status_manager.get_all_guilds()
+            user_guilds = []
+            
+            for guild_id, config in all_guilds.items():
+                if config.get('admin_user_id') == user_id and config.get('setup_complete', False):
+                    user_guilds.append((guild_id, config))
+            
+            if not user_guilds:
+                return """❌ **Setup Status: NOT CONFIGURED**\n\nYou are not an admin of any configured student groups.
+
+**What this means:**
+• You haven't set up the bot for any servers yet
+• Or you're not the admin of any configured servers
+
+**To get started:**
+• Run `/setup` in a Discord server where you're an admin
+• This will configure the bot for that server
+• You can be admin of multiple servers
+
+**Current Status:** No configured servers found for your account."""
+            
+            # User is admin of one or more guilds
+            if len(user_guilds) == 1:
+                guild_id, config = user_guilds[0]
+                guild_name = config.get('guild_name', 'Unknown Server')
+                club_name = config.get('club_name', 'Unknown Club')
+                
+                return f"""✅ **Setup Status: CONFIGURED**\n\nYou are the admin of **{club_name}** in server **{guild_name}**.
+
+**Your Configuration:**
+• Server: {guild_name} (ID: {guild_id})
+• Club: {club_name}
+• Admin: <@{user_id}>
+
+**What you can do:**
+• Schedule and manage meetings
+• Create and track meeting minutes
+• Assign and monitor tasks
+• Send automated reminders
+• Process natural language requests
+
+**Current Status:** Fully operational! 🎉"""
+            else:
+                # User is admin of multiple guilds
+                response = f"""✅ **Setup Status: CONFIGURED**\n\nYou are the admin of **{len(user_guilds)}** configured student groups!\n\n"""
+                
+                for guild_id, config in user_guilds:
+                    guild_name = config.get('guild_name', 'Unknown Server')
+                    club_name = config.get('club_name', 'Unknown Club')
+                    response += f"**{club_name}** (Server: {guild_name})\n"
+                
+                response += "\n**What you can do:**\n• Schedule and manage meetings\n• Create and track meeting minutes\n• Assign and monitor tasks\n• Send automated reminders\n• Process natural language requests\n\n**Current Status:** Fully operational for all your groups! 🎉"
+                
+                return response
+                
+        except Exception as e:
+            return f"❌ **Setup Status: ERROR**\n\nError checking setup status: {str(e)}"
     
     def is_fully_setup(self, guild_id: str = None, user_id: str = None) -> bool:
         """
