@@ -111,11 +111,12 @@ def send_output_to_discord(messageToSend:str) -> str:
     # Instead, we'll use a thread-safe approach by storing the message to be sent
     # and returning a response that indicates the message should be sent
     
-    # Store the message in the bot instance for the main thread to send
-    if not hasattr(BOT_INSTANCE, 'pending_announcements'):
-        BOT_INSTANCE.pending_announcements = []
+    # Store the message in a global variable that works across threads
+    global _pending_announcements
+    if '_pending_announcements' not in globals():
+        _pending_announcements = []
     
-    BOT_INSTANCE.pending_announcements.append({
+    _pending_announcements.append({
         'message': str(messageToSend),
         'channel_id': None,  # Will use last_channel_id
         'channel_name': 'current channel'
@@ -470,15 +471,23 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
                 # Instead, we'll use a thread-safe approach by storing the message to be sent
                 # and returning a response that indicates the message should be sent
                 
-                # Store the message in the bot instance for the main thread to send
-                if not hasattr(BOT_INSTANCE, 'pending_announcements'):
-                    BOT_INSTANCE.pending_announcements = []
+                # Store the message in a global variable that works across threads
+                import threading
+                if not hasattr(threading.current_thread(), 'pending_announcements'):
+                    # Use a global variable instead of bot instance
+                    global _pending_announcements
+                    if '_pending_announcements' not in globals():
+                        _pending_announcements = []
+                    print(f"🔍 [send_announcement] Using global pending_announcements list")
                 
-                BOT_INSTANCE.pending_announcements.append({
+                announcement_data = {
                     'message': formatted_message,
                     'channel_id': int(channel_id),
                     'channel_name': channel_name
-                })
+                }
+                _pending_announcements.append(announcement_data)
+                print(f"🔍 [send_announcement] Added announcement to global queue. Total pending: {len(_pending_announcements)}")
+                print(f"🔍 [send_announcement] Announcement data: {announcement_data}")
                 
                 return f"✅ Announcement queued for {channel_name} channel!\n\n**Message to be sent:**\n{formatted_message}"
                 

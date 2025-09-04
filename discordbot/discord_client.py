@@ -179,8 +179,11 @@ class ClubExecBot(discord.Client):
             
         # Check for general natural language queries
         if self.should_use_langchain(content):
+            print(f"🔍 Using LangChain for message: {content}")
             await self.handle_langchain_query(message)
             return
+        else:
+            print(f"🔍 NOT using LangChain for message: {content}")
             
         # Special handling for DMs ONLY if no other handler was used
         # This prevents duplicate processing and welcome messages in wrong contexts
@@ -287,6 +290,24 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             # Send response directly to the channel
             await message.channel.send(response)
             
+            # Check for and send any pending announcements
+            from ae_langchain.main_agent import _pending_announcements
+            if _pending_announcements:
+                for announcement in _pending_announcements:
+                    try:
+                        # If no specific channel_id, use the current channel
+                        channel_id = announcement['channel_id'] or message.channel.id
+                        await self.send_any_message(
+                            announcement['message'], 
+                            channel_id
+                        )
+                        print(f"✅ Sent pending announcement to channel {channel_id}")
+                    except Exception as e:
+                        print(f"❌ Failed to send pending announcement: {e}")
+                
+                # Clear the pending announcements
+                _pending_announcements.clear()
+            
         except Exception as e:
             print(f"Error in AutoExec command: {e}")
             await message.channel.send("❌ Sorry, I encountered an error processing your request.")
@@ -344,10 +365,19 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             
             # Send response directly to the channel
             await message.channel.send(response)
+            print(f"🔍 [handle_langchain_query] Response sent to channel, now checking for pending announcements...")
             
             # Check for and send any pending announcements
-            if hasattr(self, 'pending_announcements') and self.pending_announcements:
-                for announcement in self.pending_announcements:
+            print(f"🔍 [handle_langchain_query] Checking pending announcements...")
+            
+            # Import the global variable from the main_agent module
+            from ae_langchain.main_agent import _pending_announcements
+            print(f"🔍 [handle_langchain_query] Global _pending_announcements exists: {'_pending_announcements' in globals()}")
+            print(f"🔍 [handle_langchain_query] _pending_announcements: {_pending_announcements}")
+            print(f"🔍 [handle_langchain_query] len(_pending_announcements): {len(_pending_announcements) if _pending_announcements else 'None'}")
+            
+            if _pending_announcements:
+                for announcement in _pending_announcements:
                     try:
                         # If no specific channel_id, use the current channel
                         channel_id = announcement['channel_id'] or message.channel.id
@@ -360,10 +390,12 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
                         print(f"❌ Failed to send pending announcement: {e}")
                 
                 # Clear the pending announcements
-                self.pending_announcements = []
+                _pending_announcements.clear()
             
         except Exception as e:
-            print(f"Error in LangChain query: {e}")
+            print(f"❌ [handle_langchain_query] Error in LangChain query: {e}")
+            import traceback
+            traceback.print_exc()
             await message.channel.send("❌ Sorry, I encountered an error processing your request.")
             
     async def handle_dm_general_query(self, message: discord.Message):
@@ -413,6 +445,32 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             # Send response directly to the DM
             await message.channel.send(response)
             
+            # Check for and send any pending announcements
+            print(f"🔍 [DM] Checking for pending announcements...")
+            from ae_langchain.main_agent import _pending_announcements
+            if _pending_announcements:
+                print(f"🔍 [DM] Found {len(_pending_announcements)} pending announcements")
+                for i, announcement in enumerate(_pending_announcements):
+                    try:
+                        # If no specific channel_id, use the current channel
+                        channel_id = announcement['channel_id'] or message.channel.id
+                        print(f"🔍 [DM] Sending announcement {i+1} to channel {channel_id}")
+                        print(f"🔍 [DM] Message: {announcement['message'][:100]}...")
+                        await self.send_any_message(
+                            announcement['message'], 
+                            channel_id
+                        )
+                        print(f"✅ [DM] Sent pending announcement to channel {channel_id}")
+                    except Exception as e:
+                        print(f"❌ [DM] Failed to send pending announcement: {e}")
+                        import traceback
+                        traceback.print_exc()
+                
+                # Clear the pending announcements
+                _pending_announcements.clear()
+            else:
+                print(f"🔍 [DM] No pending announcements found")
+            
         except Exception as e:
             print(f"Error in DM general query: {e}")
             await message.channel.send("❌ Sorry, I encountered an error processing your request.")
@@ -434,7 +492,8 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             'can you', 'could you', 'please', 'help me', 'how do i',
             'what is', 'when is', 'where is', 'why', 'how',
             'i need', 'i want', 'i would like', 'tell me', 'show me',
-            'what can you', 'how do you work'
+            'what can you', 'how do you work', 'send', 'announcement', 'schedule',
+            'create', 'make', 'do', 'get', 'find', 'check'
         ]
         
         # Check for natural language patterns
@@ -818,18 +877,24 @@ I am **NOT** set up for any student groups yet.
                 
     async def send_any_message(self, message: str, channel_id: int = None):
         """Send a message to a specific channel."""
+        print(f"🔍 [send_any_message] Called with channel_id: {channel_id}, message: {message[:50]}...")
+        
         # Use last_channel_id as default if no channel_id provided
         if not channel_id and self.last_channel_id:
             channel_id = self.last_channel_id
+            print(f"🔍 [send_any_message] Using last_channel_id: {channel_id}")
             
         if channel_id:
             channel = self.get_channel(channel_id)
+            print(f"🔍 [send_any_message] Got channel: {channel}")
             if channel:
+                print(f"🔍 [send_any_message] Sending message to channel {channel_id}")
                 await channel.send(message)
+                print(f"✅ [send_any_message] Message sent successfully to channel {channel_id}")
             else:
-                print(f"❌ Could not find channel {channel_id}")
+                print(f"❌ [send_any_message] Could not find channel {channel_id}")
         else:
-            print("❌ No channel ID provided for message")
+            print("❌ [send_any_message] No channel ID provided for message")
 
 # Create the bot instance
 bot = ClubExecBot()
