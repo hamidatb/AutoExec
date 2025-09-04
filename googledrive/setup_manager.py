@@ -294,12 +294,17 @@ class SetupManager:
             message += f"• Tasks Sheet: {monthly_sheets['tasks']}\n"
             message += f"• Meetings Sheet: {monthly_sheets['meetings']}\n\n"
             message += "**Step 4: Channel Configuration**\n"
-            message += "Now I need to know which Discord channels to use:\n\n"
+            message += "Now I need to know which Discord channels to use for different types of messages:\n\n"
             message += "Please provide the channel IDs for:\n"
-            message += "• Task reminders\n"
-            message += "• Meeting reminders\n"
-            message += "• Escalations (for overdue tasks)\n\n"
-            message += "You can get channel IDs by right-clicking a channel and selecting 'Copy ID'"
+            message += "• **Task reminders** - Where I'll send task deadline reminders (T-24h, T-2h, overdue)\n"
+            message += "• **Meeting reminders** - Where I'll send meeting notifications (T-2h, T-0)\n"
+            message += "• **Escalations** - Where I'll send alerts for overdue tasks and admin notifications\n\n"
+            message += "**How to get channel IDs:**\n"
+            message += "1. Right-click on the channel in Discord\n"
+            message += "2. Select 'Copy ID'\n"
+            message += "3. Paste all three IDs in your next message (one per line)\n\n"
+            message += "**Example format:**\n"
+            message += "```\n123456789012345678\n987654321098765432\n555666777888999000\n```"
             
             return message
             
@@ -353,12 +358,16 @@ class SetupManager:
             
             message = "🎉 **Setup Complete!** 🎉\n\n"
             message += f"Your club **{current_state['club_name']}** is now configured!\n\n"
+            message += "**Channel Configuration:**\n"
+            message += f"• Task reminders will be sent to: <#{channel_ids[0]}>\n"
+            message += f"• Meeting reminders will be sent to: <#{channel_ids[1]}>\n"
+            message += f"• Escalations will be sent to: <#{channel_ids[2]}>\n\n"
             message += "**What happens next:**\n"
             message += "• I'll listen for commands in your DM and public channels\n"
             message += "• Use `/meeting set` to schedule meetings\n"
             message += "• Use `/assign` to create tasks\n"
             message += "• I'll automatically parse meeting minutes and create tasks\n"
-            message += "• Task reminders and escalations will be sent automatically\n\n"
+            message += "• Task reminders and escalations will be sent to the configured channels\n\n"
             message += "**Need help?** Use `/help` to see all available commands."
             
             return message
