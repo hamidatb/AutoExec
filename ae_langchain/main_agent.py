@@ -108,13 +108,32 @@ def send_output_to_discord(messageToSend:str) -> str:
         return "❌ ERROR: The bot instance is not running."
 
     # Run the message-sending function inside the bot event loop
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        # Call send_any_message with the message parameter
-        loop.create_task(BOT_INSTANCE.send_any_message(str(messageToSend)))
-    else:
-        # Call send_any_message with the message parameter
-        asyncio.run(BOT_INSTANCE.send_any_message(str(messageToSend)))
+    try:
+        # Try to get the current event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Call send_any_message with the message parameter
+            loop.create_task(BOT_INSTANCE.send_any_message(str(messageToSend)))
+        else:
+            # Call send_any_message with the message parameter
+            asyncio.run(BOT_INSTANCE.send_any_message(str(messageToSend)))
+    except RuntimeError:
+        # No event loop in current thread - use the bot's event loop
+        import asyncio
+        import threading
+        
+        def run_in_main_loop():
+            # Get the main thread's event loop
+            main_loop = BOT_INSTANCE.loop
+            if main_loop and not main_loop.is_closed():
+                # Schedule the coroutine in the main loop
+                asyncio.run_coroutine_threadsafe(
+                    BOT_INSTANCE.send_any_message(str(messageToSend)), 
+                    main_loop
+                )
+        
+        # Run in the main thread's event loop
+        run_in_main_loop()
 
     return "✅ Message has been sent to Discord."
 
