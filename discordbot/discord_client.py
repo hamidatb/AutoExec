@@ -107,15 +107,14 @@ class ClubExecBot(discord.Client):
         if isinstance(message.channel, discord.DMChannel) and self.setup_manager.is_in_setup(str(message.author.id)):
             return
         
-        # Check setup gating for public channels
-        if not isinstance(message.channel, discord.DMChannel):
-            guild_id = str(message.guild.id) if message.guild else None
-            if not self.is_fully_setup(guild_id):
-                await message.channel.send(
-                    "❌ **Setup Required**\n\n"
-                    "Setup is not complete. Please ask your admin to run `/setup` in DM with me."
-                )
-                return
+        # Check setup gating for ALL channels (including DMs for non-setup users)
+        guild_id = str(message.guild.id) if message.guild else None
+        if not self.is_fully_setup(guild_id):
+            await message.channel.send(
+                "❌ **Setup Required**\n\n"
+                "Setup is not complete. Please ask your admin to run `/setup` in DM with me."
+            )
+            return
             
         content = message.content.strip()
         
@@ -192,7 +191,7 @@ I'm designed to help manage club executive tasks efficiently! 🎯"""
 
 **Meeting Management:**
 • Schedule meetings with `/meeting set`
-• View upcoming meetings with `/meeting upcoming`
+• View upcoming meetings with `/meeting_upcoming`
 • Create agenda templates
 • Link and parse meeting minutes
 
@@ -260,7 +259,7 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             # For now, send a helpful response
             response = "📋 **Meeting Minutes Request**\n\n"
             response += "I can help you with meeting minutes! Here are your options:\n\n"
-            response += "• Use `/meeting upcoming` to see scheduled meetings\n"
+            response += "• Use `/meeting_upcoming` to see scheduled meetings\n"
             response += "• Use `/meeting linkminutes <url>` to link minutes documents\n"
             response += "• I'll automatically parse action items from linked minutes\n\n"
             response += "Need help? Use `/help` to see all available commands!"
@@ -723,7 +722,7 @@ async def help_command(interaction: discord.Interaction):
 
 **Meeting Management:**
 • `/meeting set` - Schedule a new meeting
-• `/meeting upcoming` - Show upcoming meetings
+• `/meeting_upcoming` - Show upcoming meetings
 • `/meeting linkminutes` - Link meeting minutes
 
 **Task Management:**
@@ -889,6 +888,61 @@ async def meeting_command(
         print(f"Error in meeting command: {e}")
         await interaction.response.send_message(
             "❌ An error occurred. Please try again.",
+            ephemeral=True
+        )
+
+@bot.tree.command(name="meeting_upcoming", description="Show upcoming meetings")
+async def meeting_upcoming_command(interaction: discord.Interaction):
+    """Show upcoming meetings."""
+    # Check setup gating first
+    if not await bot.check_setup_gate(interaction):
+        return
+    
+    try:
+        guild_id = str(interaction.guild.id)
+        club_config = bot.club_configs.get(guild_id)
+        
+        if not club_config or 'config_spreadsheet_id' not in club_config:
+            await interaction.response.send_message(
+                "❌ No club configuration found.",
+                ephemeral=True
+            )
+            return
+            
+        # Get upcoming meetings from the meeting manager
+        meetings = bot.meeting_manager.get_upcoming_meetings(
+            club_config['config_spreadsheet_id']
+        )
+        
+        if not meetings:
+            await interaction.response.send_message(
+                "📅 **No upcoming meetings found.**\n\n"
+                "Use `/meeting set` to schedule a new meeting.",
+                ephemeral=True
+            )
+            return
+            
+        # Format meetings for display
+        response = "📅 **Upcoming Meetings:**\n\n"
+        for meeting in meetings[:5]:  # Show next 5 meetings
+            title = meeting.get('title', 'Untitled Meeting')
+            start_time = meeting.get('start_at_local', 'Time TBD')
+            location = meeting.get('location', 'Location TBD')
+            meeting_link = meeting.get('meeting_link', '')
+            
+            response += f"**{title}**\n"
+            response += f"🕐 {start_time}\n"
+            response += f"📍 {location}\n"
+            if meeting_link:
+                response += f"🔗 {meeting_link}\n"
+            response += "\n"
+            
+        await interaction.response.send_message(response, ephemeral=True)
+        
+    except Exception as e:
+        print(f"Error in meeting upcoming command: {e}")
+        await interaction.response.send_message(
+            "❌ An error occurred while fetching meetings. Please try again.",
             ephemeral=True
         )
 
