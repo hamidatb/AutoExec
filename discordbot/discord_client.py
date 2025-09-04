@@ -107,40 +107,12 @@ class ClubExecBot(discord.Client):
         if isinstance(message.channel, discord.DMChannel) and self.setup_manager.is_in_setup(str(message.author.id)):
             return
         
-        # CRITICAL: For DM channels, only process LangChain if setup is NOT complete
-        # If setup is complete, DMs should be treated as commands or ignored
-        if isinstance(message.channel, discord.DMChannel):
-            user_id = str(message.author.id)
-            if self.setup_manager.is_setup_complete(user_id):
-                print(f"🔍 [DM PROCESSING] User {user_id} has completed setup, skipping LangChain processing")
-                # Setup is complete, so this DM should be treated as a command or ignored
-                # Handle simple setup status questions
-                content_lower = message.content.lower().strip()
-                if any(phrase in content_lower for phrase in ['are you setup', 'setup complete', 'setup done', 'are you configured']):
-                    club_config = self.setup_manager.get_club_config(user_id)
-                    if club_config:
-                        await message.channel.send(
-                            f"✅ **Yes, I'm fully set up!**\n\n"
-                            f"**Club:** {club_config.get('club_name', 'Unknown')}\n"
-                            f"**Admin:** <@{user_id}>\n"
-                            f"**Setup completed:** {club_config.get('completed_at', 'Unknown')}\n\n"
-                            f"I'm ready to help manage meetings and tasks for your club!"
-                        )
-                    else:
-                        await message.channel.send("✅ **Yes, I'm set up and ready to help!**")
-                    return
-                
-                # For other non-command DMs after setup, ignore them
-                if not message.content.startswith('/'):
-                    print(f"🔍 [DM PROCESSING] Ignoring non-command DM from user {user_id}")
-                    return
-        
         # Check setup gating for ALL channels (including DMs for non-setup users)
         guild_id = str(message.guild.id) if message.guild else None
         user_id = str(message.author.id)
         
         print(f"🔍 [SETUP CHECK] Checking setup for user {user_id}, guild {guild_id}")
-        setup_complete = self.is_fully_setup(guild_id, user_id)
+        setup_complete = self.is_fully_setup(guild_id=guild_id, user_id=user_id)
         print(f"🔍 [SETUP CHECK] Setup complete: {setup_complete}")
         
         if not setup_complete:
@@ -563,7 +535,7 @@ I am **NOT** set up for any student groups yet.
         guild_id = str(interaction.guild.id) if interaction.guild else None
         user_id = str(interaction.user.id)
         
-        if not self.is_fully_setup(guild_id, user_id):
+        if not self.is_fully_setup(guild_id=guild_id, user_id=user_id):
             await interaction.response.send_message(
                 "❌ **Setup Required**\n\n"
                 "Setup is not complete. Please ask your admin to run `/setup` in DM with me.",
