@@ -502,6 +502,255 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
         return f"❌ Error sending announcement: {str(e)}"
 
 @tool
+def get_setup_info() -> str:
+    """
+    Get information about the current bot setup and configuration.
+    Use this to answer questions about what's configured, what channels are set up,
+    what Google Sheets are being used, etc.
+    
+    Returns:
+        str: Detailed information about the current setup
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get guild configurations from the setup manager
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        if not all_guilds:
+            return "❌ **No club configuration found.**\n\nPlease run `/setup` to configure the bot for your server."
+        
+        setup_info = "📋 **Current Bot Setup Information:**\n\n"
+        
+        # Get the first available guild configuration
+        for guild_id, guild_config in all_guilds.items():
+            if guild_config.get('setup_complete', False):
+                setup_info += f"🏠 **Server:** {guild_config.get('guild_name', 'Unknown')}\n"
+                setup_info += f"👥 **Club:** {guild_config.get('club_name', 'Unknown')}\n"
+                setup_info += f"👤 **Admin:** <@{guild_config.get('admin_user_id', 'Unknown')}>\n"
+                setup_info += f"✅ **Setup Status:** Complete\n"
+                setup_info += f"📅 **Setup Date:** {guild_config.get('completed_at', 'Unknown')}\n\n"
+                
+                # Channel information
+                setup_info += "📢 **Channels:**\n"
+                task_channel = guild_config.get('task_reminders_channel_id')
+                meeting_channel = guild_config.get('meeting_reminders_channel_id')
+                escalation_channel = guild_config.get('escalation_channel_id')
+                
+                if task_channel:
+                    setup_info += f"  • Task Reminders: <#{task_channel}>\n"
+                if meeting_channel:
+                    setup_info += f"  • Meeting Reminders: <#{meeting_channel}>\n"
+                if escalation_channel:
+                    setup_info += f"  • Escalation: <#{escalation_channel}>\n"
+                setup_info += "\n"
+                
+                # Google Sheets information
+                setup_info += "📊 **Google Sheets:**\n"
+                config_sheet = guild_config.get('config_spreadsheet_id')
+                if config_sheet:
+                    setup_info += f"  • Config Sheet: https://docs.google.com/spreadsheets/d/{config_sheet}\n"
+                
+                # Monthly sheets
+                monthly_sheets = guild_config.get('monthly_sheets', {})
+                if monthly_sheets:
+                    setup_info += "  • Monthly Sheets:\n"
+                    if 'tasks' in monthly_sheets:
+                        setup_info += f"    - Tasks: https://docs.google.com/spreadsheets/d/{monthly_sheets['tasks']}\n"
+                    if 'meetings' in monthly_sheets:
+                        setup_info += f"    - Meetings: https://docs.google.com/spreadsheets/d/{monthly_sheets['meetings']}\n"
+                
+                # Folder information
+                config_folder = guild_config.get('config_folder_id')
+                monthly_folder = guild_config.get('monthly_folder_id')
+                if config_folder:
+                    setup_info += f"  • Config Folder: https://drive.google.com/drive/folders/{config_folder}\n"
+                if monthly_folder:
+                    setup_info += f"  • Monthly Folder: https://drive.google.com/drive/folders/{monthly_folder}\n"
+                
+                break
+        else:
+            setup_info += "❌ No complete guild configuration found."
+            
+        return setup_info
+        
+    except Exception as e:
+        print(f"Error getting setup info: {e}")
+        return f"❌ Error getting setup information: {str(e)}"
+
+@tool
+def get_meeting_sheet_info() -> str:
+    """
+    Get information about the meetings Google Sheet, including the link and current status.
+    Use this to answer questions like "What's our Google Sheets link for meetings?"
+    
+    Returns:
+        str: Information about the meetings sheet including the link
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get guild configurations from the setup manager
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        if not all_guilds:
+            return "❌ **No club configuration found.**\n\nPlease run `/setup` to configure the bot for your server."
+        
+        # Get the first available guild configuration
+        for guild_id, guild_config in all_guilds.items():
+            if guild_config.get('setup_complete', False):
+                # Get the meetings sheet ID
+                meetings_sheet_id = None
+                if 'monthly_sheets' in guild_config and 'meetings' in guild_config['monthly_sheets']:
+                    meetings_sheet_id = guild_config['monthly_sheets']['meetings']
+                elif 'meetings_sheet_id' in guild_config:
+                    meetings_sheet_id = guild_config['meetings_sheet_id']
+                
+                if not meetings_sheet_id:
+                    return "❌ **No meetings spreadsheet configured.**\n\nPlease run `/setup` to configure the meeting spreadsheet."
+                
+                # Get some basic info about the sheet
+                try:
+                    meetings = BOT_INSTANCE.meeting_manager.get_upcoming_meetings(meetings_sheet_id, limit=10)
+                    meeting_count = len(meetings)
+                except:
+                    meeting_count = "Unknown"
+                
+                sheet_info = "📅 **Meetings Google Sheet Information:**\n\n"
+                sheet_info += f"🔗 **Sheet Link:** https://docs.google.com/spreadsheets/d/{meetings_sheet_id}\n"
+                sheet_info += f"📊 **Sheet ID:** `{meetings_sheet_id}`\n"
+                sheet_info += f"📋 **Upcoming Meetings:** {meeting_count}\n"
+                sheet_info += f"🏠 **Server:** {guild_config.get('guild_name', 'Unknown')}\n"
+                sheet_info += f"👥 **Club:** {guild_config.get('club_name', 'Unknown')}\n\n"
+                sheet_info += "💡 **Tip:** You can use this link to view and edit meetings directly in Google Sheets!"
+                
+                return sheet_info
+                
+        return "❌ No complete guild configuration found."
+        
+    except Exception as e:
+        print(f"Error getting meeting sheet info: {e}")
+        return f"❌ Error getting meeting sheet information: {str(e)}"
+
+@tool
+def get_task_sheet_info() -> str:
+    """
+    Get information about the tasks Google Sheet, including the link and current status.
+    Use this to answer questions like "What's our Google Sheets link for tasks?"
+    
+    Returns:
+        str: Information about the tasks sheet including the link
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get guild configurations from the setup manager
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        if not all_guilds:
+            return "❌ **No club configuration found.**\n\nPlease run `/setup` to configure the bot for your server."
+        
+        # Get the first available guild configuration
+        for guild_id, guild_config in all_guilds.items():
+            if guild_config.get('setup_complete', False):
+                # Get the tasks sheet ID
+                tasks_sheet_id = None
+                if 'monthly_sheets' in guild_config and 'tasks' in guild_config['monthly_sheets']:
+                    tasks_sheet_id = guild_config['monthly_sheets']['tasks']
+                elif 'tasks_sheet_id' in guild_config:
+                    tasks_sheet_id = guild_config['tasks_sheet_id']
+                
+                if not tasks_sheet_id:
+                    return "❌ **No tasks spreadsheet configured.**\n\nPlease run `/setup` to configure the tasks spreadsheet."
+                
+                # Get some basic info about the sheet
+                try:
+                    all_tasks = BOT_INSTANCE.meeting_manager.sheets_manager.get_all_tasks(tasks_sheet_id)
+                    task_count = len(all_tasks)
+                except:
+                    task_count = "Unknown"
+                
+                sheet_info = "📋 **Tasks Google Sheet Information:**\n\n"
+                sheet_info += f"🔗 **Sheet Link:** https://docs.google.com/spreadsheets/d/{tasks_sheet_id}\n"
+                sheet_info += f"📊 **Sheet ID:** `{tasks_sheet_id}`\n"
+                sheet_info += f"📝 **Total Tasks:** {task_count}\n"
+                sheet_info += f"🏠 **Server:** {guild_config.get('guild_name', 'Unknown')}\n"
+                sheet_info += f"👥 **Club:** {guild_config.get('club_name', 'Unknown')}\n\n"
+                sheet_info += "💡 **Tip:** You can use this link to view and edit tasks directly in Google Sheets!"
+                
+                return sheet_info
+                
+        return "❌ No complete guild configuration found."
+        
+    except Exception as e:
+        print(f"Error getting task sheet info: {e}")
+        return f"❌ Error getting task sheet information: {str(e)}"
+
+@tool
+def get_channel_info() -> str:
+    """
+    Get information about the configured Discord channels.
+    Use this to answer questions about which channels are set up for reminders, announcements, etc.
+    
+    Returns:
+        str: Information about the configured channels
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get guild configurations from the setup manager
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        if not all_guilds:
+            return "❌ **No club configuration found.**\n\nPlease run `/setup` to configure the bot for your server."
+        
+        # Get the first available guild configuration
+        for guild_id, guild_config in all_guilds.items():
+            if guild_config.get('setup_complete', False):
+                channel_info = "📢 **Configured Discord Channels:**\n\n"
+                
+                task_channel = guild_config.get('task_reminders_channel_id')
+                meeting_channel = guild_config.get('meeting_reminders_channel_id')
+                escalation_channel = guild_config.get('escalation_channel_id')
+                
+                if task_channel:
+                    channel_info += f"📋 **Task Reminders:** <#{task_channel}>\n"
+                    channel_info += f"   - Used for: Task reminders, task-related announcements\n"
+                else:
+                    channel_info += f"📋 **Task Reminders:** Not configured\n"
+                
+                if meeting_channel:
+                    channel_info += f"📅 **Meeting Reminders:** <#{meeting_channel}>\n"
+                    channel_info += f"   - Used for: Meeting reminders, meeting announcements\n"
+                else:
+                    channel_info += f"📅 **Meeting Reminders:** Not configured\n"
+                
+                if escalation_channel:
+                    channel_info += f"⚠️ **Escalation:** <#{escalation_channel}>\n"
+                    channel_info += f"   - Used for: Important alerts, escalation notifications\n"
+                else:
+                    channel_info += f"⚠️ **Escalation:** Not configured\n"
+                
+                channel_info += f"\n🏠 **Server:** {guild_config.get('guild_name', 'Unknown')}\n"
+                channel_info += f"👥 **Club:** {guild_config.get('club_name', 'Unknown')}\n"
+                
+                return channel_info
+                
+        return "❌ No complete guild configuration found."
+        
+    except Exception as e:
+        print(f"Error getting channel info: {e}")
+        return f"❌ Error getting channel information: {str(e)}"
+
+@tool
 def handle_misc_questions() -> str:
     """
     Handle miscellaneous questions that don't perfectly match other available tools.
@@ -897,7 +1146,11 @@ IMPORTANT: If you don't use a tool, you will fail. Always choose the most approp
         get_club_setup_info,
         check_guild_setup_status,
         schedule_meeting,
-        send_announcement
+        send_announcement,
+        get_setup_info,
+        get_meeting_sheet_info,
+        get_task_sheet_info,
+        get_channel_info
     ]
     
     print(f"🔧 Available tools: {[tool.name for tool in safe_tools]}")
