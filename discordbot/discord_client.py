@@ -474,6 +474,96 @@ async def setup_command(interaction: discord.Interaction):
     response = await bot.setup_manager.start_setup(str(interaction.user.id), interaction.user.name)
     await interaction.response.send_message(response)
 
+@bot.tree.command(name="cancel", description="Cancel the current setup process")
+async def cancel_setup_command(interaction: discord.Interaction):
+    """Cancel the current setup process."""
+    if not isinstance(interaction.channel, discord.DMChannel):
+        await interaction.response.send_message(
+            "❌ This command can only be used in DMs. Please send me a private message and use `/cancel` there.",
+            ephemeral=True
+        )
+        return
+        
+    response = bot.setup_manager.cancel_setup(str(interaction.user.id))
+    await interaction.response.send_message(response)
+
+@bot.tree.command(name="reset", description="Reset the club configuration (admin only)")
+async def reset_config_command(interaction: discord.Interaction):
+    """Reset the club configuration. Only the admin can perform this action."""
+    # Check if this is a server (guild) interaction
+    if not interaction.guild:
+        await interaction.response.send_message(
+            "❌ This command can only be used in a server, not in DMs.",
+            ephemeral=True
+        )
+        return
+        
+    guild_id = str(interaction.guild.id)
+    user_id = str(interaction.user.id)
+    
+    # Check if the bot is configured for this server
+    if guild_id not in bot.club_configs:
+        await interaction.response.send_message(
+            "❌ **Reset Failed**\n\nNo configuration found for this server.\n\n**To get started:**\n• Run `/setup` in DMs to configure the bot",
+            ephemeral=True
+        )
+        return
+    
+    # Check if the user is the admin
+    if not bot.setup_manager.is_admin(user_id, guild_id, bot.club_configs):
+        club_config = bot.club_configs[guild_id]
+        admin_id = club_config.get('admin_discord_id', 'Unknown')
+        await interaction.response.send_message(
+            f"❌ **Reset Failed**\n\nOnly the admin can reset the club configuration.\n\n**Current Admin:** <@{admin_id}>\n\n**Need help?** Contact the admin or run `/setup` in DMs to reconfigure.",
+            ephemeral=True
+        )
+        return
+    
+    # Confirm the reset action
+    response = bot.setup_manager.reset_club_configuration(guild_id, user_id, bot.club_configs)
+    await interaction.response.send_message(response, ephemeral=True)
+
+@bot.tree.command(name="help", description="Show help information and available commands")
+async def help_command(interaction: discord.Interaction):
+    """Show help information and available commands."""
+    help_text = """🤖 **AutoExec Bot Help**
+
+**Setup Commands (DM only):**
+• `/setup` - Start the bot setup process
+• `/cancel` - Cancel the current setup process
+
+**Server Commands:**
+• `/reset` - Reset club configuration (admin only)
+• `/help` - Show this help message
+
+**Meeting Management:**
+• `/meeting set` - Schedule a new meeting
+• `/meeting upcoming` - Show upcoming meetings
+• `/meeting linkminutes` - Link meeting minutes
+
+**Task Management:**
+• `/assign` - Assign a task to someone
+• `/tasks` - Show your assigned tasks
+
+**Natural Language:**
+• Use `$AE` followed by your question for AI-powered assistance
+• Use `$AEmm` to request meeting minutes
+
+**Setup Process:**
+1. Send me a DM and use `/setup`
+2. Follow the prompts to configure your club
+3. Set up Google Sheets integration
+4. Configure admin permissions and channels
+
+**Need to start over?**
+• Use `/cancel` during setup to restart
+• Use `/reset` (admin only) to reset completed configuration
+
+**Support:**
+If you need help, contact your server admin or use the natural language features!"""
+    
+    await interaction.response.send_message(help_text, ephemeral=True)
+
 @bot.tree.command(name="meeting", description="Manage meetings")
 @app_commands.describe(
     action="Action to perform",
@@ -943,56 +1033,6 @@ async def subscribe_command(interaction: discord.Interaction):
         "You'll receive DMs for upcoming deadlines and overdue tasks.",
         ephemeral=True
     )
-
-@bot.tree.command(name="help", description="Show available commands")
-async def help_command(interaction: discord.Interaction):
-    """Show available commands."""
-    help_text = """
-🤖 **Club Exec Task Manager Bot - Commands**
-
-**Setup & Configuration:**
-• `/setup` - Start bot setup (DM only)
-• `/help` - Show this help message
-
-**Direct Messages (DMs):**
-• **DM me anytime** - Ask questions, get help, or use natural language
-• **No prefix needed** - Just type your question normally
-• **Personal assistance** - Get help without cluttering public channels
-
-**Meeting Management (Admin Only):**
-• `/meeting set title:"Title" start:"2025-09-08 17:00" end:"2025-09-08 18:00"`
-• `/meeting upcoming` - Show upcoming meetings
-• `/meeting cancel` - Cancel a meeting
-• `/meeting linkminutes <url>` - Link minutes document
-• `/meeting agenda` - Create agenda template
-
-**Task Management:**
-• `/assign @user "Task title" due:"2025-09-09 12:00"` - Assign task (Admin only)
-• `/summary [month]` - Show task summary
-• `/status @user` - Show tasks for specific user
-• `/done <task_id>` - Mark task complete
-• `/reschedule <task_id> "2025-09-10 15:00"` - Reschedule task
-
-**User Preferences:**
-• `/subscribe` - Subscribe to private reminders
-
-**Natural Language Commands:**
-• `$AE <query>` - Use AI agent for general queries
-• `$AEmm` - Request meeting minutes
-• Natural language: "Can you help me schedule a meeting?"
-• Questions: "What meetings do I have today?"
-• **DMs work too!** - Send me a private message for personal assistance
-
-**Natural Language Responses:**
-Reply to task reminders with:
-• "done" - Mark task complete
-• "not yet" - Mark task in progress  
-• "reschedule to <date>" - Change deadline
-
-Need help? Contact your server admin!
-"""
-    
-    await interaction.response.send_message(help_text, ephemeral=True)
 
 def run_bot():
     """Run the Club Exec Task Manager Bot."""
