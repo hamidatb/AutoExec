@@ -71,7 +71,7 @@ class SetupManager:
         try:
             # Initialize setup state for this user
             self.setup_states[user_id] = {
-                'step': 'club_name',
+                'step': 'guild_id' if not guild_id else 'club_name',
                 'club_name': None,
                 'admin_discord_id': None,
                 'guild_id': guild_id,
@@ -83,15 +83,31 @@ class SetupManager:
                 'channels_configured': False
             }
             
-            message = "🎉 **Welcome to the Club Exec Task Manager Bot!** 🎉\n\n"
-            message += "I'll help you set up task management for your club. Let's get started!\n\n"
-            message += "**IMPORTANT**: Before we begin, make sure you have:\n"
-            message += "1. Created Google Drive folders for your club's documents\n"
-            message += "2. Shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**\n"
-            message += "3. Given the service account 'Editor' permissions\n\n"
-            message += "**Note**: No OAuth setup required - just share the folders and you're ready to go!\n\n"
-            message += "**Step 1: Club Information**\n"
-            message += "What is the name of your club or group?"
+            if not guild_id:
+                message = "🎉 **Welcome to the Club Exec Task Manager Bot!** 🎉\n\n"
+                message += "I'll help you set up task management for your club. Let's get started!\n\n"
+                message += "**IMPORTANT**: Before we begin, make sure you have:\n"
+                message += "1. Created Google Drive folders for your club's documents\n"
+                message += "2. Shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**\n"
+                message += "3. Given the service account 'Editor' permissions\n\n"
+                message += "**Note**: No OAuth setup required - just share the folders and you're ready to go!\n\n"
+                message += "**Step 1: Server ID**\n"
+                message += "First, I need to know which Discord server you want to set up the bot for.\n\n"
+                message += "**How to get your Server ID:**\n"
+                message += "1. Right-click on your server name in Discord\n"
+                message += "2. Select 'Copy Server ID'\n"
+                message += "3. Paste the ID here\n\n"
+                message += "**Note:** You must be an admin of the server to set up the bot."
+            else:
+                message = "🎉 **Welcome to the Club Exec Task Manager Bot!** 🎉\n\n"
+                message += f"I'll help you set up task management for **{guild_name}**. Let's get started!\n\n"
+                message += "**IMPORTANT**: Before we begin, make sure you have:\n"
+                message += "1. Created Google Drive folders for your club's documents\n"
+                message += "2. Shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**\n"
+                message += "3. Given the service account 'Editor' permissions\n\n"
+                message += "**Note**: No OAuth setup required - just share the folders and you're ready to go!\n\n"
+                message += "**Step 1: Club Information**\n"
+                message += "What is the name of your club or group?"
             
             return message
             
@@ -122,7 +138,9 @@ class SetupManager:
             current_step = current_state['step']
             print(f"🔍 [SETUP] Current step: {current_step}")
             
-            if current_step == 'club_name':
+            if current_step == 'guild_id':
+                return await self._handle_guild_id(user_id, message_content)
+            elif current_step == 'club_name':
                 return await self._handle_club_name(user_id, message_content)
             elif current_step == 'admin_selection':
                 return await self._handle_admin_selection(user_id, message_content)
@@ -144,6 +162,43 @@ class SetupManager:
             print(f"❌ [SETUP ERROR] Error handling setup response: {e}")
             return "❌ An error occurred during setup. Please try again."
     
+    async def _handle_guild_id(self, user_id: str, guild_id: str) -> str:
+        """
+        Handles guild ID input during setup.
+        
+        Args:
+            user_id: Discord ID of the user
+            guild_id: Guild ID provided by user
+            
+        Returns:
+            Next setup message
+        """
+        try:
+            guild_id = guild_id.strip()
+            
+            # Validate guild ID format (should be numeric)
+            if not guild_id.isdigit():
+                return "❌ **Invalid Server ID**\n\nPlease provide a valid Discord server ID (numbers only).\n\n**How to get your Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'\n3. Paste the ID here"
+            
+            # Check if this guild is already set up
+            if self.status_manager.is_setup_complete(guild_id):
+                return f"❌ **Server Already Set Up**\n\nThis server (ID: `{guild_id}`) has already been configured.\n\nIf you need to reconfigure it, please contact the current admin or use `/reset` command."
+            
+            # Store guild ID and move to next step
+            self.setup_states[user_id]['guild_id'] = guild_id
+            self.setup_states[user_id]['step'] = 'club_name'
+            
+            message = f"✅ **Server ID Set: `{guild_id}`**\n\n"
+            message += "**Step 2: Club Information**\n"
+            message += "What is the name of your club or organization?\n\n"
+            message += "This will be used to name your Google Sheets and identify your club in the system."
+            
+            return message
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Error handling guild ID: {e}")
+            return "❌ Error processing server ID. Please try again."
+    
     async def _handle_club_name(self, user_id: str, club_name: str) -> str:
         """
         Handles club name input.
@@ -161,7 +216,7 @@ class SetupManager:
             self.setup_states[user_id]['step'] = 'admin_selection'
             
             message = f"✅ **Club Name Set: {club_name}**\n\n"
-            message += "**Step 2: Admin Selection**\n"
+            message += "**Step 3: Admin Selection**\n"
             message += "Who should be the admin for this bot? Please @mention them.\n\n"
             message += "The admin will have full control over:\n"
             message += "• Meeting scheduling and cancellation\n"
@@ -197,7 +252,7 @@ class SetupManager:
             self.setup_states[user_id]['step'] = 'folder_selection'
             
             message = f"✅ **Admin Set: <@{admin_discord_id}>**\n\n"
-            message += "**Step 3: Google Sheets Initialization**\n"
+            message += "**Step 4: Google Sheets Initialization**\n"
             message += "Before I create the Google Sheets, I need to know where to put them.\n\n"
             message += "**IMPORTANT**: Please make sure you have shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**!\n\n"
             message += "**No OAuth needed** - the bot will access only the folders you specifically share.\n\n"
@@ -290,7 +345,7 @@ class SetupManager:
             initial_message = "✅ **Folders Selected and Verified Successfully!**\n\n"
             initial_message += f"• Config Folder ID: `{config_folder_id}` ✅ Accessible\n"
             initial_message += f"• Monthly Folder ID: `{monthly_folder_id}` ✅ Accessible\n\n"
-            initial_message += "**Step 3: Google Sheets Initialization**\n"
+            initial_message += "**Step 5: Google Sheets Initialization**\n"
             initial_message += "I'll now create the necessary Google Sheets for your club:\n\n"
             initial_message += f"• **{self.setup_states[user_id]['club_name']} Task Manager Config** - Main configuration\n"
             initial_message += f"• **{self.setup_states[user_id]['club_name']} Tasks - {datetime.now().strftime('%B %Y')}** - Task tracking\n"
@@ -461,7 +516,7 @@ class SetupManager:
             message += f"• Config Sheet: `{config_spreadsheet_id}`\n"
             message += f"• Tasks Sheet: `{monthly_sheets['tasks']}`\n"
             message += f"• Meetings Sheet: `{monthly_sheets['meetings']}`\n\n"
-            message += "**Step 5a: Task Reminders Channel**\n"
+            message += "**Step 6a: Task Reminders Channel**\n"
             message += "Now I need to know which Discord channels to use for different types of messages.\n\n"
             message += "First, which channel should I use for task reminders?\n\n"
             message += "This is where I'll send:\n"
@@ -507,7 +562,7 @@ class SetupManager:
             
             message = "✅ **Task Reminders Channel Set!**\n\n"
             message += f"Task reminders will be sent to: <#{channel_id}>\n\n"
-            message += "**Step 5b: Meeting Reminders Channel**\n"
+            message += "**Step 6b: Meeting Reminders Channel**\n"
             message += "Now, which channel should I use for meeting reminders?\n\n"
             message += "This is where I'll send:\n"
             message += "• Meeting notifications (T-2h, T-0)\n"
@@ -551,7 +606,7 @@ class SetupManager:
             
             message = "✅ **Meeting Reminders Channel Set!**\n\n"
             message += f"Meeting reminders will be sent to: <#{channel_id}>\n\n"
-            message += "**Step 5c: Escalation Channel**\n"
+            message += "**Step 6c: Escalation Channel**\n"
             message += "Finally, which channel should I use for escalations?\n\n"
             message += "This is where I'll send:\n"
             message += "• Overdue task alerts\n"
