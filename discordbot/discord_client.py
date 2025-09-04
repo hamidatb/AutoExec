@@ -150,7 +150,7 @@ class ClubExecBot(discord.Client):
             query_lower = query.lower()
             if any(keyword in query_lower for keyword in ['system architecture', 'how do you work', 'what are you', 'what can you do']):
                 if 'system architecture' in query_lower or 'how do you work' in query_lower:
-                    response = """🤖 **AutoExec System Architecture**
+                    response = """**AutoExec System Architecture**
 
 **Core Components:**
 • **Discord Bot Interface** - Handles user commands and natural language queries
@@ -174,7 +174,7 @@ class ClubExecBot(discord.Client):
 
 I'm designed to help manage club executive tasks efficiently! 🎯"""
                 elif 'what can you do' in query_lower:
-                    response = """🤖 **What I Can Do**
+                    response = """**What I Can Do**
 
 **Meeting Management:**
 • Schedule meetings with `/meeting set`
@@ -226,7 +226,7 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             print(f"🔍 LangChain response: {response}")
             
             # Send response directly to the channel
-            await message.channel.send(f"🤖 **AutoExec Response:**\n{response}")
+            await message.channel.send(response)
             
         except Exception as e:
             print(f"Error in AutoExec command: {e}")
@@ -284,7 +284,7 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             print(f"🔍 LangChain response: {response}")
             
             # Send response directly to the channel
-            await message.channel.send(f"🤖 **AutoExec Assistant:**\n{response}")
+            await message.channel.send(response)
             
         except Exception as e:
             print(f"Error in LangChain query: {e}")
@@ -324,7 +324,7 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
                 response = await loop.run_in_executor(executor, run_agent_sync, message.content)
             
             # Send response directly to the DM
-            await message.channel.send(f"🤖 **AutoExec Assistant:**\n{response}")
+            await message.channel.send(response)
             
         except Exception as e:
             print(f"Error in DM general query: {e}")
@@ -398,7 +398,7 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
         
         if any(keyword in content_lower for keyword in setup_keywords):
             # This is a setup-related question - provide helpful setup info
-            response = """🤖 **Setup Status Check**
+            response = """**Setup Status Check**
 
 I am **NOT** set up for any student groups yet.
 
@@ -583,7 +583,7 @@ async def reset_config_command(interaction: discord.Interaction):
 @bot.tree.command(name="help", description="Show help information and available commands")
 async def help_command(interaction: discord.Interaction):
     """Show help information and available commands."""
-    help_text = """🤖 **AutoExec Bot Help**
+    help_text = """**AutoExec Bot Help**
 
 **Setup Commands (DM only):**
 • `/setup` - Start the bot setup process
