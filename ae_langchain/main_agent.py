@@ -250,6 +250,63 @@ def send_reminder_for_next_meeting():
     return "The reminder for our nearest meeting has now been sent to Discord"
 
 @tool
+def cleanup_past_meetings():
+    """
+    Clean up meetings that were scheduled for past dates (likely due to parsing errors).
+    This helps fix issues where meetings were scheduled for wrong years.
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    from datetime import datetime, timezone
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get guild configurations from the setup manager
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        if not all_guilds:
+            return "❌ No club configuration found. Please run `/setup` first."
+        
+        cleaned_count = 0
+        
+        # Get the first available guild configuration
+        for guild_id, guild_config in all_guilds.items():
+            if guild_config.get('setup_complete', False):
+                # Get the meetings sheet ID
+                meetings_sheet_id = None
+                if 'monthly_sheets' in guild_config and 'meetings' in guild_config['monthly_sheets']:
+                    meetings_sheet_id = guild_config['monthly_sheets']['meetings']
+                elif 'meetings_sheet_id' in guild_config:
+                    meetings_sheet_id = guild_config['meetings_sheet_id']
+                
+                if meetings_sheet_id:
+                    # Get all meetings
+                    all_meetings = BOT_INSTANCE.meeting_manager.sheets_manager.get_all_meetings(meetings_sheet_id)
+                    now = datetime.now(timezone.utc)
+                    
+                    for meeting in all_meetings:
+                        if meeting.get('start_at_utc'):
+                            try:
+                                start_time = datetime.fromisoformat(meeting['start_at_utc'])
+                                # If meeting is more than 1 year old, mark as cancelled
+                                if start_time.year < now.year - 1:
+                                    meeting_id = meeting.get('meeting_id')
+                                    if meeting_id:
+                                        success = BOT_INSTANCE.meeting_manager.cancel_meeting(meeting_id, meetings_sheet_id)
+                                        if success:
+                                            cleaned_count += 1
+                            except ValueError:
+                                continue
+        
+        if cleaned_count > 0:
+            return f"✅ **Cleanup Complete**\n\nCleaned up {cleaned_count} meetings that were scheduled for past dates.\n\n**Note:** These were likely scheduling errors where meetings were scheduled for wrong years."
+        else:
+            return "✅ **No cleanup needed**\n\nAll meetings are scheduled for appropriate dates."
+            
+    except Exception as e:
+        return f"❌ Error during cleanup: {str(e)}"
+
+@tool
 def get_meeting_reminder_info():
     """
     Get information about the next upcoming meeting for display purposes.
@@ -343,7 +400,7 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
         str: Confirmation message about the scheduled meeting
     """
     from discordbot.discord_client import BOT_INSTANCE
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
     
     if BOT_INSTANCE is None:
         return "❌ ERROR: The bot instance is not running."
@@ -370,6 +427,12 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
                 # Parse start time
                 try:
                     start_datetime = datetime.strptime(start_time, "%Y-%m-%d %H:%M")
+                    
+                    # Check if the date is in the past (likely a parsing error)
+                    now = datetime.now()
+                    if start_datetime.year < now.year or (start_datetime.year == now.year and start_datetime < now):
+                        return f"❌ **Invalid Date:** The scheduled date ({start_datetime.strftime('%B %d, %Y')}) is in the past.\n\n**Current date:** {now.strftime('%B %d, %Y')}\n\n**Please use a future date.**\n\n**Examples:**\n• Tomorrow: `{datetime.now().strftime('%Y-%m-%d')} 14:00`\n• Next week: `{(datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')} 14:00`"
+                    
                     start_datetime = start_datetime.replace(tzinfo=timezone.utc)
                 except ValueError:
                     return "❌ Invalid start time format. Please use YYYY-MM-DD HH:MM format."
