@@ -345,6 +345,23 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             # Send response directly to the channel
             await message.channel.send(response)
             
+            # Check for and send any pending announcements
+            if hasattr(self, 'pending_announcements') and self.pending_announcements:
+                for announcement in self.pending_announcements:
+                    try:
+                        # If no specific channel_id, use the current channel
+                        channel_id = announcement['channel_id'] or message.channel.id
+                        await self.send_any_message(
+                            announcement['message'], 
+                            channel_id
+                        )
+                        print(f"✅ Sent pending announcement to channel {channel_id}")
+                    except Exception as e:
+                        print(f"❌ Failed to send pending announcement: {e}")
+                
+                # Clear the pending announcements
+                self.pending_announcements = []
+            
         except Exception as e:
             print(f"Error in LangChain query: {e}")
             await message.channel.send("❌ Sorry, I encountered an error processing your request.")

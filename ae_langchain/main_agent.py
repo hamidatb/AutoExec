@@ -107,28 +107,21 @@ def send_output_to_discord(messageToSend:str) -> str:
     if BOT_INSTANCE is None:
         return "❌ ERROR: The bot instance is not running."
 
-    # Simple approach: try to run the coroutine directly
-    # This will work if we're in the right context, or fail gracefully if not
-    try:
-        # Try to get the current event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Schedule the task in the current loop
-            loop.create_task(BOT_INSTANCE.send_any_message(str(messageToSend)))
-        else:
-            # Run in a new event loop
-            asyncio.run(BOT_INSTANCE.send_any_message(str(messageToSend)))
-    except RuntimeError as e:
-        # No event loop available - this is expected in some contexts
-        # Just log the error and return a message indicating the issue
-        print(f"⚠️ Could not send message to Discord (no event loop): {e}")
-        return "⚠️ Message could not be sent to Discord (no active event loop)"
-    except Exception as e:
-        # Any other error
-        print(f"❌ Error sending message to Discord: {e}")
-        return f"❌ Error sending message to Discord: {e}"
-
-    return "✅ Message has been sent to Discord."
+    # Since we're running in a thread pool, we can't directly send Discord messages
+    # Instead, we'll use a thread-safe approach by storing the message to be sent
+    # and returning a response that indicates the message should be sent
+    
+    # Store the message in the bot instance for the main thread to send
+    if not hasattr(BOT_INSTANCE, 'pending_announcements'):
+        BOT_INSTANCE.pending_announcements = []
+    
+    BOT_INSTANCE.pending_announcements.append({
+        'message': str(messageToSend),
+        'channel_id': None,  # Will use last_channel_id
+        'channel_name': 'current channel'
+    })
+    
+    return "✅ Message has been queued for Discord."
 
 @tool
 def send_meeting_schedule(amount_of_meetings_to_return: int):
@@ -473,25 +466,21 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
                 # Send the announcement to the specific channel
                 formatted_message = f"📢 **{announcement_type.upper()} ANNOUNCEMENT**\n\n{announcement_message}"
                 
-                # Send to the specific channel using the bot's send_any_message method
-                # We need to run this in the bot's event loop
-                import asyncio
-                try:
-                    # Try to get the current event loop
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # Schedule the task in the current loop
-                        loop.create_task(BOT_INSTANCE.send_any_message(formatted_message, int(channel_id)))
-                    else:
-                        # Run in a new event loop
-                        asyncio.run(BOT_INSTANCE.send_any_message(formatted_message, int(channel_id)))
-                except RuntimeError as e:
-                    # No event loop available - this is expected in some contexts
-                    print(f"⚠️ Could not send announcement to specific channel (no event loop): {e}")
-                    # Fallback to the generic send_output_to_discord
-                    result = send_output_to_discord(formatted_message)
+                # Since we're running in a thread pool, we can't directly send Discord messages
+                # Instead, we'll use a thread-safe approach by storing the message to be sent
+                # and returning a response that indicates the message should be sent
                 
-                return f"✅ Announcement sent successfully to {channel_name} channel!\n\n**Message sent:**\n{formatted_message}"
+                # Store the message in the bot instance for the main thread to send
+                if not hasattr(BOT_INSTANCE, 'pending_announcements'):
+                    BOT_INSTANCE.pending_announcements = []
+                
+                BOT_INSTANCE.pending_announcements.append({
+                    'message': formatted_message,
+                    'channel_id': int(channel_id),
+                    'channel_name': channel_name
+                })
+                
+                return f"✅ Announcement queued for {channel_name} channel!\n\n**Message to be sent:**\n{formatted_message}"
                 
                 break
         else:
