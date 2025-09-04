@@ -1,51 +1,42 @@
 import os
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
 
-# if modyfying these scopes, delete the old token.json
+# Scopes for Google Drive and Sheets access
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",  # Full access to Google Sheets
     "https://www.googleapis.com/auth/drive"         # Full access to Google Drive (all files)
 ]
 
-# these are in my .env 
-# these must be recreated if someone wants to run this project on their own environment
-TOKEN_PATH = "token.json"
-CREDENTIALS_PATH = "credentials.json"
+# Path to service account key file
+SERVICE_ACCOUNT_KEY_PATH = "googledrive/service_account_key.json"
 
 def get_credentials():
     """ 
-        Handles authentication and returns a Google Drive API service instance.'
-        The scopes it uses are drive (for docs) and the sheets scope.
+        Handles authentication using service account and returns Google API credentials.
+        Users only need to share specific folders with the service account.
 
         Args:
             None
         Returns:
-            The credentials for AutoExec linked to the current user
+            The service account credentials for AutoExec
     """
-
-    creds = None
-    # check if old tokens exist (authentication has already been previously granetd)
-    if os.path.exists(TOKEN_PATH):
-        creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
-
-    # if the credentials aren't valid or don't exist, update or create
-    if not creds or not creds.valid:
-        # just refresh if they're expired
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-
-        # if the user needs new creds, use the AutoExec credntials file to create some
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-            # open up their browser and ask them to authenticate AutoExec
-            creds = flow.run_local_server(port=0)
-        with open(TOKEN_PATH, "w") as token:
-            token.write(creds.to_json())
-
-    # return the valid creds
-    return creds
+    
+    try:
+        # Use service account credentials
+        creds = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_KEY_PATH, 
+            scopes=SCOPES
+        )
+        return creds
+        
+    except FileNotFoundError:
+        print(f"❌ Service account key file not found at: {SERVICE_ACCOUNT_KEY_PATH}")
+        print("Please download the service account key for autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com")
+        print("and save it as 'googledrive/service_account_key.json'")
+        raise
+    except Exception as e:
+        print(f"❌ Error loading service account credentials: {e}")
+        raise
 
 def main():
     get_credentials()
