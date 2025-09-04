@@ -357,3 +357,151 @@ class SetupManager:
         except Exception as e:
             print(f"Error cancelling setup: {e}")
             return "❌ Error cancelling setup."
+
+    def reset_club_configuration(self, guild_id: str, admin_user_id: str, club_configs: Dict[str, Any]) -> str:
+        """
+        Resets the club configuration for a specific guild.
+        Only the admin can perform this action.
+        
+        Args:
+            guild_id: The Discord guild/server ID to reset
+            admin_user_id: Discord ID of the user requesting the reset
+            club_configs: Current club configurations dictionary
+            
+        Returns:
+            Reset confirmation message or error message
+        """
+        try:
+            # Check if the guild has a configuration
+            if guild_id not in club_configs:
+                return f"❌ **Reset Failed**\n\nNo configuration found for this server."
+            
+            # Verify the user is the admin
+            guild_config = club_configs[guild_id]
+            if str(admin_user_id) != guild_config.get('admin_discord_id'):
+                return f"❌ **Reset Failed**\n\nOnly the admin can reset the club configuration.\n\n**Current Admin:** <@{guild_config.get('admin_discord_id')}>"
+            
+            # Get club name for confirmation
+            club_name = guild_config.get('club_name', 'Unknown Club')
+            
+            # Remove the configuration
+            del club_configs[guild_id]
+            
+            # TODO: In the future, this could also clean up Google Sheets and other resources
+            
+            return f"""✅ **Configuration Reset Complete**
+
+**Club:** {club_name}
+**Server:** {guild_id}
+
+**What was reset:**
+• Club configuration and settings
+• Admin permissions
+• Google Sheets integration
+• Meeting and task management setup
+
+**To reconfigure:**
+• Run `/setup` to start the setup process again
+• This will create a fresh configuration
+
+**Note:** All previous data and settings have been removed."""
+            
+        except Exception as e:
+            print(f"Error resetting club configuration: {e}")
+            return f"❌ **Reset Failed**\n\nAn error occurred while resetting the configuration: {str(e)}"
+
+    def get_club_admin(self, guild_id: str, club_configs: Dict[str, Any]) -> Optional[str]:
+        """
+        Gets the admin Discord ID for a specific guild.
+        
+        Args:
+            guild_id: The Discord guild/server ID
+            club_configs: Current club configurations dictionary
+            
+        Returns:
+            Admin Discord ID or None if not found
+        """
+        try:
+            if guild_id in club_configs:
+                return club_configs[guild_id].get('admin_discord_id')
+            return None
+        except Exception as e:
+            print(f"Error getting club admin: {e}")
+            return None
+
+    def is_admin(self, user_id: str, guild_id: str, club_configs: Dict[str, Any]) -> bool:
+        """
+        Checks if a user is the admin for a specific guild.
+        
+        Args:
+            user_id: Discord ID of the user to check
+            guild_id: The Discord guild/server ID
+            club_configs: Current club configurations dictionary
+            
+        Returns:
+            True if user is admin, False otherwise
+        """
+        try:
+            admin_id = self.get_club_admin(guild_id, club_configs)
+            return admin_id == str(user_id)
+        except Exception as e:
+            print(f"Error checking admin status: {e}")
+            return False
+
+    def can_reset_configuration(self, user_id: str, guild_id: str, club_configs: Dict[str, Any]) -> tuple[bool, str]:
+        """
+        Checks if a user can reset the configuration for a specific guild.
+        
+        Args:
+            user_id: Discord ID of the user requesting the reset
+            guild_id: The Discord guild/server ID
+            club_configs: Current club configurations dictionary
+            
+        Returns:
+            Tuple of (can_reset: bool, reason: str)
+        """
+        try:
+            # Check if the guild has a configuration
+            if guild_id not in club_configs:
+                return False, "No configuration found for this server."
+            
+            # Check if the user is the admin
+            if not self.is_admin(user_id, guild_id, club_configs):
+                guild_config = club_configs[guild_id]
+                admin_id = guild_config.get('admin_discord_id', 'Unknown')
+                return False, f"Only the admin can reset the club configuration. Current Admin: <@{admin_id}>"
+            
+            return True, "User is authorized to reset configuration."
+            
+        except Exception as e:
+            print(f"Error checking reset authorization: {e}")
+            return False, f"Error checking authorization: {str(e)}"
+
+    def get_configuration_summary(self, guild_id: str, club_configs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Gets a summary of the current configuration for a guild.
+        
+        Args:
+            guild_id: The Discord guild/server ID
+            club_configs: Current club configurations dictionary
+            
+        Returns:
+            Configuration summary dictionary or None if not found
+        """
+        try:
+            if guild_id not in club_configs:
+                return None
+                
+            config = club_configs[guild_id]
+            return {
+                'club_name': config.get('club_name', 'Unknown Club'),
+                'admin_discord_id': config.get('admin_discord_id', 'Unknown'),
+                'has_meetings': 'meetings_sheet_id' in config,
+                'has_tasks': 'tasks_sheet_id' in config,
+                'config_spreadsheet_id': config.get('config_spreadsheet_id'),
+                'created_at': config.get('created_at', 'Unknown')
+            }
+            
+        except Exception as e:
+            print(f"Error getting configuration summary: {e}")
+            return None
