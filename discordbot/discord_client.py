@@ -120,31 +120,48 @@ class ClubExecBot(discord.Client):
             setup_complete = self._is_user_admin_of_any_guild(user_id)
         print(f"🔍 [SETUP CHECK] Setup complete: {setup_complete}")
         
-        if not setup_complete:
-            # Check if this is a setup-related question
-            content_lower = message.content.lower()
-            setup_keywords = ['setup', 'set up', 'configured', 'configuration', 'are you set up', 'setup status', 'am i set up']
-            
-            if any(keyword in content_lower for keyword in setup_keywords):
-                # Handle setup status check directly
-                if guild_id:
-                    # Server context - check this specific guild
+        # Check if this is a setup-related question (regardless of setup status)
+        content_lower = message.content.lower()
+        setup_keywords = ['setup', 'set up', 'configured', 'configuration', 'are you set up', 'setup status', 'am i set up']
+        
+        if any(keyword in content_lower for keyword in setup_keywords):
+            # Handle setup status check directly
+            if guild_id:
+                # Server context - check this specific guild
+                if setup_complete:
+                    # Guild is set up - show success message
+                    guild_config = self.setup_manager.get_guild_config(guild_id)
+                    guild_name = guild_config.get('guild_name', 'Unknown Server') if guild_config else 'Unknown Server'
+                    club_name = guild_config.get('club_name', 'Unknown Club') if guild_config else 'Unknown Club'
+                    
+                    await message.channel.send(
+                        f"✅ **Setup Status: CONFIGURED**\n\n"
+                        f"I am set up for **{club_name}** in server **{guild_name}**.\n\n"
+                        f"**Configuration:**\n"
+                        f"• Server: {guild_name} (ID: {guild_id})\n"
+                        f"• Club: {club_name}\n\n"
+                        f"**Current Status:** Fully operational! 🎉"
+                    )
+                else:
+                    # Guild is not set up
                     await message.channel.send(
                         f"❌ **Setup Required**\n\n"
                         f"I am not set up for the guild with ID {guild_id}. If you would like to set up the bot for this guild, please follow the setup instructions."
                     )
-                else:
-                    # DM context - check if user is admin of any guild
-                    from ae_langchain.main_agent import get_user_setup_status
-                    response = get_user_setup_status(user_id)
-                    await message.channel.send(response)
-                return
             else:
-                await message.channel.send(
-                    "❌ **Setup Required**\n\n"
-                    "Setup is not complete. Please ask your admin to run `/setup` in DM with me."
-                )
-                return
+                # DM context - check if user is admin of any guild
+                from ae_langchain.main_agent import get_user_setup_status
+                response = get_user_setup_status(user_id)
+                await message.channel.send(response)
+            return
+        
+        # If not a setup question and setup is not complete, block other processing
+        if not setup_complete:
+            await message.channel.send(
+                "❌ **Setup Required**\n\n"
+                "Setup is not complete. Please ask your admin to run `/setup` in DM with me."
+            )
+            return
             
         content = message.content.strip()
         

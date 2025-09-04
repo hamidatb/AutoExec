@@ -331,8 +331,18 @@ def get_club_setup_info() -> str:
             return """❌ **Setup Status: ERROR**\n\nI cannot check my setup status because the setup manager is not available."""
         
         # Get all guild configurations
-        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
-        configured_guilds = [guild for guild in all_guilds.values() if guild.get('setup_complete', False)]
+        try:
+            all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+            configured_guilds = [guild for guild in all_guilds.values() if guild.get('setup_complete', False)]
+        except Exception as e:
+            return f"""❌ **Setup Status: ERROR**\n\nI encountered an error accessing guild configurations: {str(e)}
+
+**What this means:**
+• There was a problem accessing the setup data
+• The setup manager may not be properly initialized
+• Contact an administrator for assistance
+
+**Current Status:** Unable to determine setup status."""
         
         if not configured_guilds:
             return """❌ **Setup Status: NOT CONFIGURED**\n\nI am **NOT** set up for any student groups yet.
