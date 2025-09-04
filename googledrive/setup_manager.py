@@ -70,11 +70,16 @@ class SetupManager:
             Next setup message or completion message
         """
         try:
+            print(f"🔍 [SETUP] Handling setup response for user {user_id}")
+            print(f"🔍 [SETUP] Message content: {message_content}")
+            
             if user_id not in self.setup_states:
+                print(f"❌ [SETUP ERROR] No setup session found for user {user_id}")
                 return "❌ Setup session not found. Please start setup again with `/setup`."
             
             current_state = self.setup_states[user_id]
             current_step = current_state['step']
+            print(f"🔍 [SETUP] Current step: {current_step}")
             
             if current_step == 'club_name':
                 return await self._handle_club_name(user_id, message_content)
@@ -82,15 +87,18 @@ class SetupManager:
                 return await self._handle_admin_selection(user_id, message_content)
             elif current_step == 'folder_selection':
                 return await self._handle_folder_selection(user_id, message_content)
+            elif current_step == 'folder_verification':
+                return await self._handle_folder_verification(user_id, message_content)
             elif current_step == 'sheets_initialization':
                 return await self._handle_sheets_initialization(user_id, message_content)
             elif current_step == 'channel_configuration':
                 return await self._handle_channel_configuration(user_id, message_content)
             else:
+                print(f"❌ [SETUP ERROR] Unknown setup step: {current_step}")
                 return "❌ Unknown setup step. Please start setup again."
                 
         except Exception as e:
-            print(f"Error handling setup response: {e}")
+            print(f"❌ [SETUP ERROR] Error handling setup response: {e}")
             return "❌ An error occurred during setup. Please try again."
     
     async def _handle_club_name(self, user_id: str, club_name: str) -> str:
@@ -182,9 +190,13 @@ class SetupManager:
             Next setup message
         """
         try:
+            print(f"🔍 [SETUP] Processing folder selection for user {user_id}")
+            print(f"🔍 [SETUP] Message content: {message_content}")
+            
             # Parse folder links from message
             # Split by newline or comma
             folder_links = [link.strip() for link in message_content.replace('\n', ',').split(',') if link.strip()]
+            print(f"🔍 [SETUP] Extracted {len(folder_links)} folder links")
             
             if len(folder_links) < 2:
                 return "❌ Please provide both folder links (config folder and monthly sheets folder)."
@@ -193,6 +205,8 @@ class SetupManager:
             config_folder_id = self._extract_folder_id(folder_links[0])
             monthly_folder_id = self._extract_folder_id(folder_links[1])
             
+            print(f"🔍 [SETUP] Extracted folder IDs - Config: {config_folder_id}, Monthly: {monthly_folder_id}")
+            
             if not config_folder_id or not monthly_folder_id:
                 return "❌ Invalid folder links. Please make sure you're providing Google Drive folder links."
             
@@ -200,27 +214,129 @@ class SetupManager:
             self.setup_states[user_id]['config_folder_id'] = config_folder_id
             self.setup_states[user_id]['monthly_folder_id'] = monthly_folder_id
             
-            # Move to sheets initialization
-            self.setup_states[user_id]['step'] = 'sheets_initialization'
+            # Move to folder verification step
+            self.setup_states[user_id]['step'] = 'folder_verification'
             
             message = "✅ **Folders Selected Successfully!**\n\n"
-            message += "**Step 3: Google Sheets Initialization**\n"
-            message += "I'll now create the necessary Google Sheets for your club:\n\n"
-            message += "• **{club_name} Task Manager Config** - Main configuration\n"
-            message += "• **{club_name} Tasks - {current_month}** - Task tracking\n"
-            message += "• **{club_name} Meetings - {current_month}** - Meeting management\n\n"
+            message += f"• Config Folder ID: `{config_folder_id}`\n"
+            message += f"• Monthly Folder ID: `{monthly_folder_id}`\n\n"
+            message += "**Step 3: Folder Access Verification**\n"
+            message += "I'll now verify that I can access these folders...\n\n"
             message += "This may take a few moments..."
-            
-            # Get current month
-            current_month = datetime.now().strftime("%B %Y")
-            message = message.format(club_name=self.setup_states[user_id]['club_name'], 
-                                   current_month=current_month)
             
             return message
             
         except Exception as e:
-            print(f"Error handling folder selection: {e}")
+            print(f"❌ [SETUP ERROR] Error handling folder selection: {e}")
             return "❌ Error processing folder links. Please try again."
+    
+    async def _handle_folder_verification(self, user_id: str, message_content: str) -> str:
+        """
+        Handles folder access verification.
+        
+        Args:
+            user_id: Discord ID of the user
+            message_content: User's response (should be "continue" or similar)
+            
+        Returns:
+            Next setup message
+        """
+        try:
+            print(f"🔍 [SETUP] Starting folder verification for user {user_id}")
+            
+            current_state = self.setup_states[user_id]
+            config_folder_id = current_state['config_folder_id']
+            monthly_folder_id = current_state['monthly_folder_id']
+            
+            print(f"🔍 [SETUP] Verifying access to config folder: {config_folder_id}")
+            
+            # Test access to config folder
+            try:
+                config_access = await self._verify_folder_access(config_folder_id)
+                print(f"🔍 [SETUP] Config folder access result: {config_access}")
+            except Exception as e:
+                print(f"❌ [SETUP ERROR] Config folder verification failed: {e}")
+                config_access = False
+            
+            print(f"🔍 [SETUP] Verifying access to monthly folder: {monthly_folder_id}")
+            
+            # Test access to monthly folder
+            try:
+                monthly_access = await self._verify_folder_access(monthly_folder_id)
+                print(f"🔍 [SETUP] Monthly folder access result: {monthly_access}")
+            except Exception as e:
+                print(f"❌ [SETUP ERROR] Monthly folder verification failed: {e}")
+                monthly_access = False
+            
+            # Check results
+            if not config_access:
+                return f"❌ **Config Folder Access Failed**\n\nI cannot access the config folder `{config_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
+            
+            if not monthly_access:
+                return f"❌ **Monthly Folder Access Failed**\n\nI cannot access the monthly folder `{monthly_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
+            
+            # Both folders accessible, move to sheets initialization
+            current_state['step'] = 'sheets_initialization'
+            
+            message = "✅ **Folder Access Verified Successfully!**\n\n"
+            message += f"• Config Folder: ✅ Accessible\n"
+            message += f"• Monthly Folder: ✅ Accessible\n\n"
+            message += "**Step 4: Google Sheets Initialization**\n"
+            message += "I'll now create the necessary Google Sheets for your club:\n\n"
+            message += f"• **{current_state['club_name']} Task Manager Config** - Main configuration\n"
+            message += f"• **{current_state['club_name']} Tasks - {datetime.now().strftime('%B %Y')}** - Task tracking\n"
+            message += f"• **{current_state['club_name']} Meetings - {datetime.now().strftime('%B %Y')}** - Meeting management\n\n"
+            message += "This may take a few moments..."
+            
+            return message
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Error in folder verification: {e}")
+            return "❌ Error verifying folder access. Please try again."
+    
+    async def _verify_folder_access(self, folder_id: str) -> bool:
+        """
+        Verifies that the bot can access a Google Drive folder.
+        
+        Args:
+            folder_id: Google Drive folder ID
+            
+        Returns:
+            True if accessible, False otherwise
+        """
+        try:
+            print(f"🔍 [SETUP] Testing access to folder: {folder_id}")
+            
+            # Try to get folder metadata
+            folder = self.sheets_manager.drive_service.files().get(
+                fileId=folder_id,
+                fields='id,name,permissions'
+            ).execute()
+            
+            print(f"🔍 [SETUP] Folder metadata retrieved: {folder.get('name', 'Unknown')}")
+            
+            # Check if we have write permissions by trying to create a test file
+            test_file_metadata = {
+                'name': f'access_test_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt',
+                'parents': [folder_id]
+            }
+            
+            test_file = self.sheets_manager.drive_service.files().create(
+                body=test_file_metadata,
+                media_body='Test access file - can be deleted'
+            ).execute()
+            
+            print(f"🔍 [SETUP] Test file created successfully: {test_file.get('id')}")
+            
+            # Clean up test file
+            self.sheets_manager.drive_service.files().delete(fileId=test_file.get('id')).execute()
+            print(f"🔍 [SETUP] Test file cleaned up")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Folder access verification failed for {folder_id}: {e}")
+            return False
     
     def _extract_folder_id(self, folder_link: str) -> str:
         """
@@ -259,14 +375,27 @@ class SetupManager:
             Next setup message
         """
         try:
+            print(f"🔍 [SETUP] Starting sheets initialization for user {user_id}")
+            
             current_state = self.setup_states[user_id]
             club_name = current_state['club_name']
             admin_discord_id = current_state['admin_discord_id']
+            config_folder_id = current_state['config_folder_id']
+            monthly_folder_id = current_state['monthly_folder_id']
+            
+            print(f"🔍 [SETUP] Creating config sheet for club: {club_name}")
+            print(f"🔍 [SETUP] Admin Discord ID: {admin_discord_id}")
+            print(f"🔍 [SETUP] Config folder ID: {config_folder_id}")
             
             # Create master config sheet
-            config_spreadsheet_id = self.sheets_manager.create_master_config_sheet(
-                club_name, admin_discord_id, current_state['config_folder_id']
-            )
+            try:
+                config_spreadsheet_id = self.sheets_manager.create_master_config_sheet(
+                    club_name, admin_discord_id, config_folder_id
+                )
+                print(f"🔍 [SETUP] Config sheet created with ID: {config_spreadsheet_id}")
+            except Exception as e:
+                print(f"❌ [SETUP ERROR] Failed to create config sheet: {e}")
+                return f"❌ **Config Sheet Creation Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The config folder is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct"
             
             if not config_spreadsheet_id:
                 return "❌ Failed to create configuration sheet. Please check your Google Drive permissions."
@@ -276,9 +405,17 @@ class SetupManager:
             
             # Create monthly sheets
             current_month = datetime.now().strftime("%B %Y")
-            monthly_sheets = self.sheets_manager.create_monthly_sheets(
-                club_name, current_month, current_state['monthly_folder_id']
-            )
+            print(f"🔍 [SETUP] Creating monthly sheets for: {current_month}")
+            print(f"🔍 [SETUP] Monthly folder ID: {monthly_folder_id}")
+            
+            try:
+                monthly_sheets = self.sheets_manager.create_monthly_sheets(
+                    club_name, current_month, monthly_folder_id
+                )
+                print(f"🔍 [SETUP] Monthly sheets created: {monthly_sheets}")
+            except Exception as e:
+                print(f"❌ [SETUP ERROR] Failed to create monthly sheets: {e}")
+                return f"❌ **Monthly Sheets Creation Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The monthly folder is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct"
             
             if not monthly_sheets:
                 return "❌ Failed to create monthly sheets. Please check your Google Drive permissions."
@@ -289,11 +426,14 @@ class SetupManager:
             # Move to next step
             current_state['step'] = 'channel_configuration'
             
+            print(f"🔍 [SETUP] Sheets initialization completed successfully")
+            print(f"🔍 [SETUP] Moving to channel configuration step")
+            
             message = "✅ **Google Sheets Created Successfully!**\n\n"
-            message += f"• Config Sheet: {config_spreadsheet_id}\n"
-            message += f"• Tasks Sheet: {monthly_sheets['tasks']}\n"
-            message += f"• Meetings Sheet: {monthly_sheets['meetings']}\n\n"
-            message += "**Step 4: Channel Configuration**\n"
+            message += f"• Config Sheet: `{config_spreadsheet_id}`\n"
+            message += f"• Tasks Sheet: `{monthly_sheets['tasks']}`\n"
+            message += f"• Meetings Sheet: `{monthly_sheets['meetings']}`\n\n"
+            message += "**Step 5: Channel Configuration**\n"
             message += "Now I need to know which Discord channels to use for different types of messages:\n\n"
             message += "Please provide the channel IDs for:\n"
             message += "• **Task reminders** - Where I'll send task deadline reminders (T-24h, T-2h, overdue)\n"
@@ -309,8 +449,8 @@ class SetupManager:
             return message
             
         except Exception as e:
-            print(f"Error handling sheets initialization: {e}")
-            return "❌ Error creating Google Sheets. Please check your permissions and try again."
+            print(f"❌ [SETUP ERROR] Error in sheets initialization: {e}")
+            return f"❌ **Sheets Initialization Failed**\n\nError: {str(e)}\n\n**Please check:**\n• Your Google Drive permissions\n• The service account has access to the folders\n• Try running setup again"
     
     async def _handle_channel_configuration(self, user_id: str, message_content: str) -> str:
         """
@@ -324,37 +464,58 @@ class SetupManager:
             Setup completion message
         """
         try:
+            print(f"🔍 [SETUP] Processing channel configuration for user {user_id}")
+            print(f"🔍 [SETUP] Channel message content: {message_content}")
+            
             # Parse channel IDs from message
             # This is a simplified parser - in practice, you might want a more structured approach
             channel_ids = self._extract_channel_ids(message_content)
+            print(f"🔍 [SETUP] Extracted channel IDs: {channel_ids}")
             
             if len(channel_ids) < 3:
                 return "❌ Please provide all three channel IDs: task reminders, meeting reminders, and escalations."
             
             current_state = self.setup_states[user_id]
             
+            print(f"🔍 [SETUP] Updating config sheet with channel IDs")
+            print(f"🔍 [SETUP] Config spreadsheet ID: {current_state['config_spreadsheet_id']}")
+            
             # Update config sheet with channel IDs
-            await self.sheets_manager.update_config_channels(
-                current_state['config_spreadsheet_id'],
-                channel_ids[0],  # Task reminders
-                channel_ids[1],  # Meeting reminders
-                channel_ids[2]   # Escalations
-            )
+            try:
+                await self.sheets_manager.update_config_channels(
+                    current_state['config_spreadsheet_id'],
+                    channel_ids[0],  # Task reminders
+                    channel_ids[1],  # Meeting reminders
+                    channel_ids[2]   # Escalations
+                )
+                print(f"🔍 [SETUP] Config sheet updated successfully")
+            except Exception as e:
+                print(f"❌ [SETUP ERROR] Failed to update config sheet: {e}")
+                return f"❌ **Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel IDs are correct\n• The bot has access to those channels\n• Try again with valid channel IDs"
             
             # Mark setup as complete
             current_state['channels_configured'] = True
             
+            print(f"🔍 [SETUP] Logging successful setup completion")
+            
             # Log successful setup
-            await self.sheets_manager.log_action(
-                current_state['config_spreadsheet_id'],
-                'setup_completed',
-                user_id,
-                f'Setup completed for club: {current_state["club_name"]}',
-                'success'
-            )
+            try:
+                await self.sheets_manager.log_action(
+                    current_state['config_spreadsheet_id'],
+                    'setup_completed',
+                    user_id,
+                    f'Setup completed for club: {current_state["club_name"]}',
+                    'success'
+                )
+                print(f"🔍 [SETUP] Setup completion logged successfully")
+            except Exception as e:
+                print(f"⚠️ [SETUP WARNING] Failed to log setup completion: {e}")
+                # Don't fail the setup for logging errors
             
             # Clean up setup state
             del self.setup_states[user_id]
+            
+            print(f"🔍 [SETUP] Setup completed successfully for user {user_id}")
             
             message = "🎉 **Setup Complete!** 🎉\n\n"
             message += f"Your club **{current_state['club_name']}** is now configured!\n\n"
@@ -373,8 +534,8 @@ class SetupManager:
             return message
             
         except Exception as e:
-            print(f"Error handling channel configuration: {e}")
-            return "❌ Error configuring channels. Please try again."
+            print(f"❌ [SETUP ERROR] Error in channel configuration: {e}")
+            return f"❌ **Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel IDs are correct\n• The bot has access to those channels\n• Try again with valid channel IDs"
     
     def _extract_discord_id(self, mention: str) -> Optional[str]:
         """
