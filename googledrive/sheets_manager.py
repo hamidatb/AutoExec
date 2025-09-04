@@ -55,6 +55,12 @@ class ClubSheetsManager:
                             'title': 'logs',
                             'gridProperties': {'rowCount': 100, 'columnCount': 8}
                         }
+                    },
+                    {
+                        'properties': {
+                            'title': 'timers',
+                            'gridProperties': {'rowCount': 1000, 'columnCount': 8}
+                        }
                     }
                 ]
             }
@@ -97,6 +103,15 @@ class ClubSheetsManager:
                 range='logs!A1',
                 valueInputOption='RAW',
                 body={'values': logs_headers}
+            ).execute()
+            
+            # Initialize timers sheet headers
+            timers_headers = [['id', 'guild_id', 'type', 'ref_type', 'ref_id', 'fire_at_utc', 'channel_id', 'state']]
+            self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range='timers!A1',
+                valueInputOption='RAW',
+                body={'values': timers_headers}
             ).execute()
             
             # Move sheet to specified folder if provided
@@ -193,7 +208,7 @@ class ClubSheetsManager:
             # Initialize meetings sheet headers
             meetings_headers = [
                 ['meeting_id', 'title', 'start_at_utc', 'end_at_utc', 'start_at_local', 
-                 'end_at_local', 'channel_id', 'minutes_doc_url', 'status', 'created_by', 'created_at_utc', 'updated_at']
+                 'end_at_local', 'location', 'meeting_link', 'channel_id', 'minutes_doc_url', 'status', 'created_by', 'created_at_utc', 'updated_at']
             ]
             
             self.sheets_service.spreadsheets().values().update(
@@ -296,6 +311,8 @@ class ClubSheetsManager:
                 meeting_data.get('end_at_utc', ''),
                 meeting_data.get('start_at_local', ''),
                 meeting_data.get('end_at_local', ''),
+                meeting_data.get('location', ''),
+                meeting_data.get('meeting_link', ''),
                 meeting_data.get('channel_id', ''),
                 meeting_data.get('minutes_doc_url', ''),
                 meeting_data.get('status', 'scheduled'),
@@ -407,7 +424,7 @@ class ClubSheetsManager:
         try:
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range='meetings!A:L'
+                range='meetings!A:N'
             ).execute()
             
             values = result.get('values', [])
@@ -525,7 +542,7 @@ class ClubSheetsManager:
         try:
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range='meetings!A:L'
+                range='meetings!A:N'
             ).execute()
             
             values = result.get('values', [])
@@ -539,9 +556,9 @@ class ClubSheetsManager:
                     now = datetime.now(timezone.utc).isoformat()
                     self.sheets_service.spreadsheets().values().update(
                         spreadsheetId=spreadsheet_id,
-                        range=f'meetings!I{i}:L{i}',
+                        range=f'meetings!K{i}:N{i}',
                         valueInputOption='RAW',
-                        body={'values': [[new_status, row[9], row[10], now]]}
+                        body={'values': [[new_status, row[11], row[12], now]]}
                     ).execute()
                     return True
             
@@ -566,7 +583,7 @@ class ClubSheetsManager:
         try:
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range='meetings!A:L'
+                range='meetings!A:N'
             ).execute()
             
             values = result.get('values', [])
@@ -580,9 +597,9 @@ class ClubSheetsManager:
                     now = datetime.now(timezone.utc).isoformat()
                     self.sheets_service.spreadsheets().values().update(
                         spreadsheetId=spreadsheet_id,
-                        range=f'meetings!H{i}:L{i}',
+                        range=f'meetings!J{i}:N{i}',
                         valueInputOption='RAW',
-                        body={'values': [[minutes_url, row[8], row[9], row[10], now]]}
+                        body={'values': [[minutes_url, row[10], row[11], row[12], now]]}
                     ).execute()
                     return True
             
@@ -669,3 +686,208 @@ class ClubSheetsManager:
             
         except HttpError as error:
             print(f"Error logging action: {error}")
+    
+    def add_timer(self, config_spreadsheet_id: str, timer_data: Dict[str, Any]) -> bool:
+        """
+        Adds a new timer to the timers sheet.
+        
+        Args:
+            config_spreadsheet_id: ID of the config spreadsheet
+            timer_data: Dictionary containing timer information
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            timer_row = [
+                timer_data.get('id', ''),
+                timer_data.get('guild_id', ''),
+                timer_data.get('type', ''),
+                timer_data.get('ref_type', ''),
+                timer_data.get('ref_id', ''),
+                timer_data.get('fire_at_utc', ''),
+                timer_data.get('channel_id', ''),
+                timer_data.get('state', 'active')
+            ]
+            
+            # Find the next empty row
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=config_spreadsheet_id,
+                range='timers!A:A'
+            ).execute()
+            
+            next_row = len(result.get('values', [])) + 1
+            
+            self.sheets_service.spreadsheets().values().update(
+                spreadsheetId=config_spreadsheet_id,
+                range=f'timers!A{next_row}',
+                valueInputOption='RAW',
+                body={'values': [timer_row]}
+            ).execute()
+            
+            return True
+            
+        except HttpError as error:
+            print(f"Error adding timer: {error}")
+            return False
+    
+    def get_timers(self, config_spreadsheet_id: str) -> List[Dict[str, Any]]:
+        """
+        Gets all timers from the timers sheet.
+        
+        Args:
+            config_spreadsheet_id: ID of the config spreadsheet
+            
+        Returns:
+            List of timer dictionaries
+        """
+        try:
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=config_spreadsheet_id,
+                range='timers!A:H'
+            ).execute()
+            
+            values = result.get('values', [])
+            if len(values) < 2:  # No data or only headers
+                return []
+            
+            headers = values[0]
+            timers = []
+            
+            for row in values[1:]:
+                if len(row) >= len(headers):
+                    timer = dict(zip(headers, row))
+                    timers.append(timer)
+            
+            return timers
+            
+        except HttpError as error:
+            print(f"Error getting timers: {error}")
+            return []
+    
+    def update_timer_state(self, config_spreadsheet_id: str, timer_id: str, new_state: str) -> bool:
+        """
+        Updates the state of a timer.
+        
+        Args:
+            config_spreadsheet_id: ID of the config spreadsheet
+            timer_id: ID of the timer to update
+            new_state: New state for the timer
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=config_spreadsheet_id,
+                range='timers!A:H'
+            ).execute()
+            
+            values = result.get('values', [])
+            if len(values) < 2:
+                return False
+            
+            # Find the row with the timer_id
+            for i, row in enumerate(values[1:], start=2):
+                if row[0] == timer_id:  # id column
+                    # Update state
+                    self.sheets_service.spreadsheets().values().update(
+                        spreadsheetId=config_spreadsheet_id,
+                        range=f'timers!H{i}',
+                        valueInputOption='RAW',
+                        body={'values': [[new_state]]}
+                    ).execute()
+                    return True
+            
+            return False
+            
+        except HttpError as error:
+            print(f"Error updating timer state: {error}")
+            return False
+    
+    def delete_timer(self, config_spreadsheet_id: str, timer_id: str) -> bool:
+        """
+        Deletes a timer from the timers sheet.
+        
+        Args:
+            config_spreadsheet_id: ID of the config spreadsheet
+            timer_id: ID of the timer to delete
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=config_spreadsheet_id,
+                range='timers!A:H'
+            ).execute()
+            
+            values = result.get('values', [])
+            if len(values) < 2:
+                return False
+            
+            # Find the row with the timer_id
+            for i, row in enumerate(values[1:], start=2):
+                if row[0] == timer_id:  # id column
+                    # Clear the row
+                    self.sheets_service.spreadsheets().values().clear(
+                        spreadsheetId=config_spreadsheet_id,
+                        range=f'timers!A{i}:H{i}'
+                    ).execute()
+                    return True
+            
+            return False
+            
+        except HttpError as error:
+            print(f"Error deleting timer: {error}")
+            return False
+    
+    def ensure_monthly_sheets_exist(self, club_name: str, month_year: str, folder_id: str = None) -> Dict[str, str]:
+        """
+        Ensures that monthly sheets exist for the given month and year.
+        Creates them if they don't exist.
+        
+        Args:
+            club_name: Name of the club
+            month_year: Month and year (e.g., "September 2025")
+            folder_id: Optional Google Drive folder ID to place the sheets in
+            
+        Returns:
+            Dict with spreadsheet IDs for tasks and meetings
+        """
+        try:
+            # Check if sheets already exist by trying to find them
+            # This is a simplified check - in practice, you might want to maintain
+            # a registry of created sheets in the config sheet
+            
+            # For now, we'll always create new sheets for the month
+            # In a production system, you'd check if they already exist
+            return self.create_monthly_sheets(club_name, month_year, folder_id)
+            
+        except Exception as e:
+            print(f"Error ensuring monthly sheets exist: {e}")
+            return {}
+    
+    def get_or_create_monthly_sheets(self, club_name: str, month_year: str, folder_id: str = None) -> Dict[str, str]:
+        """
+        Gets existing monthly sheets or creates new ones if they don't exist.
+        
+        Args:
+            club_name: Name of the club
+            month_year: Month and year (e.g., "September 2025")
+            folder_id: Optional Google Drive folder ID to place the sheets in
+            
+        Returns:
+            Dict with spreadsheet IDs for tasks and meetings
+        """
+        try:
+            # Try to find existing sheets first
+            # This would involve searching through the config sheet or Drive
+            # For now, we'll create new sheets each time
+            # In production, you'd implement proper sheet discovery
+            
+            return self.create_monthly_sheets(club_name, month_year, folder_id)
+            
+        except Exception as e:
+            print(f"Error getting or creating monthly sheets: {e}")
+            return {}
