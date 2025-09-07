@@ -86,6 +86,7 @@ class MockSetupManager:
         self.cancel_setup = Mock()
         self.is_in_setup = Mock(return_value=False)
         self.is_setup_complete = Mock(return_value=False)
+        self.is_fully_setup = Mock(return_value=False)  # Added missing method
         self.get_guild_config = Mock(return_value=None)
         self.can_modify_config = Mock(return_value=True)
         self.mark_setup_complete = Mock()
@@ -135,6 +136,15 @@ class MockSheetsManager:
         self.update_timer_state = Mock(return_value=True)
         self.get_all_tasks = Mock(return_value=[])
         self.get_all_meetings = Mock(return_value=[])
+        
+        # Mock the Google API service chain
+        self.sheets_service.spreadsheets.return_value.create.return_value.execute.return_value = {
+            'spreadsheetId': 'test_config_sheet_id',
+            'spreadsheetUrl': 'https://docs.google.com/spreadsheets/d/test_config_sheet_id'
+        }
+        self.drive_service.files.return_value.update.return_value.execute.return_value = {
+            'id': 'test_config_sheet_id'
+        }
 
 
 class MockTimerScheduler:
@@ -151,6 +161,9 @@ class MockTimerScheduler:
         self.update_timer = AsyncMock()
         self.cancel_timer = AsyncMock()
         self.get_active_timers = Mock(return_value={})
+        
+        # Make cancel_timer return a coroutine to avoid "object Mock can't be used in 'await' expression" error
+        self.cancel_timer = AsyncMock()
 
 
 class MockReconciliationManager:
@@ -160,6 +173,40 @@ class MockReconciliationManager:
         # Mock methods
         self.reconciliation_loop = AsyncMock()
         self.reconcile_timers = AsyncMock()
+        self.timer_scheduler = MockTimerScheduler()
+
+
+class MockSlashCommands:
+    """Mock slash commands for testing."""
+    
+    def __init__(self, bot):
+        self.bot = bot
+    
+    async def setup_command(self, interaction):
+        """Mock setup command."""
+        if not isinstance(interaction.channel, MockDiscordDMChannel):
+            await interaction.response.send_message(
+                "❌ This command can only be used in DMs. Please send me a private message and use `/setup` there.",
+                ephemeral=True
+            )
+            return
+            
+        guild_id = str(interaction.guild.id) if interaction.guild else None
+        guild_name = interaction.guild.name if interaction.guild else None
+        response = await self.bot.setup_manager.start_setup(str(interaction.user.id), interaction.user.name, guild_id, guild_name)
+        await interaction.response.send_message(response)
+    
+    async def cancel_setup_command(self, interaction):
+        """Mock cancel setup command."""
+        if not isinstance(interaction.channel, MockDiscordDMChannel):
+            await interaction.response.send_message(
+                "❌ This command can only be used in DMs. Please send me a private message and use `/cancel` there.",
+                ephemeral=True
+            )
+            return
+            
+        response = self.bot.setup_manager.cancel_setup(str(interaction.user.id))
+        await interaction.response.send_message(response)
 
 
 def create_mock_setup_state(user_id: str = "123456789", step: str = "club_name") -> Dict[str, Any]:
