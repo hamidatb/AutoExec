@@ -89,7 +89,6 @@ As a student leader, I found myself constantly:
 - **Google Drive API** - File storage and document management
 - **Google Sheets API** - Spreadsheet operations and data manipulation
 - **Google Docs API** - Document content parsing and extraction
-- **Google OAuth2** - Authentication and authorization
 - **Google Service Account** - Server-to-server authentication
 - **Google Cloud Storage** - File organization and backup
 
@@ -111,7 +110,7 @@ As a student leader, I found myself constantly:
 - **Environment Variables** - Secure configuration management
 - **File Permissions** - Unix-style access control (chmod 600)
 - **SSH Key Authentication** - Public key cryptography
-- **OAuth2** - Secure API authentication
+- **Service Account Auth** - Secure server-to-server authentication
 - **Encrypted Storage** - Sensitive data protection
 - **Firewall Rules** - Network access control
 
