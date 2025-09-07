@@ -103,6 +103,40 @@ class MeetingManager:
             print(f"Error canceling meeting: {e}")
             return False
     
+    async def update_meeting(self, meeting_id: str, meetings_spreadsheet_id: str, 
+                           updates: Dict[str, Any]) -> bool:
+        """
+        Updates a meeting with new information.
+        
+        Args:
+            meeting_id: ID of the meeting to update
+            meetings_spreadsheet_id: ID of the meetings spreadsheet
+            updates: Dictionary of fields to update (title, start_at_utc, end_at_utc, location, meeting_link, etc.)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Update meeting fields
+            success = self.sheets_manager.update_meeting_fields(
+                meetings_spreadsheet_id, meeting_id, updates
+            )
+            
+            if success:
+                print(f"Meeting {meeting_id} updated with: {updates}")
+                
+                # If time was changed, we might need to reschedule reminders
+                if 'start_at_utc' in updates:
+                    # Cancel old reminders and schedule new ones
+                    await self._cancel_meeting_reminders(meeting_id)
+                    # Note: We'd need config_spreadsheet_id to reschedule, but for now just cancel old ones
+            
+            return success
+            
+        except Exception as e:
+            print(f"Error updating meeting: {e}")
+            return False
+    
     async def link_minutes(self, meeting_id: str, minutes_doc_url: str,
                           meetings_spreadsheet_id: str, tasks_spreadsheet_id: str,
                           people_mapping: Dict[str, str]) -> bool:
@@ -207,6 +241,43 @@ class MeetingManager:
         except Exception as e:
             print(f"Error getting meeting by ID: {e}")
             return None
+    
+    def search_meetings_by_title(self, title_query: str, meetings_spreadsheet_id: str, 
+                                status_filter: str = None) -> List[Dict[str, Any]]:
+        """
+        Search for meetings by title (case-insensitive partial match).
+        
+        Args:
+            title_query: Title or partial title to search for
+            meetings_spreadsheet_id: ID of the meetings spreadsheet
+            status_filter: Optional status filter ('scheduled', 'canceled', etc.)
+            
+        Returns:
+            List of matching meeting dictionaries
+        """
+        try:
+            all_meetings = self.sheets_manager.get_all_meetings(meetings_spreadsheet_id)
+            matching_meetings = []
+            
+            title_query_lower = title_query.lower().strip()
+            
+            for meeting in all_meetings:
+                meeting_title = meeting.get('title', '').lower()
+                
+                # Check if title matches (partial match)
+                if title_query_lower in meeting_title:
+                    # Apply status filter if provided
+                    if status_filter is None or meeting.get('status') == status_filter:
+                        matching_meetings.append(meeting)
+            
+            # Sort by start time (most recent first)
+            matching_meetings.sort(key=lambda x: x.get('start_at_utc', ''), reverse=True)
+            
+            return matching_meetings
+            
+        except Exception as e:
+            print(f"Error searching meetings by title: {e}")
+            return []
     
     async def _schedule_meeting_reminders(self, meeting_data: Dict[str, Any],
                                          meetings_spreadsheet_id: str, config_spreadsheet_id: str = None):

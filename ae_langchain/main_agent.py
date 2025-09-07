@@ -49,6 +49,30 @@ def get_discord_context():
     """Get the current Discord context."""
     return _discord_context
 
+def get_meetings_sheet_id(guild_config: dict) -> str:
+    """
+    Get the meetings sheet ID from guild configuration.
+    This is the standard way to get the meetings sheet ID across all tools.
+    
+    Args:
+        guild_config: The guild configuration dictionary
+        
+    Returns:
+        str: The meetings sheet ID, or None if not found
+    """
+    if not guild_config:
+        return None
+    
+    # Check in order of preference
+    if 'monthly_sheets' in guild_config and 'meetings' in guild_config['monthly_sheets']:
+        return guild_config['monthly_sheets']['meetings']
+    elif 'meetings_sheet_id' in guild_config:
+        return guild_config['meetings_sheet_id']
+    elif 'meetings_spreadsheet_id' in guild_config:
+        return guild_config['meetings_spreadsheet_id']
+    
+    return None
+
 def get_agent_executor_with_memory(guild_id: str = None, user_id: str = None):
     """Get or create a server-specific agent executor with isolated conversation memory."""
     global _server_agent_executors, _dm_agent_executors
@@ -221,6 +245,9 @@ MEETING SCHEDULING CONVERSATION EXAMPLES:
             get_club_setup_info,
             check_guild_setup_status,
             schedule_meeting,
+            search_meetings_by_title,
+            cancel_meeting,
+            update_meeting,
             send_reminder_to_person,
             send_announcement,
             get_setup_info,
@@ -859,6 +886,354 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
     except Exception as e:
         print(f"Error scheduling meeting: {e}")
         return f"❌ Error scheduling meeting: {str(e)}"
+
+@tool
+def search_meetings_by_title(meeting_title: str) -> str:
+    """
+    Search for meetings by title to help with cancellation or updates.
+    Use this when users want to cancel or update a meeting but there might be multiple matches.
+    
+    Args:
+        meeting_title (str): The title or partial title of the meeting to search for
+        
+    Returns:
+        str: Formatted list of matching meetings with their details
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get Discord context to know which guild
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        
+        if not guild_id:
+            return "❌ No Discord context found. Please use this command in a Discord server."
+        
+        # Get guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config:
+            return "❌ This server is not set up. Please run `/setup` first."
+        
+        # Get the meetings sheet ID using the standard function
+        meetings_sheet_id = get_meetings_sheet_id(guild_config)
+        if not meetings_sheet_id:
+            return "❌ No meetings spreadsheet configured for this server."
+        
+        # Search for meetings by title
+        matching_meetings = BOT_INSTANCE.meeting_manager.search_meetings_by_title(
+            meeting_title, meetings_sheet_id, status_filter='scheduled'
+        )
+        
+        if not matching_meetings:
+            return f"❌ No scheduled meetings found matching '{meeting_title}'."
+        
+        if len(matching_meetings) == 1:
+            meeting = matching_meetings[0]
+            return f"✅ Found 1 matching meeting:\n\n**{meeting.get('title', 'Untitled')}**\n🆔 ID: `{meeting.get('meeting_id', 'N/A')}`\n🕐 Date: {meeting.get('start_at_local', 'N/A')}\n📍 Location: {meeting.get('location', 'N/A')}\n🔗 Link: {meeting.get('meeting_link', 'N/A')}"
+        
+        # Multiple matches - show numbered list
+        result = f"🔍 Found {len(matching_meetings)} meetings matching '{meeting_title}':\n\n"
+        for i, meeting in enumerate(matching_meetings, 1):
+            result += f"**{i}. {meeting.get('title', 'Untitled')}**\n"
+            result += f"   🆔 ID: `{meeting.get('meeting_id', 'N/A')}`\n"
+            result += f"   🕐 Date: {meeting.get('start_at_local', 'N/A')}\n"
+            result += f"   📍 Location: {meeting.get('location', 'N/A')}\n"
+            result += f"   🔗 Link: {meeting.get('meeting_link', 'N/A')}\n\n"
+        
+        result += "Please specify which meeting you want to cancel or update by saying the number (1, 2, 3, etc.) or the meeting ID."
+        return result
+        
+    except Exception as e:
+        print(f"Error searching meetings: {e}")
+        return f"❌ Error searching meetings: {str(e)}"
+
+@tool
+def cancel_meeting(meeting_identifier: str) -> str:
+    """
+    Cancel a scheduled meeting by ID or title.
+    
+    **USE THIS TOOL WHEN:**
+    - User says "cancel [meeting name]" or "cancel the [meeting name]"
+    - User wants to remove/delete a scheduled meeting
+    - User says "remove [meeting name]" or "delete [meeting name]"
+    
+    **DO NOT USE THIS TOOL FOR:**
+    - Creating new meetings (use schedule_meeting instead)
+    - Updating meeting details (use update_meeting instead)
+    - Rescheduling meetings (use update_meeting with new_start_time instead)
+    
+    Args:
+        meeting_identifier (str): Either the meeting ID or the meeting title
+        
+    Returns:
+        str: Confirmation message about the cancellation
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get Discord context to know which guild
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        
+        if not guild_id:
+            return "❌ No Discord context found. Please use this command in a Discord server."
+        
+        # Get guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config:
+            return "❌ This server is not set up. Please run `/setup` first."
+        
+        # Get the meetings sheet ID using the standard function
+        meetings_sheet_id = get_meetings_sheet_id(guild_config)
+        if not meetings_sheet_id:
+            return "❌ No meetings spreadsheet configured for this server."
+        
+        # Check if identifier looks like a meeting ID (UUID format)
+        import re
+        uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        
+        if re.match(uuid_pattern, meeting_identifier, re.IGNORECASE):
+            # It's a meeting ID
+            meeting = BOT_INSTANCE.meeting_manager.get_meeting_by_id(meeting_identifier, meetings_sheet_id)
+            if not meeting:
+                return f"❌ No meeting found with ID: {meeting_identifier}"
+            
+            if meeting.get('status') == 'canceled':
+                return f"❌ Meeting '{meeting.get('title', 'Untitled')}' is already canceled."
+            
+            # Cancel the meeting
+            import asyncio
+            success = asyncio.run(BOT_INSTANCE.meeting_manager.cancel_meeting(meeting_identifier, meetings_sheet_id))
+            
+            if success:
+                return f"✅ **Meeting Canceled Successfully!**\n\n**{meeting.get('title', 'Untitled')}**\n🕐 Was scheduled for: {meeting.get('start_at_local', 'N/A')}\n📍 Location: {meeting.get('location', 'N/A')}\n\nAll reminders for this meeting have been canceled."
+            else:
+                return f"❌ Failed to cancel meeting '{meeting.get('title', 'Untitled')}'. Please try again."
+        
+        else:
+            # It's a title - search for meetings
+            matching_meetings = BOT_INSTANCE.meeting_manager.search_meetings_by_title(
+                meeting_identifier, meetings_sheet_id, status_filter='scheduled'
+            )
+            
+            if not matching_meetings:
+                return f"❌ No scheduled meetings found matching '{meeting_identifier}'."
+            
+            if len(matching_meetings) == 1:
+                meeting = matching_meetings[0]
+                meeting_id = meeting.get('meeting_id')
+                
+                if not meeting_id:
+                    return f"❌ Meeting '{meeting.get('title', 'Untitled')}' has no valid ID."
+                
+                # Cancel the meeting
+                import asyncio
+                success = asyncio.run(BOT_INSTANCE.meeting_manager.cancel_meeting(meeting_id, meetings_sheet_id))
+                
+                if success:
+                    return f"✅ **Meeting Canceled Successfully!**\n\n**{meeting.get('title', 'Untitled')}**\n🕐 Was scheduled for: {meeting.get('start_at_local', 'N/A')}\n📍 Location: {meeting.get('location', 'N/A')}\n\nAll reminders for this meeting have been canceled."
+                else:
+                    return f"❌ Failed to cancel meeting '{meeting.get('title', 'Untitled')}'. Please try again."
+            
+            else:
+                # Multiple matches - return search results
+                result = f"🔍 Found {len(matching_meetings)} meetings matching '{meeting_identifier}':\n\n"
+                for i, meeting in enumerate(matching_meetings, 1):
+                    result += f"**{i}. {meeting.get('title', 'Untitled')}**\n"
+                    result += f"   🆔 ID: `{meeting.get('meeting_id', 'N/A')}`\n"
+                    result += f"   🕐 Date: {meeting.get('start_at_local', 'N/A')}\n"
+                    result += f"   📍 Location: {meeting.get('location', 'N/A')}\n\n"
+                
+                result += "Please specify which meeting you want to cancel by saying the number (1, 2, 3, etc.) or the meeting ID."
+                return result
+        
+    except Exception as e:
+        print(f"Error canceling meeting: {e}")
+        return f"❌ Error canceling meeting: {str(e)}"
+
+@tool
+def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time: str = "", 
+                  new_location: str = "", new_meeting_link: str = "") -> str:
+    """
+    Update a scheduled meeting with new information.
+    
+    **USE THIS TOOL WHEN:**
+    - User says "update [meeting name]" or "change [meeting name]"
+    - User says "reschedule [meeting name]" (use new_start_time parameter)
+    - User wants to modify meeting details (time, location, title, link)
+    - User says "move [meeting name] to [new time]"
+    
+    **DO NOT USE THIS TOOL FOR:**
+    - Creating new meetings (use schedule_meeting instead)
+    - Canceling meetings (use cancel_meeting instead)
+    
+    Args:
+        meeting_identifier (str): Either the meeting ID or the meeting title
+        new_title (str): New title for the meeting (optional)
+        new_start_time (str): New start time in format "YYYY-MM-DD HH:MM" (optional)
+        new_location (str): New location for the meeting (optional)
+        new_meeting_link (str): New meeting link (optional)
+        
+    Returns:
+        str: Confirmation message about the update
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get Discord context to know which guild
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        
+        if not guild_id:
+            return "❌ No Discord context found. Please use this command in a Discord server."
+        
+        # Get guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config:
+            return "❌ This server is not set up. Please run `/setup` first."
+        
+        # Get the meetings sheet ID using the standard function
+        meetings_sheet_id = get_meetings_sheet_id(guild_config)
+        if not meetings_sheet_id:
+            return "❌ No meetings spreadsheet configured for this server."
+        
+        # Check if identifier looks like a meeting ID (UUID format)
+        import re
+        uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        
+        if re.match(uuid_pattern, meeting_identifier, re.IGNORECASE):
+            # It's a meeting ID
+            meeting = BOT_INSTANCE.meeting_manager.get_meeting_by_id(meeting_identifier, meetings_sheet_id)
+            if not meeting:
+                return f"❌ No meeting found with ID: {meeting_identifier}"
+            
+            if meeting.get('status') == 'canceled':
+                return f"❌ Cannot update canceled meeting '{meeting.get('title', 'Untitled')}'."
+            
+            # Prepare updates
+            updates = {}
+            if new_title:
+                updates['title'] = new_title
+            if new_start_time:
+                # Convert to UTC format
+                from datetime import datetime
+                try:
+                    dt = datetime.strptime(new_start_time, "%Y-%m-%d %H:%M")
+                    updates['start_at_utc'] = dt.isoformat() + '+00:00'
+                    updates['start_at_local'] = dt.strftime("%B %d, %Y at %I:%M %p")
+                except ValueError:
+                    return f"❌ Invalid date format. Please use 'YYYY-MM-DD HH:MM' format."
+            if new_location:
+                updates['location'] = new_location
+            if new_meeting_link:
+                updates['meeting_link'] = new_meeting_link
+            
+            if not updates:
+                return "❌ No updates provided. Please specify what you want to change."
+            
+            # Update the meeting
+            import asyncio
+            success = asyncio.run(BOT_INSTANCE.meeting_manager.update_meeting(meeting_identifier, meetings_sheet_id, updates))
+            
+            if success:
+                result = f"✅ **Meeting Updated Successfully!**\n\n**{meeting.get('title', 'Untitled')}**\n"
+                if new_title:
+                    result += f"📝 New title: {new_title}\n"
+                if new_start_time:
+                    result += f"🕐 New time: {updates.get('start_at_local', new_start_time)}\n"
+                if new_location:
+                    result += f"📍 New location: {new_location}\n"
+                if new_meeting_link:
+                    result += f"🔗 New link: {new_meeting_link}\n"
+                return result
+            else:
+                return f"❌ Failed to update meeting '{meeting.get('title', 'Untitled')}'. Please try again."
+        
+        else:
+            # It's a title - search for meetings
+            matching_meetings = BOT_INSTANCE.meeting_manager.search_meetings_by_title(
+                meeting_identifier, meetings_sheet_id, status_filter='scheduled'
+            )
+            
+            if not matching_meetings:
+                return f"❌ No scheduled meetings found matching '{meeting_identifier}'."
+            
+            if len(matching_meetings) == 1:
+                meeting = matching_meetings[0]
+                meeting_id = meeting.get('meeting_id')
+                
+                if not meeting_id:
+                    return f"❌ Meeting '{meeting.get('title', 'Untitled')}' has no valid ID."
+                
+                # Prepare updates
+                updates = {}
+                if new_title:
+                    updates['title'] = new_title
+                if new_start_time:
+                    # Convert to UTC format
+                    from datetime import datetime
+                    try:
+                        dt = datetime.strptime(new_start_time, "%Y-%m-%d %H:%M")
+                        updates['start_at_utc'] = dt.isoformat() + '+00:00'
+                        updates['start_at_local'] = dt.strftime("%B %d, %Y at %I:%M %p")
+                    except ValueError:
+                        return f"❌ Invalid date format. Please use 'YYYY-MM-DD HH:MM' format."
+                if new_location:
+                    updates['location'] = new_location
+                if new_meeting_link:
+                    updates['meeting_link'] = new_meeting_link
+                
+                if not updates:
+                    return "❌ No updates provided. Please specify what you want to change."
+                
+                # Update the meeting
+                import asyncio
+                success = asyncio.run(BOT_INSTANCE.meeting_manager.update_meeting(meeting_id, meetings_sheet_id, updates))
+                
+                if success:
+                    result = f"✅ **Meeting Updated Successfully!**\n\n**{meeting.get('title', 'Untitled')}**\n"
+                    if new_title:
+                        result += f"📝 New title: {new_title}\n"
+                    if new_start_time:
+                        result += f"🕐 New time: {updates.get('start_at_local', new_start_time)}\n"
+                    if new_location:
+                        result += f"📍 New location: {new_location}\n"
+                    if new_meeting_link:
+                        result += f"🔗 New link: {new_meeting_link}\n"
+                    return result
+                else:
+                    return f"❌ Failed to update meeting '{meeting.get('title', 'Untitled')}'. Please try again."
+            
+            else:
+                # Multiple matches - return search results
+                result = f"🔍 Found {len(matching_meetings)} meetings matching '{meeting_identifier}':\n\n"
+                for i, meeting in enumerate(matching_meetings, 1):
+                    result += f"**{i}. {meeting.get('title', 'Untitled')}**\n"
+                    result += f"   🆔 ID: `{meeting.get('meeting_id', 'N/A')}`\n"
+                    result += f"   🕐 Date: {meeting.get('start_at_local', 'N/A')}\n"
+                    result += f"   📍 Location: {meeting.get('location', 'N/A')}\n\n"
+                
+                result += "Please specify which meeting you want to update by saying the number (1, 2, 3, etc.) or the meeting ID."
+                return result
+        
+    except Exception as e:
+        print(f"Error updating meeting: {e}")
+        return f"❌ Error updating meeting: {str(e)}"
 
 @tool
 def send_reminder_to_person(person_name: str, reminder_message: str, delay_minutes: int = 0) -> str:
@@ -2478,7 +2853,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, start_meeting_scheduling, list_active_timers, clear_all_timers, ask_for_discord_mention, get_exec_info]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, search_meetings_by_title, cancel_meeting, update_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, start_meeting_scheduling, list_active_timers, clear_all_timers, ask_for_discord_mention, get_exec_info]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
@@ -2506,6 +2881,21 @@ def create_langchain_prompt() -> ChatPromptTemplate:
             - You help with meeting management, task tracking, scheduling, and organizational communication
             - You integrate with Google Sheets for data management and Discord for communication
             - You can create meeting minutes, schedule meetings, send reminders, and manage club activities
+            
+            MEETING MANAGEMENT CAPABILITIES:
+            - Schedule new meetings with automatic reminder setup
+            - Cancel meetings by title or meeting ID (handles multiple matches intelligently)
+            - Update existing meetings (title, time, location, meeting link)
+            - Search for meetings by title to help with cancellation/updates
+            - When multiple meetings match a title, present numbered options for user selection
+            - Automatically cancel reminders when meetings are canceled or rescheduled
+            
+            IMPORTANT TOOL USAGE RULES:
+            - When users say "cancel [meeting name]" or "cancel the [meeting name]", ALWAYS use the cancel_meeting tool
+            - When users say "update [meeting name]" or "change [meeting name]", use the update_meeting tool
+            - When users say "reschedule [meeting name]", use the update_meeting tool with new_start_time
+            - NEVER use schedule_meeting for cancellation or updates - use the appropriate cancel_meeting or update_meeting tools
+            - If multiple meetings match a title, use search_meetings_by_title first to show options
             
             CREATOR INFORMATION:
             - Created by Hamidat Bello 👋

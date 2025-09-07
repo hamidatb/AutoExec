@@ -590,6 +590,67 @@ class ClubSheetsManager:
             print(f"Error updating meeting status: {error}")
             return False
     
+    def update_meeting_fields(self, spreadsheet_id: str, meeting_id: str, updates: Dict[str, Any]) -> bool:
+        """
+        Updates multiple fields of a meeting.
+        
+        Args:
+            spreadsheet_id: ID of the meetings spreadsheet
+            meeting_id: ID of the meeting to update
+            updates: Dictionary of field names to new values
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range='meetings!A:N'
+            ).execute()
+            
+            values = result.get('values', [])
+            if len(values) < 2:
+                return False
+            
+            headers = values[0]
+            
+            # Find the row with the meeting_id
+            for i, row in enumerate(values[1:], start=2):
+                if row[0] == meeting_id:  # meeting_id column
+                    # Create updated row
+                    updated_row = row.copy()
+                    
+                    # Update fields based on the updates dictionary
+                    for field, value in updates.items():
+                        if field in headers:
+                            field_index = headers.index(field)
+                            # Ensure the row is long enough
+                            while len(updated_row) <= field_index:
+                                updated_row.append('')
+                            updated_row[field_index] = str(value)
+                    
+                    # Update updated_at field
+                    if 'updated_at' in headers:
+                        updated_at_index = headers.index('updated_at')
+                        while len(updated_row) <= updated_at_index:
+                            updated_row.append('')
+                        updated_row[updated_at_index] = datetime.now(timezone.utc).isoformat()
+                    
+                    # Update the row in the sheet
+                    self.sheets_service.spreadsheets().values().update(
+                        spreadsheetId=spreadsheet_id,
+                        range=f'meetings!A{i}:N{i}',
+                        valueInputOption='RAW',
+                        body={'values': [updated_row]}
+                    ).execute()
+                    return True
+            
+            return False
+            
+        except HttpError as error:
+            print(f"Error updating meeting fields: {error}")
+            return False
+    
     def update_meeting_minutes(self, spreadsheet_id: str, meeting_id: str, minutes_url: str) -> bool:
         """
         Updates the minutes document URL for a meeting.
