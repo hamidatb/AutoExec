@@ -261,7 +261,8 @@ MEETING SCHEDULING CONVERSATION EXAMPLES:
             clear_all_timers,
             ask_for_discord_mention,
             get_exec_info,
-            parse_meeting_minutes_action_items
+            parse_meeting_minutes_action_items,
+            create_tasks_from_meeting_minutes
         ]
         
         # Create agent with memory
@@ -2500,23 +2501,73 @@ def clear_all_timers() -> str:
 @tool
 def parse_meeting_minutes_action_items(minutes_doc_url: str) -> str:
     """
-    Parse action items from a specific meeting minutes Google Doc URL.
+    Parse action items from a specific meeting minutes Google Doc URL and automatically create tasks in Google Sheets.
     Use this when users ask to "parse action items from this meeting minutes" or similar requests.
     
     Args:
         minutes_doc_url (str): The Google Doc URL containing the meeting minutes
         
     Returns:
-        str: Formatted list of action items with deadlines (defaults to 2 weeks if no deadline specified)
+        str: Formatted list of action items with deadlines and task creation status
     """
     from discordbot.discord_client import BOT_INSTANCE
     from googledrive.minutes_parser import MinutesParser
     from datetime import datetime, timedelta
+    import uuid
     
     if BOT_INSTANCE is None:
         return "❌ ERROR: The bot instance is not running."
     
     try:
+        # Get the Discord context from the current message
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        channel_id = context.get('channel_id')
+        user_id = context.get('user_id')
+        
+        # Handle DM context - check if user is admin of any servers
+        if not guild_id:
+            if not user_id:
+                return "❌ No Discord context found. Please use this command in a Discord server or DM."
+            
+            # Check if user is admin of any servers
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                # User is admin of only one server, use that context
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                # User is admin of multiple servers, ask for clarification
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**
+
+You are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:
+
+{guild_list}
+
+**How to specify:**
+• Mention the club name: "For [Club Name], parse action items from..."
+• Mention the server name: "In [Server Name], create tasks from..."
+
+**Example:** "For Computer Science Club, parse action items from this meeting minutes: [URL]"
+
+Which server would you like me to help you with?"""
+        
+        # Get the guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Get the tasks sheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        tasks_sheet_id = monthly_sheets.get('tasks')
+        
+        if not tasks_sheet_id:
+            return "❌ No tasks spreadsheet configured. Please run `/setup` first."
+        
         # Initialize the minutes parser
         minutes_parser = MinutesParser()
         
@@ -2526,11 +2577,22 @@ def parse_meeting_minutes_action_items(minutes_doc_url: str) -> str:
         if not action_items:
             return "❌ **No Action Items Found**\n\nNo action items table was found in the meeting minutes document. Please ensure the document contains an 'Action Items' table with the required columns."
         
+        # Get exec members for Discord ID mapping
+        exec_members = guild_config.get('exec_members', [])
+        people_mapping = {}
+        for member in exec_members:
+            if 'discord_id' in member and 'name' in member:
+                people_mapping[member['name']] = member['discord_id']
+        
         # Format the response
         response = "📋 **Action Items from Meeting Minutes**\n\n"
         
-        # Calculate default deadline (2 weeks from now)
-        default_deadline = (datetime.now() + timedelta(weeks=2)).strftime("%Y-%m-%d")
+        # Calculate default deadline (2 weeks from meeting date, or current date if no meeting date)
+        from datetime import timezone
+        default_deadline = (datetime.now(timezone.utc) + timedelta(weeks=2)).replace(hour=23, minute=59, second=0, microsecond=0).isoformat()
+        
+        created_tasks = []
+        failed_tasks = []
         
         for item in action_items:
             person = item.get('person', 'Unknown')
@@ -2547,14 +2609,188 @@ def parse_meeting_minutes_action_items(minutes_doc_url: str) -> str:
                 response += f" ({role})"
             response += f" {status_emoji}\n"
             response += f"📝 Task: {task}\n"
-            response += f"⏰ Deadline: {deadline}\n\n"
+            # Show the deadline that will be used for task creation
+            display_deadline = deadline if deadline else default_deadline
+            # Convert ISO format to user-friendly display
+            try:
+                from datetime import datetime
+                if display_deadline:
+                    # Parse ISO format and display in user-friendly format
+                    dt = datetime.fromisoformat(display_deadline.replace('Z', '+00:00'))
+                    display_date = dt.strftime("%B %d, %Y at %I:%M %p UTC")
+                    response += f"⏰ Deadline: {display_date}\n"
+                else:
+                    response += f"⏰ Deadline: Not set\n"
+            except:
+                response += f"⏰ Deadline: {display_deadline}\n"
+            
+            # Create task in Google Sheets if not completed
+            if not completed:
+                # Map person name to Discord ID
+                discord_id = people_mapping.get(person, '')
+                
+                # Use the deadline from parsed action items, or default if not set
+                task_deadline = deadline if deadline else default_deadline
+                
+                # Format Discord ID for proper mention format
+                formatted_discord_id = f"<@{discord_id}>" if discord_id else ""
+                
+                # Create task data
+                task_data = {
+                    'title': task,
+                    'owner_discord_id': formatted_discord_id,
+                    'owner_name': person,
+                    'due_at': task_deadline,
+                    'status': 'open',
+                    'priority': 'medium',
+                    'source_doc': minutes_doc_url,
+                    'channel_id': channel_id,
+                    'notes': f"Role: {role} | From meeting minutes",
+                    'created_by': user_id,
+                    'guild_id': guild_id
+                }
+                
+                # Add task to spreadsheet
+                success, task_id = BOT_INSTANCE.sheets_manager.add_task(tasks_sheet_id, task_data)
+                
+                if success:
+                    created_tasks.append(f"✅ {person}: {task}")
+                    response += f"📊 **Task created in Google Sheets**\n"
+                else:
+                    failed_tasks.append(f"❌ {person}: {task}")
+                    response += f"⚠️ **Failed to create task in Google Sheets**\n"
+            else:
+                response += f"✅ **Task already completed - not added to sheets**\n"
+            
+            response += "\n"
         
-        response += f"💡 **Note:** Tasks without specified deadlines have been set to {default_deadline} (2 weeks from now)."
+        # Add summary
+        if created_tasks:
+            response += f"🎉 **Successfully created {len(created_tasks)} tasks in Google Sheets!**\n\n"
+            for task in created_tasks:
+                response += f"• {task}\n"
+        
+        if failed_tasks:
+            response += f"\n⚠️ **Failed to create {len(failed_tasks)} tasks:**\n"
+            for task in failed_tasks:
+                response += f"• {task}\n"
+        
+        if not created_tasks and not failed_tasks:
+            response += f"💡 **All tasks were already completed - no new tasks created.**\n"
+        
+        response += f"\n📅 **Note:** Tasks without specified deadlines have been set to {default_deadline} (2 weeks from now)."
         
         return response
         
     except Exception as e:
         return f"❌ **Error parsing meeting minutes:** {str(e)}\n\nPlease ensure the document URL is correct and accessible."
+
+@tool
+def create_tasks_from_meeting_minutes(minutes_doc_url: str) -> str:
+    """
+    Parse meeting minutes and create tasks in Google Sheets for the current month.
+    This tool automatically creates tasks for incomplete action items and skips completed ones.
+    
+    Args:
+        minutes_doc_url (str): The Google Doc URL containing the meeting minutes
+        
+    Returns:
+        str: Summary of tasks created in Google Sheets
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    from googledrive.minutes_parser import MinutesParser
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get the Discord context from the current message
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        channel_id = context.get('channel_id')
+        user_id = context.get('user_id')
+        
+        # Handle DM context - check if user is admin of any servers
+        if not guild_id:
+            if not user_id:
+                return "❌ No Discord context found. Please use this command in a Discord server or DM."
+            
+            # Check if user is admin of any servers
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                # User is admin of only one server, use that context
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                # User is admin of multiple servers, ask for clarification
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**
+
+You are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:
+
+{guild_list}
+
+**How to specify:**
+• Mention the club name: "For [Club Name], create tasks from..."
+• Mention the server name: "In [Server Name], parse meeting minutes..."
+
+**Example:** "For Computer Science Club, create tasks from this meeting minutes: [URL]"
+
+Which server would you like me to help you with?"""
+        
+        # Get the guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Get the tasks sheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        tasks_sheet_id = monthly_sheets.get('tasks')
+        
+        if not tasks_sheet_id:
+            return "❌ No tasks spreadsheet configured. Please run `/setup` first."
+        
+        # Get exec members for Discord ID mapping
+        exec_members = guild_config.get('exec_members', [])
+        people_mapping = {}
+        for member in exec_members:
+            if 'discord_id' in member and 'name' in member:
+                people_mapping[member['name']] = member['discord_id']
+        
+        # Initialize the minutes parser
+        minutes_parser = MinutesParser()
+        
+        # Create tasks from minutes
+        created_tasks = minutes_parser.create_tasks_from_minutes(
+            minutes_doc_url, 
+            tasks_sheet_id, 
+            people_mapping
+        )
+        
+        if not created_tasks:
+            return "❌ **No Tasks Created**\n\nNo action items were found in the meeting minutes document, or all tasks were already completed."
+        
+        # Format response
+        response = f"🎉 **Successfully Created {len(created_tasks)} Tasks in Google Sheets!**\n\n"
+        
+        for task in created_tasks:
+            status_emoji = "✅" if task['status'] == 'completed' else "⏳"
+            response += f"{status_emoji} **{task['owner_name']}**\n"
+            response += f"📝 {task['title']}\n"
+            response += f"📊 Status: {task['status']}\n"
+            if task.get('due_at'):
+                response += f"⏰ Due: {task['due_at']}\n"
+            response += "\n"
+        
+        response += f"📋 **View all tasks:** https://docs.google.com/spreadsheets/d/{tasks_sheet_id}"
+        
+        return response
+        
+    except Exception as e:
+        return f"❌ **Error creating tasks from meeting minutes:** {str(e)}\n\nPlease ensure the document URL is correct and accessible."
 
 # Helper functions for the new tools
 def parse_due_date(date_str: str) -> datetime:

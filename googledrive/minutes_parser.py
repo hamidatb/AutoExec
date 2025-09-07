@@ -318,6 +318,10 @@ class MinutesParser:
             print(f"🔍 [DEBUG] Parsing markdown content, length: {len(markdown_content)}")
             print(f"🔍 [DEBUG] First 500 characters: {markdown_content[:500]}")
             
+            # Extract meeting date from document header
+            meeting_date = self._extract_meeting_date(markdown_content)
+            print(f"🔍 [DEBUG] Extracted meeting date: {meeting_date}")
+            
             # Split content into lines
             lines = markdown_content.split('\n')
             print(f"🔍 [DEBUG] Total lines: {len(lines)}")
@@ -362,11 +366,31 @@ class MinutesParser:
                         print(f"🔍 [DEBUG] Parsed {len(individual_items)} individual items")
                         
                         for item in individual_items:
+                            # Set deadline: use extracted deadline, or default to 2 weeks from meeting date
+                            deadline = item.get('deadline')
+                            if not deadline and meeting_date:
+                                from datetime import datetime, timedelta, timezone
+                                try:
+                                    # Parse meeting date and add 2 weeks
+                                    meeting_dt = datetime.strptime(meeting_date, "%b %d, %Y")
+                                    default_deadline = meeting_dt + timedelta(weeks=2)
+                                    # Set to end of day (23:59:00) in UTC
+                                    default_deadline = default_deadline.replace(hour=23, minute=59, second=0, microsecond=0, tzinfo=timezone.utc)
+                                    deadline = default_deadline.isoformat()
+                                except:
+                                    # Fallback to current date + 2 weeks
+                                    fallback_deadline = datetime.now(timezone.utc) + timedelta(weeks=2)
+                                    fallback_deadline = fallback_deadline.replace(hour=23, minute=59, second=0, microsecond=0)
+                                    deadline = fallback_deadline.isoformat()
+                            elif deadline:
+                                # Convert existing deadline to ISO format with timezone
+                                deadline = self._convert_deadline_to_iso(deadline)
+                            
                             action_items.append({
                                 'role': current_role,
                                 'person': current_person,
                                 'task': item['task'],
-                                'deadline': item.get('deadline'),
+                                'deadline': deadline,
                                 'completed': item['completed']
                             })
                     
@@ -401,11 +425,31 @@ class MinutesParser:
                             print(f"🔍 [DEBUG] Parsed {len(individual_items)} individual items")
                             
                             for item in individual_items:
+                                # Set deadline: use extracted deadline, or default to 2 weeks from meeting date
+                                deadline = item.get('deadline')
+                                if not deadline and meeting_date:
+                                    from datetime import datetime, timedelta, timezone
+                                    try:
+                                        # Parse meeting date and add 2 weeks
+                                        meeting_dt = datetime.strptime(meeting_date, "%b %d, %Y")
+                                        default_deadline = meeting_dt + timedelta(weeks=2)
+                                        # Set to end of day (23:59:00) in UTC
+                                        default_deadline = default_deadline.replace(hour=23, minute=59, second=0, microsecond=0, tzinfo=timezone.utc)
+                                        deadline = default_deadline.isoformat()
+                                    except:
+                                        # Fallback to current date + 2 weeks
+                                        fallback_deadline = datetime.now(timezone.utc) + timedelta(weeks=2)
+                                        fallback_deadline = fallback_deadline.replace(hour=23, minute=59, second=0, microsecond=0)
+                                        deadline = fallback_deadline.isoformat()
+                                elif deadline:
+                                    # Convert existing deadline to ISO format with timezone
+                                    deadline = self._convert_deadline_to_iso(deadline)
+                                
                                 action_items.append({
                                     'role': role,
                                     'person': team_member,
                                     'task': item['task'],
-                                    'deadline': item.get('deadline'),
+                                    'deadline': deadline,
                                     'completed': item['completed']
                                 })
                     
@@ -510,6 +554,159 @@ class MinutesParser:
             print(f"🔍 [DEBUG] Traceback: {traceback.format_exc()}")
             return []
     
+    def _extract_meeting_date(self, markdown_content: str) -> Optional[str]:
+        """
+        Extracts meeting date from the document header.
+        
+        Args:
+            markdown_content: The markdown content of the document
+            
+        Returns:
+            Meeting date string in format "Sep 7, 2025" or None if not found
+        """
+        try:
+            lines = markdown_content.split('\n')
+            
+            for line in lines:
+                # Look for meeting date patterns in headers
+                # Pattern: "Sep 7, 2025 - Online: Discord Exec Voice Channel"
+                date_patterns = [
+                    r'([A-Za-z]+\s+\d{1,2},?\s+\d{4})',  # "Sep 7, 2025" or "Sep 7 2025"
+                    r'([A-Za-z]+\s+\d{1,2})',  # "Sep 7" (assume current year)
+                ]
+                
+                for pattern in date_patterns:
+                    match = re.search(pattern, line)
+                    if match:
+                        date_str = match.group(1).strip()
+                        # Clean up the date string
+                        date_str = re.sub(r'\s+', ' ', date_str)  # Normalize spaces
+                        if ',' not in date_str and len(date_str.split()) == 2:
+                            # Add current year if not present
+                            from datetime import datetime
+                            current_year = datetime.now().year
+                            date_str = f"{date_str}, {current_year}"
+                        print(f"🔍 [DEBUG] Found meeting date: {date_str}")
+                        return date_str
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error extracting meeting date: {e}")
+            return None
+
+    def _convert_deadline_to_iso(self, deadline_text: str) -> str:
+        """
+        Converts deadline text to ISO 8601 format with timezone.
+        
+        Args:
+            deadline_text: The deadline text (e.g., "Sep 8", "Sep 8, 2025")
+            
+        Returns:
+            ISO 8601 formatted deadline string (e.g., "2025-09-08T23:59:00+00:00")
+        """
+        try:
+            from datetime import datetime, timezone
+            
+            # Clean up the deadline text
+            deadline_text = deadline_text.strip()
+            
+            # Try different date formats
+            date_formats = [
+                '%b %d, %Y',  # "Sep 8, 2025"
+                '%b %d',      # "Sep 8" (assume current year)
+                '%B %d, %Y',  # "September 8, 2025"
+                '%B %d',      # "September 8" (assume current year)
+                '%Y-%m-%d',   # "2025-09-08"
+                '%m/%d/%Y',   # "09/08/2025"
+                '%m/%d/%y',   # "09/08/25"
+            ]
+            
+            for fmt in date_formats:
+                try:
+                    if fmt in ['%b %d', '%B %d']:
+                        # Add current year
+                        parsed_date = datetime.strptime(deadline_text, fmt)
+                        current_year = datetime.now().year
+                        parsed_date = parsed_date.replace(year=current_year)
+                    else:
+                        parsed_date = datetime.strptime(deadline_text, fmt)
+                    
+                    # Set to end of day (23:59:00) in UTC
+                    parsed_date = parsed_date.replace(hour=23, minute=59, second=0, microsecond=0, tzinfo=timezone.utc)
+                    return parsed_date.isoformat()
+                    
+                except ValueError:
+                    continue
+            
+            # If we can't parse it, return current date + 2 weeks as fallback
+            fallback_date = datetime.now(timezone.utc).replace(hour=23, minute=59, second=0, microsecond=0)
+            return fallback_date.isoformat()
+            
+        except Exception as e:
+            print(f"Error converting deadline to ISO: {e}")
+            # Return current date + 2 weeks as fallback
+            from datetime import datetime, timezone, timedelta
+            fallback_date = datetime.now(timezone.utc) + timedelta(weeks=2)
+            fallback_date = fallback_date.replace(hour=23, minute=59, second=0, microsecond=0)
+            return fallback_date.isoformat()
+
+    def _convert_deadline_to_iso(self, deadline_text: str) -> str:
+        """
+        Converts deadline text to ISO 8601 format with timezone.
+        
+        Args:
+            deadline_text: The deadline text (e.g., "Sep 8", "Sep 8, 2025")
+            
+        Returns:
+            ISO 8601 formatted deadline string (e.g., "2025-09-08T23:59:00+00:00")
+        """
+        try:
+            from datetime import datetime, timezone
+            
+            # Clean up the deadline text
+            deadline_text = deadline_text.strip()
+            
+            # Try different date formats
+            date_formats = [
+                '%b %d, %Y',  # "Sep 8, 2025"
+                '%b %d',      # "Sep 8" (assume current year)
+                '%B %d, %Y',  # "September 8, 2025"
+                '%B %d',      # "September 8" (assume current year)
+                '%Y-%m-%d',   # "2025-09-08"
+                '%m/%d/%Y',   # "09/08/2025"
+                '%m/%d/%y',   # "09/08/25"
+            ]
+            
+            for fmt in date_formats:
+                try:
+                    if fmt in ['%b %d', '%B %d']:
+                        # Add current year
+                        parsed_date = datetime.strptime(deadline_text, fmt)
+                        current_year = datetime.now().year
+                        parsed_date = parsed_date.replace(year=current_year)
+                    else:
+                        parsed_date = datetime.strptime(deadline_text, fmt)
+                    
+                    # Set to end of day (23:59:00) in UTC
+                    parsed_date = parsed_date.replace(hour=23, minute=59, second=0, microsecond=0, tzinfo=timezone.utc)
+                    return parsed_date.isoformat()
+                    
+                except ValueError:
+                    continue
+            
+            # If we can't parse it, return current date + 2 weeks as fallback
+            fallback_date = datetime.now(timezone.utc).replace(hour=23, minute=59, second=0, microsecond=0)
+            return fallback_date.isoformat()
+            
+        except Exception as e:
+            print(f"Error converting deadline to ISO: {e}")
+            # Return current date + 2 weeks as fallback
+            from datetime import datetime, timezone, timedelta
+            fallback_date = datetime.now(timezone.utc) + timedelta(weeks=2)
+            fallback_date = fallback_date.replace(hour=23, minute=59, second=0, microsecond=0)
+            return fallback_date.isoformat()
+
     def _extract_deadline_from_task(self, task_text: str) -> Optional[str]:
         """
         Extracts deadline information from task text.
@@ -791,6 +988,7 @@ class MinutesParser:
                                  people_mapping: Dict[str, str]) -> List[Dict[str, Any]]:
         """
         Creates tasks in Google Sheets from parsed meeting minutes.
+        Maps emoji completion status to appropriate Google Sheets status.
         
         Args:
             doc_url: URL of the minutes document
@@ -812,27 +1010,41 @@ class MinutesParser:
             
             for item in action_items:
                 # Map team member name to Discord ID
-                discord_id = people_mapping.get(item['team_member'], '')
+                discord_id = people_mapping.get(item.get('person', ''), '')
+                
+                # Map completion status from emoji to Google Sheets status
+                completed = item.get('completed', False)
+                if completed:
+                    # If task is completed (✅), set status to 'completed'
+                    status = 'completed'
+                else:
+                    # If task is not completed (❌ or no emoji), set status to 'open'
+                    status = 'open'
+                
+                # Format Discord ID for proper mention format
+                formatted_discord_id = f"<@{discord_id}>" if discord_id else ""
                 
                 # Create task data
                 task_data = {
-                    'title': item['action_items'],
-                    'owner_discord_id': discord_id,
-                    'owner_name': item['team_member'],
-                    'due_at': item['parsed_deadline'],
-                    'status': 'open',
+                    'title': item.get('task', ''),
+                    'owner_discord_id': formatted_discord_id,
+                    'owner_name': item.get('person', ''),
+                    'due_at': item.get('deadline', ''),
+                    'status': status,
                     'priority': 'medium',
                     'source_doc': doc_url,
                     'channel_id': '',  # Will be set based on configuration
-                    'notes': f"Role: {item['role']}"
+                    'notes': f"Role: {item.get('role', '')} | From meeting minutes"
                 }
                 
                 # Add task to spreadsheet
-                if self.sheets_manager.add_task(tasks_spreadsheet_id, task_data):
+                success, task_id = self.sheets_manager.add_task(tasks_spreadsheet_id, task_data)
+                if success:
+                    task_data['task_id'] = task_id
                     created_tasks.append(task_data)
-                    print(f"Created task: {item['action_items']} for {item['team_member']}")
+                    print(f"Created task: {item.get('task', '')} for {item.get('person', '')} (Status: {status})")
                 else:
-                    print(f"Failed to create task: {item['action_items']}")
+                    print(f"Failed to create task: {item.get('task', '')}")
             
             return created_tasks
             
