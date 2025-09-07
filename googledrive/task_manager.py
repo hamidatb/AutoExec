@@ -172,6 +172,26 @@ class TaskManager:
             print(f"Error getting user tasks: {e}")
             return []
     
+    def search_tasks_by_title(self, title_query: str, tasks_spreadsheet_id: str, 
+                             status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Search for tasks by title (case-insensitive partial match).
+        
+        Args:
+            title_query: Title or partial title to search for
+            tasks_spreadsheet_id: ID of the tasks spreadsheet
+            status_filter: Optional status filter ('open', 'in_progress', 'done', 'blocked')
+            
+        Returns:
+            List of matching task dictionaries
+        """
+        try:
+            return self.sheets_manager.search_tasks_by_title(tasks_spreadsheet_id, title_query, status_filter)
+            
+        except Exception as e:
+            print(f"Error searching tasks by title: {e}")
+            return []
+    
     def get_overdue_tasks(self, tasks_spreadsheet_id: str) -> List[Dict[str, Any]]:
         """
         Gets all overdue tasks.
