@@ -161,8 +161,6 @@ class SetupManager:
                 return await self._handle_exec_member(user_id, message_content)
             elif current_step == 'folder_selection':
                 return await self._handle_folder_selection(user_id, message_content)
-            elif current_step == 'sheets_creation':
-                return await self._handle_sheets_creation(user_id, message_content)
             elif current_step == 'sheets_initialization':
                 return await self._handle_sheets_initialization(user_id, message_content)
             elif current_step == 'task_reminders_channel':
@@ -566,22 +564,17 @@ class SetupManager:
             # Both folders accessible, proceed directly to sheets initialization
             print(f"🔍 [SETUP] Both folders verified, proceeding to sheets initialization")
             
-            # Send initial message about folder verification and sheets creation start
-            initial_message = "✅ **Folders Selected and Verified Successfully!**\n\n"
-            initial_message += f"• Config Folder ID: `{config_folder_id}` ✅ Accessible\n"
-            initial_message += f"• Monthly Folder ID: `{monthly_folder_id}` ✅ Accessible\n"
-            initial_message += f"• Meeting Minutes Folder ID: `{meeting_minutes_folder_id}` ✅ Accessible\n\n"
-            initial_message += "**Step 7: Google Sheets Initialization**\n"
-            initial_message += "I'll now create the necessary Google Sheets for your club:\n\n"
-            initial_message += f"• **{self.setup_states[user_id]['club_name']} Task Manager Config** - Main configuration\n"
-            initial_message += f"• **{self.setup_states[user_id]['club_name']} Tasks - {datetime.now().strftime('%B %Y')}** - Task tracking\n"
-            initial_message += f"• **{self.setup_states[user_id]['club_name']} Meetings - {datetime.now().strftime('%B %Y')}** - Meeting management\n\n"
-            initial_message += "This may take a few moments..."
+            # Create sheets immediately and return the complete result
+            sheets_result = await self._handle_sheets_initialization(user_id, "")
             
-            # Move to sheets creation step and create sheets immediately
-            self.setup_states[user_id]['step'] = 'sheets_creation'
+            # Combine folder verification with sheets creation result
+            complete_message = "✅ **Folders Selected and Verified Successfully!**\n\n"
+            complete_message += f"• Config Folder ID: `{config_folder_id}` ✅ Accessible\n"
+            complete_message += f"• Monthly Folder ID: `{monthly_folder_id}` ✅ Accessible\n"
+            complete_message += f"• Meeting Minutes Folder ID: `{meeting_minutes_folder_id}` ✅ Accessible\n\n"
+            complete_message += sheets_result
             
-            return initial_message
+            return complete_message
             
         except Exception as e:
             print(f"❌ [SETUP ERROR] Error handling folder selection: {e}")
@@ -671,31 +664,6 @@ class SetupManager:
             print(f"Error extracting folder ID: {e}")
             return ""
     
-    async def _handle_sheets_creation(self, user_id: str, message_content: str) -> str:
-        """
-        Handles the automatic sheets creation step.
-        
-        Args:
-            user_id: Discord ID of the user
-            message_content: User's response (ignored, this step is automatic)
-            
-        Returns:
-            Sheets creation result message
-        """
-        try:
-            print(f"🔍 [SETUP] Starting automatic sheets creation for user {user_id}")
-            
-            # Add a small delay to make the process feel more natural
-            import asyncio
-            await asyncio.sleep(2)
-            
-            # Create the sheets
-            return await self._handle_sheets_initialization(user_id, "")
-            
-        except Exception as e:
-            print(f"❌ [SETUP ERROR] Error in sheets creation: {e}")
-            return f"❌ **Error creating sheets:** {str(e)}"
-
     async def _handle_sheets_initialization(self, user_id: str, message_content: str) -> str:
         """
         Handles Google Sheets initialization.
@@ -710,9 +678,7 @@ class SetupManager:
         try:
             print(f"🔍 [SETUP] Starting sheets initialization for user {user_id}")
             
-            # Add a small delay to make the process feel more natural
-            import asyncio
-            await asyncio.sleep(1)
+            # No delay needed since this is now part of the immediate flow
             
             current_state = self.setup_states[user_id]
             club_name = current_state['club_name']
