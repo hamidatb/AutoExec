@@ -99,6 +99,10 @@ def get_agent_executor_with_memory(guild_id: str = None, user_id: str = None):
         elif user_id:
             context_info = f"\n\nDM CONTEXT:\n- You are currently in a direct message with user ID: {user_id}\n- This user may be an admin of multiple servers\n- For general questions (like 'what was my last message', 'hello', 'what can you do'), respond based on this DM conversation only\n- If they ask about server-specific actions, ask them to clarify which server they're referring to\n- When they specify a server, use that server's context for all subsequent actions\n- Always maintain context within this DM conversation - don't reference messages from other servers or contexts"
         
+        # Get current year for date context
+        from datetime import datetime
+        current_year = datetime.now().year
+        
         prompt = ChatPromptTemplate.from_messages([
             ("system", f"""You are AutoExec, an AI-powered club executive task manager designed to help student organizations and clubs manage their meetings, tasks, and administrative work efficiently.
 
@@ -128,12 +132,27 @@ CORE CAPABILITIES:
 3. **Communication**: Send announcements, reminders, and notifications via Discord
 4. **Organization**: Help with club setup, member management, and administrative tasks
 
+CRITICAL DATE HANDLING:
+- The current year is {current_year} - ALWAYS use {current_year} when generating dates
+- NEVER use 2023 or any year before {current_year} when creating dates
+- When users say "tomorrow", "next week", "next Friday", etc., calculate dates relative to {current_year}
+- For meeting scheduling, use natural language like "tomorrow at 3pm" or "{current_year}-09-08 15:00" format
+- The date parsing system will automatically handle relative dates and convert them to the correct {current_year} dates
+
 IMPORTANT GUIDELINES:
 - You can respond directly to simple questions about AutoExec, creator info, and general capabilities
 - Use tools when you need to access specific data (meetings, tasks, setup status) or perform actions
 - For task creation, use create_task_with_timer to automatically set up reminders
-- For meeting scheduling, use create_meeting_with_timer to set up meeting reminders
-- When scheduling meetings, always ask for duration if not provided (e.g., "How long should the meeting be?")
+- For meeting scheduling, use start_meeting_scheduling to begin interactive conversation
+- When scheduling meetings, have a back-and-forth conversation to gather all details:
+  1. Start with start_meeting_scheduling when user wants to schedule a meeting
+  2. Continue the conversation by asking follow-up questions based on what's missing:
+     - If user provides start time, ask for end time
+     - If user provides both times, ask for location/meeting link
+     - If user provides location, ask about meeting minutes
+     - If all details collected, use create_meeting_with_timer
+  3. Always maintain context of what information you've already collected
+  4. Use conversation history to track the meeting scheduling progress
 - When users provide Discord mentions for unknown people, use that information to complete task creation
 - Be conversational and maintain context across multiple messages in the same conversation
 - If a user provides additional information (like Discord mentions), use it to complete previous requests
@@ -144,7 +163,16 @@ IMPORTANT GUIDELINES:
 - If a user asks "what did I ask you last" or similar questions, refer to the conversation history
 - Always consider the full conversation context when responding to any message
 - IMPORTANT: When asked about previous messages, ONLY refer to messages that are actually in the chat_history. Do not make up or hallucinate previous messages.
-- If the chat_history is empty or doesn't contain the information being asked about, say so clearly{context_info}
+- If the chat_history is empty or doesn't contain the information being asked about, say so clearly
+- MEETING SCHEDULING FLOW: When a user wants to schedule a meeting:
+  1. Use start_meeting_scheduling to begin the process
+  2. In subsequent messages, continue the conversation by asking for missing information:
+     - If you see a start time mentioned, ask "What time should the meeting end?"
+     - If you see both start and end times, ask "Where will the meeting be held? (location, online link, or Discord channel)"
+     - If you see location info, ask "Do you need meeting minutes? (provide existing link, create new, or not needed)"
+     - If all info is collected, use create_meeting_with_timer with the details
+  3. Always check the conversation history to see what information has already been provided
+  4. Don't just echo back what the user said - continue the conversation flow{context_info}
 
 EXAMPLES OF DIRECT RESPONSES (no tools needed):
 - "Who made you?" → Answer directly with creator information
@@ -154,11 +182,18 @@ EXAMPLES OF DIRECT RESPONSES (no tools needed):
 EXAMPLES OF WHEN TO USE TOOLS:
 - "What meetings do I have?" → Use send_meeting_schedule
 - "Create a task for John due tomorrow" → Use create_task_with_timer
-- "Schedule a meeting tomorrow at 3pm for 1 hour" → Use create_meeting_with_timer
+- "Schedule a meeting called Team Sync" → Use start_meeting_scheduling to begin interactive flow
 - "Oh I meant hamidat" (after trying to create task for John) → Use create_task_with_timer with corrected name
 - "What timers are active?" → Use list_active_timers
 - "Is she an exec?" → Use get_exec_info
-- "Who are the execs?" → Use get_exec_info"""),
+- "Who are the execs?" → Use get_exec_info
+
+MEETING SCHEDULING CONVERSATION EXAMPLES:
+- User: "Schedule a meeting tomorrow at 3pm" → Use start_meeting_scheduling, then ask "What time should it end?"
+- User: "Tomorrow at 5pm" (after being asked for start time) → Ask "What time should the meeting end?"
+- User: "6pm" (after being asked for end time) → Ask "Where will the meeting be held?"
+- User: "Discord voice channel" (after being asked for location) → Ask "Do you need meeting minutes?"
+- User: "Create new minutes" (after being asked about minutes) → Use create_meeting_with_timer with all details"""),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
@@ -176,6 +211,7 @@ EXAMPLES OF WHEN TO USE TOOLS:
             get_setup_info,
             get_meeting_sheet_info,
             get_task_sheet_info,
+            start_meeting_scheduling,
             get_channel_info,
             create_task_with_timer,
             create_meeting_with_timer,
@@ -1519,7 +1555,47 @@ The task and all timers have been added to your Google Sheets!"""
         return f"❌ Error creating task: {str(e)}"
 
 @tool
-def create_meeting_with_timer(meeting_title: str, start_time: str, duration: str = "1 hour", location: str = "", meeting_link: str = "") -> str:
+def start_meeting_scheduling(meeting_title: str) -> str:
+    """
+    Start the interactive meeting scheduling process.
+    This tool initiates a conversation to gather all meeting details.
+    
+    Args:
+        meeting_title (str): The title of the meeting
+        
+    Returns:
+        str: First question to ask the user about meeting details
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get the Discord context from the current message
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        
+        if not guild_id:
+            return "❌ No Discord context found. Please use this command in a Discord server."
+        
+        # Get the guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Store the meeting title in context for the conversation
+        # We'll use the conversation memory to track the meeting details being collected
+        
+        return f"📅 **Scheduling: {meeting_title}**\n\nGreat! Let's set up this meeting. I'll need a few details:\n\n**1. When should the meeting start?**\nPlease provide the start time (e.g., 'tomorrow at 3pm', 'September 15th at 2:30pm', 'next Friday 10am')"
+        
+    except Exception as e:
+        return f"❌ Error starting meeting scheduling: {str(e)}"
+
+@tool
+def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str, location: str = "", meeting_link: str = "", minutes_link: str = "", create_minutes: bool = False) -> str:
     """
     Create a new meeting and automatically set up timers for reminders.
     This tool parses natural language and creates both the meeting and associated timers.
@@ -1527,9 +1603,11 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, duration: str
     Args:
         meeting_title (str): The title of the meeting
         start_time (str): Start time in natural language (e.g., "September 9th at 2pm", "next Friday 3:30pm", "2025-01-15 14:30")
-        duration (str): Meeting duration in natural language (e.g., "1 hour", "2 hours", "30 minutes", "1.5 hours")
+        end_time (str): End time in natural language (e.g., "September 9th at 3pm", "next Friday 4:30pm", "2025-01-15 15:30")
         location (str): Meeting location or venue (optional)
         meeting_link (str): Meeting link for virtual meetings (optional)
+        minutes_link (str): Link to existing meeting minutes document (optional)
+        create_minutes (bool): Whether to create new meeting minutes document (default: False)
         
     Returns:
         str: Confirmation message with meeting details and timer information
@@ -1562,12 +1640,14 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, duration: str
         if not start_datetime:
             return f"❌ Could not parse start time: '{start_time}'. Please use formats like 'September 9th at 2pm', 'next Friday 3:30pm', or '2025-01-15 14:30'"
         
-        # Parse the duration and calculate end time
-        duration_minutes = parse_duration(duration)
-        if not duration_minutes:
-            return f"❌ Could not parse duration: '{duration}'. Please use formats like '1 hour', '2 hours', '30 minutes', or '1.5 hours'"
+        # Parse the end time
+        end_datetime = parse_meeting_time(end_time)
+        if not end_datetime:
+            return f"❌ Could not parse end time: '{end_time}'. Please use formats like 'September 9th at 3pm', 'next Friday 4:30pm', or '2025-01-15 15:30'"
         
-        end_datetime = start_datetime + timedelta(minutes=duration_minutes)
+        # Validate that end time is after start time
+        if end_datetime <= start_datetime:
+            return f"❌ End time must be after start time. Start: {start_datetime.strftime('%B %d, %Y at %I:%M %p')}, End: {end_datetime.strftime('%B %d, %Y at %I:%M %p')}"
         
         # Create meeting data
         meeting_data = {
@@ -1578,6 +1658,8 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, duration: str
             'end_at_local': end_datetime.strftime("%B %d, %Y at %I:%M %p"),
             'location': location,
             'meeting_link': meeting_link,
+            'minutes_link': minutes_link,
+            'create_minutes': create_minutes,
             'channel_id': channel_id,
             'created_by': user_id,
             'guild_id': guild_id,
@@ -1883,20 +1965,20 @@ def parse_due_date(date_str: str) -> datetime:
             days_ahead += 7
         return (now + timedelta(days=days_ahead)).replace(hour=17, minute=0, second=0, microsecond=0)
     
-    # Handle month day formats
+    # Handle month day formats (with ordinal suffixes like "6th", "3rd", "1st", "2nd")
     month_patterns = [
-        (r'september (\d{1,2})', 9),
-        (r'october (\d{1,2})', 10),
-        (r'november (\d{1,2})', 11),
-        (r'december (\d{1,2})', 12),
-        (r'january (\d{1,2})', 1),
-        (r'february (\d{1,2})', 2),
-        (r'march (\d{1,2})', 3),
-        (r'april (\d{1,2})', 4),
-        (r'may (\d{1,2})', 5),
-        (r'june (\d{1,2})', 6),
-        (r'july (\d{1,2})', 7),
-        (r'august (\d{1,2})', 8),
+        (r'september (\d{1,2})(?:st|nd|rd|th)?', 9),
+        (r'october (\d{1,2})(?:st|nd|rd|th)?', 10),
+        (r'november (\d{1,2})(?:st|nd|rd|th)?', 11),
+        (r'december (\d{1,2})(?:st|nd|rd|th)?', 12),
+        (r'january (\d{1,2})(?:st|nd|rd|th)?', 1),
+        (r'february (\d{1,2})(?:st|nd|rd|th)?', 2),
+        (r'march (\d{1,2})(?:st|nd|rd|th)?', 3),
+        (r'april (\d{1,2})(?:st|nd|rd|th)?', 4),
+        (r'may (\d{1,2})(?:st|nd|rd|th)?', 5),
+        (r'june (\d{1,2})(?:st|nd|rd|th)?', 6),
+        (r'july (\d{1,2})(?:st|nd|rd|th)?', 7),
+        (r'august (\d{1,2})(?:st|nd|rd|th)?', 8),
     ]
     
     for pattern, month in month_patterns:
@@ -1907,7 +1989,11 @@ def parse_due_date(date_str: str) -> datetime:
             # If the month/day has already passed this year, use next year
             if month < now.month or (month == now.month and day <= now.day):
                 year += 1
-            return datetime(year, month, day, 17, 0, 0, tzinfo=timezone.utc)
+            
+            print(f"🔍 [DEBUG] Month/day parsing: month={month}, day={day}, year={year}")
+            result = datetime(year, month, day, 17, 0, 0, tzinfo=timezone.utc)
+            print(f"🔍 [DEBUG] Month/day result: {result}")
+            return result
     
     return None
 
@@ -1954,26 +2040,38 @@ def parse_meeting_time(time_str: str) -> datetime:
     time_str = time_str.strip().lower()
     now = datetime.now(timezone.utc)
     
+    print(f"🔍 [DEBUG] parse_meeting_time called with: '{time_str}'")
+    print(f"🔍 [DEBUG] Current time: {now} (year: {now.year})")
+    
     # Handle ISO format
     try:
         if re.match(r'\d{4}-\d{2}-\d{2}', time_str):
             if ' ' in time_str and len(time_str.split()) >= 2:
-                return datetime.strptime(time_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                parsed_date = datetime.strptime(time_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                # Safety check: if the year is before current year, assume it should be current year
+                if parsed_date.year < now.year:
+                    print(f"🔍 [DEBUG] Correcting year from {parsed_date.year} to {now.year}")
+                    parsed_date = parsed_date.replace(year=now.year)
+                return parsed_date
     except:
         pass
     
     # Handle relative times
     if 'tomorrow' in time_str:
         base_date = now + timedelta(days=1)
+        print(f"🔍 [DEBUG] Tomorrow parsing: base_date={base_date}")
     elif 'next week' in time_str:
         base_date = now + timedelta(weeks=1)
+        print(f"🔍 [DEBUG] Next week parsing: base_date={base_date}")
     elif 'next friday' in time_str:
         days_ahead = 4 - now.weekday()
         if days_ahead <= 0:
             days_ahead += 7
         base_date = now + timedelta(days=days_ahead)
+        print(f"🔍 [DEBUG] Next friday parsing: base_date={base_date}")
     else:
         base_date = now
+        print(f"🔍 [DEBUG] Using current date: base_date={base_date}")
     
     # Extract time
     time_match = re.search(r'(\d{1,2}):?(\d{2})?\s*(am|pm)?', time_str)
@@ -1987,10 +2085,14 @@ def parse_meeting_time(time_str: str) -> datetime:
         elif period == 'am' and hour == 12:
             hour = 0
         
-        return base_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        result = base_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        print(f"🔍 [DEBUG] Final result with time: {result}")
+        return result
     
     # Default to 2 PM if no time specified
-    return base_date.replace(hour=14, minute=0, second=0, microsecond=0)
+    result = base_date.replace(hour=14, minute=0, second=0, microsecond=0)
+    print(f"🔍 [DEBUG] Final result (default time): {result}")
+    return result
 
 def find_user_by_name(name: str, guild_config: dict) -> str:
     """Find a user's Discord mention by their name."""
@@ -2205,7 +2307,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, list_active_timers, clear_all_timers, ask_for_discord_mention, get_exec_info]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, start_meeting_scheduling, list_active_timers, clear_all_timers, ask_for_discord_mention, get_exec_info]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
