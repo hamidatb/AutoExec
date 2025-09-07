@@ -149,27 +149,6 @@ AutoExec has proven its value in real student organization environments, deliver
 
 ## 🚀 Getting Started
 
-### **Adding AutoExec to Your Discord Server**
-
-1. **Invite the Bot**
-   - Use the OAuth2 URL Generator in Discord Developer Portal
-   - Select scopes: `bot`, `applications.commands`
-   - Select permissions: `Send Messages`, `Read Message History`, `Use Slash Commands`
-   - Use the generated URL to invite AutoExec to your server
-
-2. **Initial Setup**
-   - Start a private DM with the bot
-   - Run `/setup` command to begin configuration
-   - Follow the setup wizard to configure your organization
-
-3. **Configure Your Organization**
-   - Enter your organization name
-   - @mention the admin user
-   - Bot will automatically create Google Sheets for task management
-   - Set up Discord channels for reminders and notifications
-
-### **Using AutoExec**
-
 #### **Meeting Management (Natural Language)**
 ```bash
 # Just talk to the bot naturally!
@@ -189,10 +168,7 @@ AutoExec has proven its value in real student organization environments, deliver
 ```
 
 #### **Natural Language Responses**
-When the bot pings you about a task, simply reply:
-- **"done"** → Marks task as complete
-- **"not yet"** → Marks task as in progress
-- **"reschedule to 2025-09-15"** → Changes deadline
+When the bot pings you about a task, you can reply however you want - just use natural language!
 
 ## 💡 Why I Built This
 
@@ -205,14 +181,6 @@ I wanted to create something that:
 - **Leverages AI** to eliminate manual work
 - **Remains free** for student organizations
 
-## 🎓 Learning Outcomes
-
-Building AutoExec taught me:
-- **AI Agent Development**: How to effectively use LangChain and OpenAI APIs in production
-- **Cloud Architecture**: Designing scalable, reliable systems with proper monitoring
-- **API Design**: Creating intuitive interfaces that non-technical users can understand
-- **DevOps Practices**: Automated deployment, monitoring, and backup strategies
-- **User Experience**: Balancing powerful features with simplicity and ease of use
 
 ## 🤝 Contributing
 
