@@ -260,7 +260,8 @@ MEETING SCHEDULING CONVERSATION EXAMPLES:
             list_active_timers,
             clear_all_timers,
             ask_for_discord_mention,
-            get_exec_info
+            get_exec_info,
+            parse_meeting_minutes_action_items
         ]
         
         # Create agent with memory
@@ -2936,7 +2937,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, search_meetings_by_title, cancel_meeting, update_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, start_meeting_scheduling, list_active_timers, clear_all_timers, ask_for_discord_mention, get_exec_info, parse_meeting_minutes_action_items]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, search_meetings_by_title, cancel_meeting, update_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, start_meeting_scheduling, list_active_timers, clear_all_timers, ask_for_discord_mention, get_exec_info]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
