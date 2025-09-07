@@ -572,7 +572,12 @@ The `/serverconfig` command is a **slash command**. Please use the Discord slash
             'has a task', 'has a meeting', 'task due', 'meeting on', 'meeting at',
             'due on', 'due at', 'due tomorrow', 'due next', 'remind me',
             'set up', 'schedule a', 'plan a', 'organize', 'assign', 'assignment',
-            'deadline', 'reminder', 'notify', 'alert', 'timers', 'active'
+            'deadline', 'reminder', 'notify', 'alert', 'timers', 'active',
+            'i meant', 'actually', 'correction', 'change it to', 'make it',
+            'discord is', 'discord mention', 'their discord', 'his discord', 'her discord',
+            'what did', 'what was', 'what did i', 'what did you', 'what happened',
+            'did you', 'did i', 'were you', 'was i', 'last time', 'before',
+            'previous', 'earlier', 'just now', 'a moment ago', 'this'
         ]
         
         # Check for natural language patterns
