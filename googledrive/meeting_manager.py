@@ -137,7 +137,7 @@ class MeetingManager:
             print(f"Error updating meeting: {e}")
             return False
     
-    async def link_minutes(self, meeting_id: str, minutes_doc_url: str,
+    async def link_minutes(self, meeting_id: str, new_minutes_link: str,
                           meetings_spreadsheet_id: str, tasks_spreadsheet_id: str,
                           people_mapping: Dict[str, str]) -> bool:
         """
@@ -145,7 +145,7 @@ class MeetingManager:
         
         Args:
             meeting_id: ID of the meeting
-            minutes_doc_url: URL of the minutes document
+            new_minutes_link: URL of the minutes document
             meetings_spreadsheet_id: ID of the meetings spreadsheet
             tasks_spreadsheet_id: ID of the tasks spreadsheet
             people_mapping: Dictionary mapping names to Discord IDs
@@ -156,7 +156,7 @@ class MeetingManager:
         try:
             # Update meeting with minutes URL
             success = self.sheets_manager.update_meeting_minutes(
-                meetings_spreadsheet_id, meeting_id, minutes_doc_url
+                meetings_spreadsheet_id, meeting_id, new_minutes_link
             )
             
             if not success:
@@ -165,7 +165,7 @@ class MeetingManager:
             
             # Process minutes and create tasks
             created_tasks = await self.minutes_parser.create_tasks_from_minutes(
-                minutes_doc_url, tasks_spreadsheet_id, people_mapping
+                new_minutes_link, tasks_spreadsheet_id, people_mapping
             )
             
             if created_tasks:
@@ -379,8 +379,8 @@ class MeetingManager:
                         # T0 reminder
                         message = f"@everyone 🚀 **Meeting Starting Now** 🚀\n"
                         message += f"**{meeting['title']}**\n"
-                        if meeting.get('minutes_doc_url'):
-                            message += f"Minutes: {meeting['minutes_doc_url']}"
+                        if meeting.get('new_minutes_link'):
+                            message += f"Minutes: {meeting['new_minutes_link']}"
                         else:
                             message += "No minutes document linked yet"
                         
@@ -407,7 +407,7 @@ class MeetingManager:
             await asyncio.sleep(delay_minutes * 60)  # Convert to seconds
             
             # Parse minutes if available
-            if meeting.get('minutes_doc_url'):
+            if meeting.get('new_minutes_link'):
                 print(f"Parsing minutes for meeting: {meeting['title']}")
                 # This would trigger minutes parsing and task creation
                 
