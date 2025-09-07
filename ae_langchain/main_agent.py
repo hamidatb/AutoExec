@@ -29,8 +29,11 @@ _pending_announcements = []
 # Global variable for Discord context
 _discord_context = {}
 
-# Global agent executor with memory for conversation continuity
-_agent_executor_with_memory = None
+# Server-specific agent executors with isolated memory
+_server_agent_executors = {}
+
+# DM-specific agent executors for users who are admin of multiple servers
+_dm_agent_executors = {}
 
 def set_discord_context(guild_id: str, channel_id: str, user_id: str):
     """Set the Discord context for LangChain tools."""
@@ -45,15 +48,31 @@ def get_discord_context():
     """Get the current Discord context."""
     return _discord_context
 
-def get_agent_executor_with_memory():
-    """Get or create the agent executor with conversation memory."""
-    global _agent_executor_with_memory
+def get_agent_executor_with_memory(guild_id: str = None, user_id: str = None):
+    """Get or create a server-specific agent executor with isolated conversation memory."""
+    global _server_agent_executors, _dm_agent_executors
     
-    if _agent_executor_with_memory is None:
+    # Determine the context key for this conversation
+    if guild_id:
+        # Server context - use guild_id as the key
+        context_key = f"guild_{guild_id}"
+        executor_dict = _server_agent_executors
+    elif user_id:
+        # DM context - use user_id as the key
+        context_key = f"user_{user_id}"
+        executor_dict = _dm_agent_executors
+    else:
+        # Fallback to a default context (shouldn't happen in normal usage)
+        context_key = "default"
+        executor_dict = _server_agent_executors
+    
+    # Check if we already have an executor for this context
+    if context_key not in executor_dict:
+        print(f"🔧 Creating new agent executor for context: {context_key}")
         from langchain.memory import ConversationBufferMemory
         from langchain.agents import AgentExecutor
         
-        # Create memory
+        # Create memory for this specific context
         memory = ConversationBufferMemory(
             memory_key="chat_history",
             return_messages=True
@@ -71,8 +90,16 @@ def get_agent_executor_with_memory():
         # Create prompt with memory
         from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
         
+        # Add context-specific information to the system prompt
+        context_info = ""
+        if guild_id:
+            server_info = get_server_context_info(guild_id)
+            context_info = f"\n\nSERVER CONTEXT:\n- You are currently operating in: {server_info}\n- Server/Guild ID: {guild_id}\n- All your responses and actions should be specific to this server's configuration\n- Do not reference or use information from other servers\n- Always consider this server's specific setup, channels, and club information"
+        elif user_id:
+            context_info = f"\n\nDM CONTEXT:\n- You are currently in a direct message with user ID: {user_id}\n- This user may be an admin of multiple servers\n- For general questions (like 'what was my last message', 'hello', 'what can you do'), respond based on this DM conversation only\n- If they ask about server-specific actions, ask them to clarify which server they're referring to\n- When they specify a server, use that server's context for all subsequent actions\n- Always maintain context within this DM conversation - don't reference messages from other servers or contexts"
+        
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are AutoExec, an AI-powered club executive task manager designed to help student organizations and clubs manage their meetings, tasks, and administrative work efficiently.
+            ("system", f"""You are AutoExec, an AI-powered club executive task manager designed to help student organizations and clubs manage their meetings, tasks, and administrative work efficiently.
 
 ABOUT AUTOEXEC:
 - You are a specialized AI assistant for club executives and student organizations
@@ -113,6 +140,8 @@ IMPORTANT GUIDELINES:
 - Look at the chat_history to understand what the user was trying to do originally
 - If a user asks "what did I ask you last" or similar questions, refer to the conversation history
 - Always consider the full conversation context when responding to any message
+- IMPORTANT: When asked about previous messages, ONLY refer to messages that are actually in the chat_history. Do not make up or hallucinate previous messages.
+- If the chat_history is empty or doesn't contain the information being asked about, say so clearly{context_info}
 
 EXAMPLES OF DIRECT RESPONSES (no tools needed):
 - "Who made you?" → Answer directly with creator information
@@ -155,7 +184,7 @@ EXAMPLES OF WHEN TO USE TOOLS:
         from langchain.agents import create_openai_functions_agent
         agent = create_openai_functions_agent(llm, safe_tools, prompt)
         
-        _agent_executor_with_memory = AgentExecutor(
+        executor_dict[context_key] = AgentExecutor(
             agent=agent,
             tools=safe_tools,
             memory=memory,
@@ -163,14 +192,156 @@ EXAMPLES OF WHEN TO USE TOOLS:
             handle_parsing_errors=True,
             max_iterations=3
         )
+        print(f"✅ Created agent executor for context: {context_key}")
+    else:
+        print(f"♻️ Reusing existing agent executor for context: {context_key}")
     
-    return _agent_executor_with_memory
+    return executor_dict[context_key]
 
-def clear_conversation_memory():
-    """Clear the conversation memory to start fresh."""
-    global _agent_executor_with_memory
-    _agent_executor_with_memory = None
-    print("🧹 Conversation memory cleared")
+def clear_conversation_memory(guild_id: str = None, user_id: str = None):
+    """Clear the conversation memory for a specific server or user."""
+    global _server_agent_executors, _dm_agent_executors
+    
+    if guild_id:
+        context_key = f"guild_{guild_id}"
+        if context_key in _server_agent_executors:
+            del _server_agent_executors[context_key]
+            print(f"🧹 Conversation memory cleared for guild {guild_id}")
+    elif user_id:
+        context_key = f"user_{user_id}"
+        if context_key in _dm_agent_executors:
+            del _dm_agent_executors[context_key]
+            print(f"🧹 Conversation memory cleared for user {user_id}")
+    else:
+        # Clear all memories (use with caution)
+        _server_agent_executors.clear()
+        _dm_agent_executors.clear()
+        print("🧹 All conversation memories cleared")
+
+def clear_all_conversation_memories():
+    """Clear all conversation memories across all servers and users."""
+    global _server_agent_executors, _dm_agent_executors
+    _server_agent_executors.clear()
+    _dm_agent_executors.clear()
+    print("🧹 All conversation memories cleared")
+
+def get_memory_stats():
+    """Get statistics about current memory usage."""
+    global _server_agent_executors, _dm_agent_executors
+    return {
+        'server_executors': len(_server_agent_executors),
+        'dm_executors': len(_dm_agent_executors),
+        'server_keys': list(_server_agent_executors.keys()),
+        'dm_keys': list(_dm_agent_executors.keys())
+    }
+
+def get_user_admin_servers(user_id: str):
+    """Get all servers where the user is an admin."""
+    try:
+        from discordbot.discord_client import BOT_INSTANCE
+        
+        if BOT_INSTANCE is None:
+            return []
+        
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        user_guilds = []
+        
+        for guild_id, config in all_guilds.items():
+            if config.get('admin_user_id') == user_id and config.get('setup_complete', False):
+                user_guilds.append({
+                    'guild_id': guild_id,
+                    'guild_name': config.get('guild_name', 'Unknown Server'),
+                    'club_name': config.get('club_name', 'Unknown Club')
+                })
+        
+        return user_guilds
+    except Exception as e:
+        print(f"Error getting user admin servers: {e}")
+        return []
+
+def handle_dm_server_selection(user_id: str, query: str):
+    """Handle DM queries when user is admin of multiple servers."""
+    user_guilds = get_user_admin_servers(user_id)
+    
+    if len(user_guilds) == 0:
+        return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+    elif len(user_guilds) == 1:
+        # User is admin of only one server, use that context
+        guild_id = user_guilds[0]['guild_id']
+        return run_agent_text_only(query, guild_id=guild_id, user_id=None)
+    else:
+        # User is admin of multiple servers, ask for clarification
+        guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+        
+        return f"""❓ **Multiple Servers Detected**
+
+You are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:
+
+{guild_list}
+
+**How to specify:**
+• Mention the club name: "For [Club Name], create a task..."
+• Mention the server name: "In [Server Name], schedule a meeting..."
+• Or be more specific: "Create a task in the Computer Science Club server"
+
+**Example:** "For Computer Science Club, create a task for John due tomorrow"
+
+Which server would you like me to help you with?"""
+
+def parse_server_context_from_query(user_id: str, query: str):
+    """Parse server context from a user query in DMs."""
+    user_guilds = get_user_admin_servers(user_id)
+    
+    if len(user_guilds) <= 1:
+        return None, query  # No need to parse if user has 0 or 1 servers
+    
+    query_lower = query.lower()
+    
+    # Look for server/club name mentions in the query
+    for guild in user_guilds:
+        club_name = guild['club_name'].lower()
+        guild_name = guild['guild_name'].lower()
+        
+        # Check if the club name or guild name is mentioned in the query
+        if (club_name in query_lower or 
+            guild_name in query_lower or
+            any(word in query_lower for word in club_name.split()) or
+            any(word in query_lower for word in guild_name.split())):
+            
+            # Remove the server context from the query for cleaner processing
+            cleaned_query = query
+            for phrase in [club_name, guild_name] + club_name.split() + guild_name.split():
+                if phrase and len(phrase) > 2:  # Only replace meaningful words
+                    cleaned_query = cleaned_query.replace(phrase, "").replace(phrase.title(), "").replace(phrase.upper(), "")
+            
+            # Clean up extra spaces and common prefixes
+            cleaned_query = cleaned_query.replace("for ", "").replace("in ", "").replace("the ", "")
+            cleaned_query = " ".join(cleaned_query.split())  # Remove extra spaces
+            
+            return guild['guild_id'], cleaned_query
+    
+    return None, query  # No server context found
+
+def get_server_context_info(guild_id: str):
+    """Get server context information for display purposes."""
+    try:
+        from discordbot.discord_client import BOT_INSTANCE
+        
+        if BOT_INSTANCE is None:
+            return "Unknown Server"
+        
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if guild_config:
+            club_name = guild_config.get('club_name', 'Unknown Club')
+            guild_name = guild_config.get('guild_name', 'Unknown Server')
+            return f"{club_name} ({guild_name})"
+        
+        return f"Server {guild_id}"
+    except Exception as e:
+        print(f"Error getting server context info: {e}")
+        return f"Server {guild_id}"
 
 @tool 
 def start_discord_bot():
@@ -301,9 +472,9 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
     
     try:
         # Get guild configurations from the setup manager instead of bot.club_configs
-        print(f"🔍 [DEBUG] Getting guild configurations from setup manager")
+        # print(f"🔍 [DEBUG] Getting guild configurations from setup manager")
         all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
-        print(f"🔍 [DEBUG] Found {len(all_guilds) if all_guilds else 0} guild configurations")
+        # print(f"🔍 [DEBUG] Found {len(all_guilds) if all_guilds else 0} guild configurations")
         
         if not all_guilds:
             meetings_info += "❌ **No club configuration found.**\n\n"
@@ -325,7 +496,7 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
                     meetings_sheet_id = guild_config['meetings_sheet_id']
                 
                 if meetings_sheet_id:
-                    print(f"🔍 [DEBUG] Getting meetings from sheet ID: {meetings_sheet_id}")
+                    # print(f"🔍 [DEBUG] Getting meetings from sheet ID: {meetings_sheet_id}")
                     
                     try:
                         # Get upcoming meetings using the meeting manager
@@ -334,7 +505,7 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
                             limit=amount_of_meetings_to_return
                         )
                         
-                        print(f"🔍 [DEBUG] Found {len(upcoming_meetings) if upcoming_meetings else 0} upcoming meetings")
+                        # print(f"🔍 [DEBUG] Found {len(upcoming_meetings) if upcoming_meetings else 0} upcoming meetings")
                         
                         if not upcoming_meetings:
                             meetings_info += "📅 **No upcoming meetings scheduled.**\n\n"
@@ -2041,99 +2212,77 @@ def run_agent(query: str):
     return response
 
 
-def run_agent_text_only(query: str):
+def run_agent_text_only(query: str, guild_id: str = None, user_id: str = None):
     """
     Runs the LangChain agent in text-only mode (no Discord sending).
     Use this when calling from the Discord bot to avoid event loop issues.
 
     Args:
         query (str): The input query.
+        guild_id (str): The Discord guild/server ID for server-specific context.
+        user_id (str): The Discord user ID for DM-specific context.
 
     Returns:
         str: The text response from the agent.
     """
-    # Create a modified prompt that doesn't require Discord sending
-    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+    # Handle DM context with multiple servers
+    if user_id and not guild_id:
+        # Check if this is a general DM question that doesn't require server context
+        query_lower = query.lower()
+        general_dm_questions = [
+            'what was my last message',
+            'what did i ask you',
+            'what did i say',
+            'what was my previous message',
+            'what did i tell you',
+            'what was my last question',
+            'what did i ask',
+            'what did we talk about',
+            'what was our conversation',
+            'what did we discuss',
+            'hello',
+            'hi',
+            'hey',
+            'what can you do',
+            'who made you',
+            'who created you',
+            'help',
+            'what are you',
+            'how are you',
+            'thanks',
+            'thank you',
+            'goodbye',
+            'bye'
+        ]
+        
+        is_general_question = any(phrase in query_lower for phrase in general_dm_questions)
+        
+        if is_general_question:
+            # Use DM context directly for general questions
+            print(f"🔍 Using DM context for general question: {query}")
+        else:
+            # Try to parse server context from the query for server-specific actions
+            parsed_guild_id, cleaned_query = parse_server_context_from_query(user_id, query)
+            if parsed_guild_id:
+                # Use the parsed server context
+                guild_id = parsed_guild_id
+                query = cleaned_query
+                print(f"🔍 Parsed server context: guild_id={guild_id}, cleaned_query='{query}'")
+            else:
+                # No server context found, handle multiple server scenario
+                return handle_dm_server_selection(user_id, query)
     
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are AutoExec, an AI-powered club executive task manager designed to help student organizations and clubs manage their meetings, tasks, and administrative work efficiently.
-
-ABOUT AUTOEXEC:
-- You are a specialized AI assistant for club executives and student organizations
-- You help with meeting management, task tracking, scheduling, and organizational communication
-- You integrate with Google Sheets for data management and Discord for communication
-- You can create meeting minutes, schedule meetings, send reminders, and manage club activities
-
-CREATOR INFORMATION:
-- Created by Hamidat Bello 👋
-- 4th Year Computing Science Specialization student at the University of Alberta
-- Passionate about building impactful software and harnessing technology to spark positive social change
-- Portfolio: https://hamidatb.github.io
-- GitHub: https://github.com/hamidatb
-
-PERSONALITY & COMMUNICATION:
-- Be professional yet friendly and approachable
-- Use clear, concise language appropriate for student leaders
-- Be proactive in suggesting helpful actions
-- Show enthusiasm for helping with club management tasks
-- Use emojis appropriately to make responses engaging but not overwhelming
-- Provide personalized responses based on current context
-
-RESPONSE GUIDELINES:
-- You can respond directly to questions about AutoExec, club management, meetings, tasks, and scheduling
-- Use tools when you need to access specific data (meetings, setup status, etc.) or perform actions
-- For general questions about capabilities, you can answer directly without tools
-- Always stay within AutoExec's scope: club management, meetings, tasks, scheduling, and organizational communication
-- Be helpful and suggest relevant tools when appropriate, but don't force tool usage for simple questions
-- If asked about topics outside AutoExec's scope, politely redirect to AutoExec's capabilities
-
-AVAILABLE TOOLS (use when you need to access data or perform actions):
-- create_meeting_mins: Use when users ask about creating meeting minutes, want to create minutes, or mention "meeting minutes"
-- send_meeting_schedule: Use when users ask about upcoming meetings, meeting schedules, "what meetings do I have", or "show me meetings"
-- get_meeting_reminder_info: Use when users ask about meeting reminders, "send a reminder", or "remind me about meetings"
-- schedule_meeting: Use when users want to SCHEDULE/CREATE a new meeting, "schedule a meeting", "set up a meeting", or "create a meeting"
-- send_announcement: Use when users want to SEND AN ANNOUNCEMENT, "send out an announcement", "announce something", or "send a message to everyone". Supports types: "meeting", "task", "general", "escalation"
-- get_club_setup_info: Use when users ask about setup status, "what club are you set up for", or "are you configured"
-- check_guild_setup_status: Use when users ask about setup status in a specific server or "are you set up for this group"
-
-EXAMPLES:
-- "What club are you set up for?" → Use get_club_setup_info to get current setup status
-- "Are you set up yet?" → Use get_club_setup_info to check configuration
-- "Are you set up for this group?" → Use check_guild_setup_status for server-specific info
-- "Can you send a reminder for a meeting in 2 mins" → Use get_meeting_reminder_info
-- "What meetings do I have today?" → Use send_meeting_schedule to get upcoming meetings
-- "Create meeting minutes" → Use create_meeting_mins to generate minutes
-- "Schedule a meeting for tomorrow at 2pm" → Use schedule_meeting to add to calendar
-- "Set up a meeting for next week" → Use schedule_meeting to create new meeting
-- "Send out an announcement about the meeting tomorrow" → Use send_announcement
-- "Announce that we're having a team meeting" → Use send_announcement
-- "Hello", "What can you do?", "Help me" → You can respond directly about AutoExec's capabilities
-- "Who made you?", "Who created AutoExec?" → You can respond directly with creator information
-
-Remember: Use tools when you need specific data or to perform actions. You can respond directly to general questions about AutoExec's capabilities and creator information."""),
-        ("user", "{input}"),
-        MessagesPlaceholder("agent_scratchpad")
-    ])
-    
-    # Get the agent executor with memory for conversation continuity
-    agent_executor = get_agent_executor_with_memory()
+    # Get the appropriate agent executor with server-specific memory
+    agent_executor = get_agent_executor_with_memory(guild_id=guild_id, user_id=user_id)
     
     try:
-        print(f"🔍 Invoking agent with query: {query}")
-        print(f"🔧 Available tools: {[tool.name for tool in agent_executor.tools]}")
-        
         response = agent_executor.invoke({"input": f"{query}"})
-        print(f"🔍 Agent response: {response}")
         
-        # Check if the agent actually used any tools
-        if hasattr(response, 'intermediate_steps') and response.intermediate_steps:
-            print(f"🔍 Agent used tools: {response.intermediate_steps}")
-        else:
-            print("⚠️ Agent didn't use any tools - this might be the problem!")
-            
-        # Check the response structure
-        print(f"🔍 Response keys: {response.keys() if hasattr(response, 'keys') else 'No keys'}")
-        print(f"🔍 Response type: {type(response)}")
+        # Manually save the conversation to memory
+        agent_executor.memory.save_context(
+            {"input": query},
+            {"output": response.get("output", "I'm sorry, I couldn't process that request.")}
+        )
         
         return response.get("output", "I'm sorry, I couldn't process that request.")
     except Exception as e:

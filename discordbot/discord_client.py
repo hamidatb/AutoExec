@@ -317,7 +317,10 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             def run_agent_sync(query):
                 from ae_langchain.main_agent import run_agent_text_only
                 try:
-                    return run_agent_text_only(query)
+                    # Pass the guild context for server-specific memory
+                    guild_id = str(message.guild.id) if message.guild else None
+                    user_id = str(message.author.id)
+                    return run_agent_text_only(query, guild_id=guild_id, user_id=user_id)
                 except Exception as e:
                     return f"I'm sorry, I encountered an error: {str(e)}"
             
@@ -439,7 +442,10 @@ The `/serverconfig` command is a **slash command**. Please use the Discord slash
             def run_agent_sync(query):
                 from ae_langchain.main_agent import run_agent_text_only
                 try:
-                    return run_agent_text_only(query)
+                    # Pass the guild context for server-specific memory
+                    guild_id = str(message.guild.id) if message.guild else None
+                    user_id = str(message.author.id)
+                    return run_agent_text_only(query, guild_id=guild_id, user_id=user_id)
                 except Exception as e:
                     return f"I'm sorry, I encountered an error: {str(e)}"
             
@@ -520,7 +526,10 @@ The `/serverconfig` command is a **slash command**. Please use the Discord slash
             def run_agent_sync(query):
                 from ae_langchain.main_agent import run_agent_text_only
                 try:
-                    return run_agent_text_only(query)
+                    # Pass the guild context for server-specific memory
+                    guild_id = str(message.guild.id) if message.guild else None
+                    user_id = str(message.author.id)
+                    return run_agent_text_only(query, guild_id=guild_id, user_id=user_id)
                 except Exception as e:
                     return f"I'm sorry, I encountered an error: {str(e)}"
             
