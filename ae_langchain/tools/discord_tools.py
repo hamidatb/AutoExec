@@ -7,8 +7,8 @@ from langchain.tools import tool
 from .context_manager import get_discord_context
 from .utility_tools import find_user_by_name
 
-# Global variable for pending announcements
-_pending_announcements = []
+# Import global variables
+from ..globals import _pending_announcements
 
 
 @tool 
@@ -86,7 +86,6 @@ def send_output_to_discord(messageToSend: str) -> str:
     # and returning a response that indicates the message should be sent
     
     # Store the message in a global variable that works across threads
-    global _pending_announcements
     
     _pending_announcements.append({
         'message': str(messageToSend),
@@ -219,7 +218,6 @@ Please clarify who you'd like to send the reminder to."""
                 return f"❌ No config spreadsheet found. Please run `/setup` first."
         else:
             # Send immediately
-            global _pending_announcements
             announcement_data = {
                 'message': formatted_message,
                 'channel_id': int(task_reminders_channel_id),
@@ -303,7 +301,6 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
                 # and returning a response that indicates the message should be sent
                 
                 # Store the message in a global variable that works across threads
-                global _pending_announcements
                 print(f"🔍 [send_announcement] Using global pending_announcements list")
                 
                 announcement_data = {
@@ -328,11 +325,9 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
 
 def get_pending_announcements():
     """Get the list of pending announcements."""
-    global _pending_announcements
     return _pending_announcements
 
 
 def clear_pending_announcements():
     """Clear the list of pending announcements."""
-    global _pending_announcements
     _pending_announcements.clear()

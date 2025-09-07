@@ -284,7 +284,7 @@ def parse_server_context_from_query(user_id: str, query: str):
     user_guilds = get_user_admin_servers(user_id)
     
     if len(user_guilds) <= 1:
-        return None
+        return None, query  # No need to parse if user has 0 or 1 servers
     
     # Look for server mentions in the query
     query_lower = query.lower()
@@ -299,11 +299,11 @@ def parse_server_context_from_query(user_id: str, query: str):
             f"server {guild_id}" in query_lower or
             f"guild {guild_id}" in query_lower):
             
-            # Set the context and return the guild config
+            # Set the context and return the guild_id and cleaned query
             set_discord_context(guild_id, "", user_id)
-            return guild['config']
+            return guild_id, query
     
-    return None
+    return None, query
 
 
 def get_server_context_info(guild_id: str):

@@ -17,6 +17,9 @@ Config().validate()
 if not os.getenv("OPENAI_API_KEY"):
     raise EnvironmentError("API Key not found. Check your .env file!")
 
+# Import global variables
+from .globals import _pending_announcements, _discord_context, _server_agent_executors, _dm_agent_executors
+
 # Import all tools from the modularized structure
 from .tools import (
     # Context management
@@ -98,6 +101,96 @@ async def run_agent(query: str):
             if server_context:
                 # Found server context, use it
                 pass
+            else:
+                # No server context found, handle multiple server scenario
+                return handle_dm_server_selection(user_id, query)
+    
+    # Get the appropriate agent executor with server-specific memory
+    agent_executor = get_agent_executor_with_memory(guild_id=guild_id, user_id=user_id)
+    
+    try:
+        response = agent_executor.invoke({"input": f"{query}"})
+        
+        # Manually save the conversation to memory
+        agent_executor.memory.save_context(
+            {"input": query},
+            {"output": response.get("output", "I'm sorry, I couldn't process that request.")}
+        )
+        
+        return response.get("output", "I'm sorry, I couldn't process that request.")
+    except Exception as e:
+        print(f"❌ Error in agent execution: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"I'm sorry, I encountered an error: {str(e)}"
+
+
+def run_agent_text_only(query: str, guild_id: str = None, user_id: str = None):
+    """
+    Runs the LangChain agent in text-only mode (no Discord sending).
+    Use this when calling from the Discord bot to avoid event loop issues.
+
+    Args:
+        query (str): The input query.
+        guild_id (str): The Discord guild/server ID for server-specific context.
+        user_id (str): The Discord user ID for DM-specific context.
+
+    Returns:
+        str: The text response from the agent.
+    """
+    # If we have a guild_id, set the Discord context for tools to use
+    if guild_id:
+        # Set a minimal Discord context for tools that need it
+        set_discord_context(
+            guild_id=guild_id,
+            channel_id="",  # We don't have a specific channel in DM context
+            user_id=user_id or ""
+        )
+        print(f"🔍 [run_agent_text_only] Set Discord context for guild_id: {guild_id}")
+    
+    # Handle DM context with multiple servers
+    if user_id and not guild_id:
+        # Check if this is a general DM question that doesn't require server context
+        query_lower = query.lower()
+        general_dm_questions = [
+            'what was my last message',
+            'what did i ask you',
+            'what did i say',
+            'what was my previous message',
+            'what did i tell you',
+            'what was my last question',
+            'what did i ask',
+            'what did we talk about',
+            'what was our conversation',
+            'what did we discuss',
+            'hello',
+            'hi',
+            'hey',
+            'what can you do',
+            'who made you',
+            'who created you',
+            'help',
+            'what are you',
+            'how are you',
+            'thanks',
+            'thank you',
+            'goodbye',
+            'bye'
+        ]
+        
+        is_general_question = any(phrase in query_lower for phrase in general_dm_questions)
+        
+        if is_general_question:
+            # Use DM context directly for general questions
+            print(f"🔍 Using DM context for general question: {query}")
+        else:
+            # Try to parse server context from the query for server-specific actions
+            parsed_guild_id, cleaned_query = parse_server_context_from_query(user_id, query)
+            if parsed_guild_id:
+                # Use the parsed server context
+                guild_id = parsed_guild_id
+                query = cleaned_query
+                print(f"🔍 Parsed server context: guild_id={guild_id}, cleaned_query='{query}'")
             else:
                 # No server context found, handle multiple server scenario
                 return handle_dm_server_selection(user_id, query)
