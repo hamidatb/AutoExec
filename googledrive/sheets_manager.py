@@ -444,6 +444,43 @@ class ClubSheetsManager:
             print(f"Error getting all tasks: {error}")
             return []
     
+    def search_tasks_by_title(self, spreadsheet_id: str, title_query: str, 
+                             status_filter: str = None) -> List[Dict[str, Any]]:
+        """
+        Search for tasks by title (case-insensitive partial match).
+        
+        Args:
+            spreadsheet_id: ID of the tasks spreadsheet
+            title_query: Title or partial title to search for
+            status_filter: Optional status filter ('open', 'in_progress', 'done', 'blocked')
+            
+        Returns:
+            List of matching task dictionaries
+        """
+        try:
+            all_tasks = self.get_all_tasks(spreadsheet_id)
+            matching_tasks = []
+            
+            title_query_lower = title_query.lower().strip()
+            
+            for task in all_tasks:
+                task_title = task.get('title', '').lower()
+                
+                # Check if title matches (partial match)
+                if title_query_lower in task_title:
+                    # Apply status filter if provided
+                    if status_filter is None or task.get('status') == status_filter:
+                        matching_tasks.append(task)
+            
+            # Sort by due date (most urgent first)
+            matching_tasks.sort(key=lambda x: x.get('due_at', ''), reverse=False)
+            
+            return matching_tasks
+            
+        except Exception as e:
+            print(f"Error searching tasks by title: {e}")
+            return []
+    
     def get_all_meetings(self, spreadsheet_id: str) -> List[Dict[str, Any]]:
         """
         Gets all meetings from the meetings sheet.
