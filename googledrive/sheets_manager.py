@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from .drive_auth import get_credentials
-from config import Config
+from config.config import Config
 
 class ClubSheetsManager:
     """

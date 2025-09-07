@@ -3,7 +3,7 @@ get_mm_json.py
 
 This gets the JSON format of the most recent meeting minutes that match the specified template.
 """
-from config import Config
+from config.config import Config
 import os
 import json
 from dotenv import load_dotenv

@@ -5,7 +5,7 @@ from datetime import datetime
 
 from .drive_auth import get_credentials
 
-from config import Config
+from config.config import Config
 
 FOLDER_ID = Config.DRIVE_FOLDER_ID 
 EVENTS_SHEET_FILENAME = Config.EVENTS_SHEET_FILENAME

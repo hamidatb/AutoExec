@@ -14,7 +14,7 @@ from langchain_openai import ChatOpenAI
 
 from googledrive.file_handler import create_meeting_mins_for_today
 
-from config import Config
+from config.config import Config
 import datetime
 
 # Load environment variables
@@ -576,7 +576,7 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
         if not all_guilds:
             meetings_info += "❌ **No club configuration found.**\n\n"
             meetings_info += "**Possible causes:**\n"
-            meetings_info += "• The guild_setup_status.json file was deleted or corrupted\n"
+            meetings_info += "• The config/guild_setup_status.json file was deleted or corrupted\n"
             meetings_info += "• The setup process was never completed\n"
             meetings_info += "• Permission issues accessing the configuration file\n\n"
             meetings_info += "**Solution:** Please run `/setup` to configure the bot for your server."

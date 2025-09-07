@@ -10,7 +10,7 @@ class GuildSetupStatusManager:
     Handles multiple guilds with separate configurations.
     """
     
-    def __init__(self, status_file_path: str = "guild_setup_status.json"):
+    def __init__(self, status_file_path: str = "config/guild_setup_status.json"):
         """
         Initialize the guild setup status manager.
         

@@ -33,7 +33,7 @@ CLUB_NAME=Your Club Name
 
 ### 4. **Run Bot**
 ```bash
-python start_bot.py
+python scripts/start_bot.py
 ```
 
 ---
@@ -92,7 +92,7 @@ python start_bot.py
 
 Run the test script to verify everything works:
 ```bash
-python test_bot.py
+python tests/test_bot.py
 ```
 
 You should see:
@@ -145,7 +145,7 @@ You should see:
 
 - **Documentation**: Check README.md
 - **Issues**: GitHub Issues
-- **Test**: Run `python test_bot.py`
+- **Test**: Run `python tests/test_bot.py`
 - **Debug**: Check console output
 
 ---

@@ -17,7 +17,7 @@ def test_imports():
     print("🧪 Testing module imports...")
     
     try:
-        from config import Config
+        from config.config import Config
         print("✅ Config module imported successfully")
     except ImportError as e:
         print(f"❌ Failed to import Config: {e}")
@@ -72,7 +72,7 @@ def test_config():
     print("\n🔧 Testing configuration...")
     
     try:
-        from config import Config
+        from config.config import Config
         Config()
         
         # Test required fields
