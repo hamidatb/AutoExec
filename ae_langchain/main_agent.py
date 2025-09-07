@@ -101,7 +101,8 @@ CORE CAPABILITIES:
 4. **Organization**: Help with club setup, member management, and administrative tasks
 
 IMPORTANT GUIDELINES:
-- Always use the available tools to perform actions rather than just describing what you would do
+- You can respond directly to simple questions about AutoExec, creator info, and general capabilities
+- Use tools when you need to access specific data (meetings, tasks, setup status) or perform actions
 - For task creation, use create_task_with_timer to automatically set up reminders
 - For meeting scheduling, use create_meeting_with_timer to set up meeting reminders
 - When users provide Discord mentions for unknown people, use that information to complete task creation
@@ -113,7 +114,17 @@ IMPORTANT GUIDELINES:
 - If a user asks "what did I ask you last" or similar questions, refer to the conversation history
 - Always consider the full conversation context when responding to any message
 
-Remember: You have access to powerful tools - use them to actually help users accomplish their goals!"""),
+EXAMPLES OF DIRECT RESPONSES (no tools needed):
+- "Who made you?" → Answer directly with creator information
+- "What can you do?" → Answer directly about capabilities
+- "Hello" → Greet directly
+
+EXAMPLES OF WHEN TO USE TOOLS:
+- "What meetings do I have?" → Use send_meeting_schedule
+- "Create a task for John due tomorrow" → Use create_task_with_timer
+- "What timers are active?" → Use list_active_timers
+- "Is she an exec?" → Use get_exec_info
+- "Who are the execs?" → Use get_exec_info"""),
             MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
@@ -136,7 +147,8 @@ Remember: You have access to powerful tools - use them to actually help users ac
             create_meeting_with_timer,
             list_active_timers,
             clear_all_timers,
-            ask_for_discord_mention
+            ask_for_discord_mention,
+            get_exec_info
         ]
         
         # Create agent with memory
@@ -1201,18 +1213,21 @@ def check_guild_setup_status(guild_id: str) -> str:
 @tool
 def create_task_with_timer(task_title: str, assignee_name: str, due_date: str, priority: str = "medium", notes: str = "") -> str:
     """
-    **PRIORITY TOOL FOR TASK CREATION** - Use this when users mention someone has a task, assignment, or deadline.
+    **TASK CREATION TOOL** - Use ONLY when users explicitly want to CREATE a new task with a deadline.
     
     Create a new task and automatically set up timers for reminders.
     This tool parses natural language and creates both the task and associated timers in Google Sheets.
     
-    **USE THIS TOOL WHEN:**
-    - User says someone "has a task due [date]"
+    **USE THIS TOOL ONLY WHEN:**
+    - User explicitly says "create a task" or "assign a task"
+    - User says someone "has a task due [date]" (indicating task creation)
     - User mentions "assign [person] [task] due [date]"
     - User wants to create a task with a deadline
-    - User mentions someone needs to do something by a specific date
     
-    **DO NOT USE send_announcement for task creation - use this tool instead!**
+    **DO NOT USE THIS TOOL FOR:**
+    - General questions about tasks
+    - Questions like "is [person] an exec" or "who is [person]"
+    - Simple conversations or greetings
     
     Args:
         task_title (str): The title/description of the task
@@ -1492,10 +1507,84 @@ def list_active_timers() -> str:
         return f"❌ Error listing timers: {str(e)}"
 
 @tool
+def get_exec_info(person_name: str = "") -> str:
+    """
+    Get information about club executives from the guild configuration.
+    
+    **USE THIS TOOL WHEN:**
+    - User asks "is [person] an exec" or "who are the execs"
+    - User wants to know about club leadership
+    - User asks about specific executive members
+    
+    Args:
+        person_name: Optional name to check if they're an executive (leave empty to get all execs)
+        
+    Returns:
+        str: Information about executives
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get the Discord context from the current message
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        
+        if not guild_id:
+            return "❌ No Discord context found. Please use this command in a Discord server."
+        
+        # Get the guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        exec_members = guild_config.get('exec_members', [])
+        
+        if not exec_members:
+            return "❌ No executive members found in the configuration."
+        
+        if person_name:
+            # Check if specific person is an exec
+            person_lower = person_name.lower().strip()
+            for member in exec_members:
+                member_name = member.get('name', '').lower()
+                if (person_lower == member_name or 
+                    person_lower in member_name or 
+                    any(person_lower == part.strip() for part in member_name.split())):
+                    return f"✅ **Yes, {member.get('name')} is an executive member.**"
+            
+            return f"❌ **No, {person_name} is not listed as an executive member.**"
+        else:
+            # Return all exec members
+            exec_list = []
+            for member in exec_members:
+                name = member.get('name', 'Unknown')
+                role = member.get('role', 'Executive')
+                exec_list.append(f"• **{name}** - {role}")
+            
+            return f"👥 **Executive Members:**\n\n" + "\n".join(exec_list)
+            
+    except Exception as e:
+        return f"❌ Error getting executive information: {str(e)}"
+
+@tool
 def ask_for_discord_mention(person_name: str) -> str:
     """
     Ask the user to provide the Discord mention for a person whose name doesn't match any executive.
-    Use this when you can't find a matching executive for a task assignee.
+    
+    **ONLY USE THIS TOOL WHEN:**
+    - You are actively creating a task with create_task_with_timer
+    - The assignee name cannot be matched to an executive in the config
+    - You need the Discord mention to complete the task creation
+    
+    **DO NOT USE THIS TOOL FOR:**
+    - General questions about people
+    - Questions like "is [person] an exec"
+    - Simple conversations
     
     Args:
         person_name: The name of the person who needs a Discord mention
@@ -1881,7 +1970,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, list_active_timers, clear_all_timers, ask_for_discord_mention]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, list_active_timers, clear_all_timers, ask_for_discord_mention, get_exec_info]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
