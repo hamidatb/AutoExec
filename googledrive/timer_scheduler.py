@@ -112,7 +112,7 @@ class TimerScheduler:
             timer_type = timer_data['type']
             channel_id = int(timer_data['channel_id'])
             
-            if timer_type.startswith('task_'):
+            if timer_type.startswith('task_') or timer_type == 'scheduled_reminder':
                 await self._send_task_reminder(timer_data, channel_id)
             elif timer_type.startswith('meeting_'):
                 await self._send_meeting_reminder(timer_data, channel_id)
