@@ -389,9 +389,20 @@ class ClubSheetsManager:
             tasks = []
             
             for row in values[1:]:
-                if len(row) >= len(headers) and row[2] == discord_id:  # owner_discord_id column
-                    task = dict(zip(headers, row))
-                    tasks.append(task)
+                if len(row) >= len(headers):
+                    # Check if this task belongs to the user
+                    # Handle both raw Discord ID and mention format (<@ID>)
+                    owner_discord_id = row[2] if len(row) > 2 else ""
+                    is_user_task = (
+                        owner_discord_id == discord_id or  # Exact match
+                        owner_discord_id == f"<@{discord_id}>" or  # Mention format
+                        (owner_discord_id.startswith("<@") and owner_discord_id.endswith(">") and 
+                         owner_discord_id[2:-1] == discord_id)  # Extract ID from mention format
+                    )
+                    
+                    if is_user_task:
+                        task = dict(zip(headers, row))
+                        tasks.append(task)
             
             return tasks
             

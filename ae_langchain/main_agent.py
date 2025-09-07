@@ -360,7 +360,7 @@ def handle_dm_server_selection(user_id: str, query: str):
         # User is admin of only one server, use that context
         guild_id = user_guilds[0]['guild_id']
         print(f"🔍 [handle_dm_server_selection] Using single server context: {guild_id}")
-        return run_agent_text_only(query, guild_id=guild_id, user_id=None)
+        return run_agent_text_only(query, guild_id=guild_id, user_id=user_id)
     else:
         # User is admin of multiple servers, ask for clarification
         guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
