@@ -28,7 +28,7 @@ CLUB_NAME=Your Club Name
 
 ### 3. **Google Setup**
 - Download service account key for `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`
-- Save it as `googledrive/service_account_key.json`
+- Save it as `googledrive/servicekey.json`
 - Share your Google Drive folders with the service account email
 
 ### 4. **Run Bot**
@@ -61,7 +61,7 @@ python start_bot.py
    - Go to IAM & Admin → Service Accounts
    - Find `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`
    - Click on it → Keys → Add Key → Create new key → JSON
-   - Save as `googledrive/service_account_key.json`
+   - Save as `googledrive/servicekey.json`
 
 ---
 
