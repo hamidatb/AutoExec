@@ -19,7 +19,7 @@ class ClubSheetsManager:
         self.drive_service = build("drive", "v3", credentials=creds)
         self.config = Config()
         
-    def create_master_config_sheet(self, club_name: str, admin_discord_id: str, folder_id: str = None) -> str:
+    def create_master_config_sheet(self, club_name: str, admin_discord_id: str, folder_id: str = None, timezone: str = 'America/Edmonton', exec_members: List[Dict] = None) -> str:
         """
         Creates the master configuration sheet for the club.
         
@@ -74,7 +74,7 @@ class ClubSheetsManager:
                 ['admin_discord_id', admin_discord_id],
                 ['default_channels', ''],
                 ['allowed_role_ids', ''],
-                ['timezone', self.config.TIMEZONE],
+                ['timezone', timezone],
                 ['task_reminder_channel_id', str(self.config.TASK_REMINDER_CHANNEL_ID)],
                 ['meeting_reminder_channel_id', str(self.config.MEETING_REMINDER_CHANNEL_ID)],
                 ['escalation_channel_id', str(self.config.ESCALATION_CHANNEL_ID)]
@@ -95,6 +95,27 @@ class ClubSheetsManager:
                 valueInputOption='RAW',
                 body={'values': people_headers}
             ).execute()
+            
+            # Add exec members to people sheet if provided
+            if exec_members:
+                people_data = []
+                current_time = datetime.now().isoformat()
+                for member in exec_members:
+                    people_data.append([
+                        member.get('name', ''),
+                        member.get('discord_id', ''),
+                        member.get('role', 'General Team Member'),
+                        current_time,
+                        current_time
+                    ])
+                
+                if people_data:
+                    self.sheets_service.spreadsheets().values().update(
+                        spreadsheetId=spreadsheet_id,
+                        range='people!A2',
+                        valueInputOption='RAW',
+                        body={'values': people_data}
+                    ).execute()
             
             # Initialize logs sheet headers
             logs_headers = [['timestamp', 'action', 'user_id', 'details', 'status', 'error_message', 'created_at']]
