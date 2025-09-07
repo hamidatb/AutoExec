@@ -2087,7 +2087,7 @@ def create_task_with_timer(task_title: str, assignee_name: str, due_date: str, p
             'status': 'open',
             'priority': priority,
             'source_doc': '',
-            'channel_id': channel_id,
+            'channel_id': guild_config.get('task_reminders_channel_id', ''),
             'notes': notes,
             'created_by': user_id,
             'guild_id': guild_id
@@ -2203,8 +2203,19 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
         channel_id = context.get('channel_id')
         user_id = context.get('user_id')
         
+        if not user_id:
+            return "❌ No Discord context found. Please use this command in a Discord server or DM."
+        
+        # Handle DM context - check if user is admin of any configured servers
         if not guild_id:
-            return "❌ No Discord context found. Please use this command in a Discord server."
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**\n\nYou are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:\n\n{guild_list}\n\n**How to specify:**\n• Mention the club name: "For [Club Name], schedule meeting [title]"\n• Mention the server name: "In [Server Name], create meeting [title]"\n\n**Example:** "For Computer Science Club, schedule meeting budget review"\n\nWhich server would you like me to help you with?"""
         
         # Get the guild configuration
         all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
@@ -2238,7 +2249,7 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
             'meeting_link': meeting_link,
             'minutes_link': minutes_link,
             'create_minutes': create_minutes,
-            'channel_id': channel_id,
+            'channel_id': guild_config.get('meeting_reminders_channel_id', ''),
             'created_by': user_id,
             'guild_id': guild_id,
             'status': 'scheduled'
