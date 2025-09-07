@@ -97,11 +97,9 @@ class ClubExecBot(discord.Client):
                 await self.handle_natural_language(message)
             return
             
-        # Handle natural language commands and queries in public channels
-        await self.handle_natural_language(message)
-            
-        # Handle task replies in public channels
+        # For public channels, only respond when the bot is mentioned
         if message.mentions and self.user in message.mentions:
+            await self.handle_natural_language(message)
             await self.handle_task_reply(message)
             
     async def handle_natural_language(self, message: discord.Message):
@@ -165,27 +163,23 @@ class ClubExecBot(discord.Client):
             )
             return
             
-        content = message.content.strip()
-        
         # Store channel context for LangChain responses
         self.last_channel_id = message.channel.id
         
-        # Check for AutoExec commands
-        if content.startswith('$AE'):
-            # Set Discord context for LangChain tools
-            from ae_langchain.main_agent import set_discord_context
-            set_discord_context(
-                guild_id=str(message.guild.id) if message.guild else None,
-                channel_id=str(message.channel.id),
-                user_id=str(message.author.id)
-            )
-            await self.handle_autoexec_command(message)
-            return
+        # Set Discord context for LangChain tools (for both @mentions and DMs)
+        from ae_langchain.main_agent import set_discord_context
+        set_discord_context(
+            guild_id=str(message.guild.id) if message.guild else None,
+            channel_id=str(message.channel.id),
+            user_id=str(message.author.id)
+        )
+        
+        # Clean the content - remove bot mentions for processing
+        content = message.content.strip()
+        if message.mentions and self.user in message.mentions:
+            # Remove the bot mention from the content
+            content = re.sub(rf'<@!?{self.user.id}>', '', content).strip()
             
-        # Check for meeting minutes request
-        if content.startswith('$AEmm'):
-            await self.handle_meeting_minutes_request(message)
-            return
             
         # Check for config command usage as regular message (should be slash command)
         if content.startswith('/config') or content.startswith('/serverconfig'):
@@ -553,47 +547,19 @@ The `/serverconfig` command is a **slash command**. Please use the Discord slash
     def should_use_langchain(self, content: str) -> bool:
         """Determine if a message should be processed by LangChain."""
         # Skip very short messages (likely setup responses)
-        if len(content.strip()) <= 3:
+        if len(content.strip()) <= 2:
             return False
             
-        # Skip setup-related questions that are handled by setup manager
+        # Since we're only called when the bot is mentioned, be more permissive
+        # Skip only obvious non-conversational content
         content_lower = content.lower()
-        setup_keywords = ['setup', 'configure', 'are you set up', 'what club', 'admin', 'permission', 'set up']
-        if any(keyword in content_lower for keyword in setup_keywords):
+        
+        # Skip very short responses that are likely setup confirmations
+        if len(content.split()) <= 1 and content_lower in ['yes', 'no', 'ok', 'okay', 'y', 'n']:
             return False
             
-        # Check for natural language patterns
-        natural_language_indicators = [
-            'can you', 'could you', 'please', 'help me', 'how do i',
-            'what is', 'when is', 'where is', 'why', 'how',
-            'i need', 'i want', 'i would like', 'tell me', 'show me',
-            'what can you', 'how do you work', 'send', 'announcement', 'schedule',
-            'create', 'make', 'do', 'get', 'find', 'check',
-            'has a task', 'has a meeting', 'task due', 'meeting on', 'meeting at',
-            'due on', 'due at', 'due tomorrow', 'due next', 'remind me',
-            'set up', 'schedule a', 'plan a', 'organize', 'assign', 'assignment',
-            'deadline', 'reminder', 'notify', 'alert', 'timers', 'active',
-            'i meant', 'actually', 'correction', 'change it to', 'make it',
-            'discord is', 'discord mention', 'their discord', 'his discord', 'her discord',
-            'what did', 'what was', 'what did i', 'what did you', 'what happened',
-            'did you', 'did i', 'were you', 'was i', 'last time', 'before',
-            'previous', 'earlier', 'just now', 'a moment ago', 'this'
-        ]
-        
-        # Check for natural language patterns
-        for indicator in natural_language_indicators:
-            if indicator in content_lower:
-                return True
-                
-        # Check for question marks (but not for very short messages)
-        if '?' in content and len(content.split()) > 2:
-            return True
-            
-        # Check for longer, conversational messages
-        if len(content.split()) > 8:
-            return True
-            
-        return False
+        # For everything else, use LangChain since the user specifically mentioned the bot
+        return True
             
     async def handle_dm_setup(self, message: discord.Message) -> bool:
         """Handle setup process in DMs.
