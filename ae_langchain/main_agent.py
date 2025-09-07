@@ -1445,12 +1445,18 @@ def create_task_with_timer(task_title: str, assignee_name: str, due_date: str, p
         clean_assignee_name = assignee_name.lstrip('@').strip()
         
         # Find the assignee by name (this is a simplified lookup)
+        print(f"🔍 [DEBUG] Looking for assignee: '{clean_assignee_name}' in guild {guild_id}")
+        print(f"🔍 [DEBUG] Guild config exec members: {guild_config.get('exec_members', [])}")
+        
         assignee_discord_id = find_user_by_name(clean_assignee_name, guild_config)
+        print(f"🔍 [DEBUG] Found assignee_discord_id: {assignee_discord_id}")
+        
         if not assignee_discord_id:
             return f"❌ Could not find user '{clean_assignee_name}'. Please use a Discord username or mention."
         
         # Check if we need to ask for a Discord mention
         if assignee_discord_id.startswith("NEED_MENTION_FOR_"):
+            print(f"🔍 [DEBUG] Need mention for: {clean_assignee_name}")
             return ask_for_discord_mention(clean_assignee_name)
         
         # Create task data
@@ -1943,20 +1949,30 @@ def find_user_by_name(name: str, guild_config: dict) -> str:
     exec_members = guild_config.get('exec_members', [])
     name_lower = name.lower().strip()
     
+    print(f"🔍 [DEBUG] find_user_by_name called with: '{name}' -> '{name_lower}'")
+    print(f"🔍 [DEBUG] Exec members: {exec_members}")
+    
     # Remove any Discord mention formatting if present
     name_lower = name_lower.replace('<@', '').replace('>', '').replace('@', '')
     
     for member in exec_members:
         member_name = member.get('name', '').lower()
+        print(f"🔍 [DEBUG] Checking member: '{member_name}'")
+        
         # Check if the provided name matches the first name, last name, or full name
         if (name_lower == member_name or  # Exact match
             name_lower in member_name or  # Partial match (e.g., "hamidat" in "hamidat bello")
             any(name_lower == part.strip() for part in member_name.split())):  # First/last name match
             discord_id = member.get('discord_id', '')
             if discord_id:
-                return f"<@{discord_id}>"
+                result = f"<@{discord_id}>"
+                print(f"🔍 [DEBUG] Found match! Returning: {result}")
+                return result
+    
     # If not found in exec members, return a placeholder that indicates we need the mention
-    return f"NEED_MENTION_FOR_{name}"
+    result = f"NEED_MENTION_FOR_{name}"
+    print(f"🔍 [DEBUG] No match found. Returning: {result}")
+    return result
 
 def create_task_timers(task_data: dict, guild_config: dict) -> int:
     """Create timers for a task and return the count."""
