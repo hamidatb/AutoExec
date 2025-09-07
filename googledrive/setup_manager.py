@@ -268,13 +268,20 @@ class SetupManager:
             
             message = f"✅ **Admin Set: <@{admin_discord_id}>**\n\n"
             message += "**Step 4: Timezone Configuration**\n"
-            message += "What timezone should I use for your club? (Press Enter to use the default)\n\n"
+            message += "What timezone should I use for your club?\n\n"
+            message += "**Type 'Y' to use the default, or choose from the list below:**\n\n"
             message += "**Default:** America/Edmonton\n\n"
-            message += "**Examples:**\n"
+            message += "**Available Timezones:**\n"
             message += "• America/New_York\n"
             message += "• America/Los_Angeles\n"
+            message += "• America/Chicago\n"
+            message += "• America/Denver\n"
             message += "• Europe/London\n"
-            message += "• Asia/Tokyo\n\n"
+            message += "• Europe/Paris\n"
+            message += "• Asia/Tokyo\n"
+            message += "• Asia/Shanghai\n"
+            message += "• Australia/Sydney\n"
+            message += "• UTC\n\n"
             message += "**Note:** This will be used for all meeting times and reminders."
             
             # Get current month
@@ -302,16 +309,20 @@ class SetupManager:
         try:
             timezone_input = timezone_input.strip()
             
-            # If empty, use default
-            if not timezone_input:
+            # If "Y" or empty, use default
+            if not timezone_input or timezone_input.lower() == 'y':
                 timezone_input = 'America/Edmonton'
             
-            # Basic timezone validation (you could make this more robust)
+            # Basic timezone validation
             valid_timezones = [
                 'America/Edmonton', 'America/New_York', 'America/Los_Angeles', 
                 'America/Chicago', 'America/Denver', 'Europe/London', 'Europe/Paris',
                 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney', 'UTC'
             ]
+            
+            # Validate timezone
+            if timezone_input not in valid_timezones:
+                return f"❌ **Invalid Timezone**\n\nPlease choose from the available timezones or type 'Y' for the default.\n\n**Available options:**\n" + "\n".join([f"• {tz}" for tz in valid_timezones]) + "\n\n**You can also type `/cancel` to stop the setup process.**"
             
             # Store timezone
             self.setup_states[user_id]['timezone'] = timezone_input
