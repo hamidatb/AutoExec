@@ -1098,7 +1098,7 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
         new_start_time (str): New start time in format "YYYY-MM-DD HH:MM" (optional)
         new_location (str): New location for the meeting (optional)
         new_meeting_link (str): New meeting link (optional)
-        new_minutes_doc_url (str): New meeting minutes document URL (optional)
+        new_minutes_link (str): New meeting minutes document URL (optional)
         
     Returns:
         str: Confirmation message about the update
@@ -2496,6 +2496,65 @@ def clear_all_timers() -> str:
     except Exception as e:
         return f"❌ Error clearing timers: {str(e)}"
 
+@tool
+def parse_meeting_minutes_action_items(minutes_doc_url: str) -> str:
+    """
+    Parse action items from a specific meeting minutes Google Doc URL.
+    Use this when users ask to "parse action items from this meeting minutes" or similar requests.
+    
+    Args:
+        minutes_doc_url (str): The Google Doc URL containing the meeting minutes
+        
+    Returns:
+        str: Formatted list of action items with deadlines (defaults to 2 weeks if no deadline specified)
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    from googledrive.minutes_parser import MinutesParser
+    from datetime import datetime, timedelta
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Initialize the minutes parser
+        minutes_parser = MinutesParser()
+        
+        # Parse the document to extract action items
+        action_items = minutes_parser.parse_minutes_doc(minutes_doc_url)
+        
+        if not action_items:
+            return "❌ **No Action Items Found**\n\nNo action items table was found in the meeting minutes document. Please ensure the document contains an 'Action Items' table with the required columns."
+        
+        # Format the response
+        response = "📋 **Action Items from Meeting Minutes**\n\n"
+        
+        # Calculate default deadline (2 weeks from now)
+        default_deadline = (datetime.now() + timedelta(weeks=2)).strftime("%Y-%m-%d")
+        
+        for item in action_items:
+            person = item.get('person', 'Unknown')
+            task = item.get('task', 'No task specified')
+            deadline = item.get('deadline', default_deadline)
+            completed = item.get('completed', False)
+            role = item.get('role', '')
+            
+            # Add completion status
+            status_emoji = "✅" if completed else "⏳"
+            
+            response += f"**{person}**"
+            if role:
+                response += f" ({role})"
+            response += f" {status_emoji}\n"
+            response += f"📝 Task: {task}\n"
+            response += f"⏰ Deadline: {deadline}\n\n"
+        
+        response += f"💡 **Note:** Tasks without specified deadlines have been set to {default_deadline} (2 weeks from now)."
+        
+        return response
+        
+    except Exception as e:
+        return f"❌ **Error parsing meeting minutes:** {str(e)}\n\nPlease ensure the document URL is correct and accessible."
+
 # Helper functions for the new tools
 def parse_due_date(date_str: str) -> datetime:
     """Parse natural language due dates into datetime objects."""
@@ -2877,7 +2936,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, search_meetings_by_title, cancel_meeting, update_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, start_meeting_scheduling, list_active_timers, clear_all_timers, ask_for_discord_mention, get_exec_info]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, search_meetings_by_title, cancel_meeting, update_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, start_meeting_scheduling, list_active_timers, clear_all_timers, ask_for_discord_mention, get_exec_info, parse_meeting_minutes_action_items]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 

@@ -21,6 +21,7 @@ class MinutesParser:
     def parse_minutes_doc(self, doc_url: str) -> List[Dict[str, Any]]:
         """
         Parses a Google Doc to extract action items from the Action Items table.
+        Converts the document to markdown first for better parsing of tables and checkboxes.
         
         Args:
             doc_url: URL of the Google Doc containing meeting minutes
@@ -34,15 +35,17 @@ class MinutesParser:
             if not doc_id:
                 return []
             
-            # Get document content
-            doc = self.docs_service.documents().get(documentId=doc_id).execute()
+            # Convert document to markdown using doctomarkdown
+            markdown_content = self._convert_doc_to_markdown(doc_id)
+            if not markdown_content:
+                return []
             
-            # Parse the document to find action items table
-            action_items = self._extract_action_items_table(doc)
+            # Parse the markdown content to find action items
+            action_items = self._parse_markdown_action_items(markdown_content)
             
             return action_items
             
-        except HttpError as error:
+        except Exception as error:
             print(f"Error parsing minutes document: {error}")
             return []
     
@@ -69,6 +72,183 @@ class MinutesParser:
                 return match.group(1)
         
         return None
+    
+    def _convert_doc_to_markdown(self, doc_id: str) -> Optional[str]:
+        """
+        Converts a Google Doc to markdown format using doctomarkdown.
+        
+        Args:
+            doc_id: Google Doc document ID
+            
+        Returns:
+            Markdown content as string or None if conversion fails
+        """
+        try:
+            from doctomarkdown import convert
+            
+            # Convert the Google Doc to markdown
+            markdown_content = convert(f"https://docs.google.com/document/d/{doc_id}/edit")
+            return markdown_content
+            
+        except Exception as e:
+            print(f"Error converting document to markdown: {e}")
+            return None
+    
+    def _parse_markdown_action_items(self, markdown_content: str) -> List[Dict[str, Any]]:
+        """
+        Parses markdown content to extract action items from the Action Items table.
+        
+        Args:
+            markdown_content: The markdown content of the document
+            
+        Returns:
+            List of action item dictionaries
+        """
+        action_items = []
+        
+        try:
+            # Split content into lines
+            lines = markdown_content.split('\n')
+            
+            # Find the Action Items table
+            in_action_items_table = False
+            table_headers = []
+            
+            for i, line in enumerate(lines):
+                # Look for the Action Items table header
+                if 'Action Items To Be Done By Next Meeting' in line or 'Action Items' in line:
+                    # Check if this is a table row (contains |)
+                    if '|' in line:
+                        in_action_items_table = True
+                        # Extract headers from the next line
+                        if i + 1 < len(lines) and '|' in lines[i + 1]:
+                            header_line = lines[i + 1]
+                            table_headers = [h.strip() for h in header_line.split('|') if h.strip()]
+                        continue
+                
+                # If we're in the action items table, parse the rows
+                if in_action_items_table and '|' in line:
+                    # Skip separator lines (containing only |, -, and spaces)
+                    if re.match(r'^[\s\|\-]+$', line):
+                        continue
+                    
+                    # Parse the table row
+                    cells = [cell.strip() for cell in line.split('|') if cell.strip()]
+                    
+                    if len(cells) >= 3:  # Should have Role, Team Member, Action Items columns
+                        role = cells[0] if len(cells) > 0 else ""
+                        team_member = cells[1] if len(cells) > 1 else ""
+                        action_items_text = cells[2] if len(cells) > 2 else ""
+                        
+                        # Parse individual action items from the action items text
+                        individual_items = self._parse_action_items_from_text(action_items_text)
+                        
+                        for item in individual_items:
+                            action_items.append({
+                                'role': role,
+                                'person': team_member,
+                                'task': item['task'],
+                                'deadline': item.get('deadline'),
+                                'completed': item['completed']
+                            })
+                
+                # Stop parsing if we hit another major section
+                elif in_action_items_table and line.strip().startswith('#'):
+                    break
+            
+            return action_items
+            
+        except Exception as e:
+            print(f"Error parsing markdown action items: {e}")
+            return []
+    
+    def _parse_action_items_from_text(self, action_items_text: str) -> List[Dict[str, Any]]:
+        """
+        Parses individual action items from a text block containing checkboxes and tasks.
+        
+        Args:
+            action_items_text: Text containing action items with checkboxes
+            
+        Returns:
+            List of action item dictionaries
+        """
+        items = []
+        
+        try:
+            # Split by lines and process each line
+            lines = action_items_text.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Check for checkbox patterns: [x] or [ ]
+                checkbox_match = re.match(r'^-\s*\[([x\s])\]\s*(.*)', line)
+                if checkbox_match:
+                    is_completed = checkbox_match.group(1) == 'x'
+                    task_text = checkbox_match.group(2).strip()
+                    
+                    # Remove strikethrough text (~~text~~)
+                    task_text = re.sub(r'~~([^~]+)~~', r'\1', task_text)
+                    
+                    # Look for deadline in the task text
+                    deadline = self._extract_deadline_from_task(task_text)
+                    
+                    items.append({
+                        'task': task_text,
+                        'completed': is_completed,
+                        'deadline': deadline
+                    })
+                else:
+                    # Handle lines without checkboxes (might be continuation or regular text)
+                    if line.startswith('-') and not line.startswith('- [') and not line.startswith('- ~~'):
+                        # Regular bullet point without checkbox
+                        task_text = line[1:].strip()
+                        deadline = self._extract_deadline_from_task(task_text)
+                        
+                        items.append({
+                            'task': task_text,
+                            'completed': False,
+                            'deadline': deadline
+                        })
+            
+            return items
+            
+        except Exception as e:
+            print(f"Error parsing action items from text: {e}")
+            return []
+    
+    def _extract_deadline_from_task(self, task_text: str) -> Optional[str]:
+        """
+        Extracts deadline information from task text.
+        
+        Args:
+            task_text: The task description text
+            
+        Returns:
+            Deadline string if found, None otherwise
+        """
+        try:
+            # Look for common deadline patterns
+            deadline_patterns = [
+                r'deadline[:\s]+([^,\n]+)',
+                r'due[:\s]+([^,\n]+)',
+                r'by[:\s]+([^,\n]+)',
+                r'([A-Za-z]+day,?\s+[A-Za-z]+\s+\d{1,2})',  # e.g., "Tuesday, Sept 2"
+                r'([A-Za-z]+\s+\d{1,2})',  # e.g., "Sept 2"
+            ]
+            
+            for pattern in deadline_patterns:
+                match = re.search(pattern, task_text, re.IGNORECASE)
+                if match:
+                    return match.group(1).strip()
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error extracting deadline: {e}")
+            return None
     
     def _extract_action_items_table(self, doc: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
