@@ -77,7 +77,8 @@ class ClubSheetsManager:
                 ['timezone', timezone],
                 ['task_reminder_channel_id', str(self.config.TASK_REMINDER_CHANNEL_ID)],
                 ['meeting_reminder_channel_id', str(self.config.MEETING_REMINDER_CHANNEL_ID)],
-                ['escalation_channel_id', str(self.config.ESCALATION_CHANNEL_ID)]
+                ['escalation_channel_id', str(self.config.ESCALATION_CHANNEL_ID)],
+                ['free_speak_channel_id', '']
             ]
             
             self.sheets_service.spreadsheets().values().update(
@@ -631,7 +632,8 @@ class ClubSheetsManager:
             return False
     
     def update_config_channels(self, config_spreadsheet_id: str, task_channel_id: str, 
-                              meeting_channel_id: str, escalation_channel_id: str) -> bool:
+                              meeting_channel_id: str, escalation_channel_id: str, 
+                              free_speak_channel_id: str = None) -> bool:
         """
         Updates the channel configuration in the config sheet.
         
@@ -640,6 +642,7 @@ class ClubSheetsManager:
             task_channel_id: Channel ID for task reminders
             meeting_channel_id: Channel ID for meeting reminders
             escalation_channel_id: Channel ID for escalations
+            free_speak_channel_id: Channel ID for free-speak (optional)
             
         Returns:
             bool: True if successful, False otherwise
@@ -651,6 +654,10 @@ class ClubSheetsManager:
                 ['meeting_reminder_channel_id', meeting_channel_id],
                 ['escalation_channel_id', escalation_channel_id]
             ]
+            
+            # Add free-speak channel if provided
+            if free_speak_channel_id:
+                config_data.append(['free_speak_channel_id', free_speak_channel_id])
             
             self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=config_spreadsheet_id,

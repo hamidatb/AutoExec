@@ -169,6 +169,8 @@ class SetupManager:
                 return await self._handle_meeting_reminders_channel(user_id, message_content)
             elif current_step == 'escalation_channel':
                 return await self._handle_escalation_channel(user_id, message_content)
+            elif current_step == 'free_speak_channel':
+                return await self._handle_free_speak_channel(user_id, message_content)
             else:
                 print(f"❌ [SETUP ERROR] Unknown setup step: {current_step}")
                 return "❌ Unknown setup step. Please start setup again."
@@ -868,6 +870,59 @@ class SetupManager:
             current_state = self.setup_states[user_id]
             current_state['escalation_channel_id'] = channel_id
             
+            # Move to free-speak channel step
+            current_state['step'] = 'free_speak_channel'
+            
+            message = "✅ **Escalation Channel Set!**\n\n"
+            message += f"Escalations will be sent to: <#{channel_id}>\n\n"
+            message += "**Step 8d: Free-Speak Channel (Optional)**\n"
+            message += "Would you like to configure a channel where the bot can speak freely without being @'d?\n\n"
+            message += "This is useful for:\n"
+            message += "• General announcements\n"
+            message += "• Status updates\n"
+            message += "• Automated responses\n\n"
+            message += "**Type 'skip' to skip this step, or provide a channel ID:**"
+            
+            return message
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Error in escalation channel configuration: {e}")
+            return f"❌ **Escalation Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel ID is correct\n• The bot has access to that channel\n• Try again with a valid channel ID"
+    
+    async def _handle_free_speak_channel(self, user_id: str, message_content: str) -> str:
+        """
+        Handles free-speak channel configuration and completes setup.
+        
+        Args:
+            user_id: Discord ID of the user
+            message_content: Channel ID for free-speak or 'skip'
+            
+        Returns:
+            Setup completion message
+        """
+        try:
+            print(f"🔍 [SETUP] Processing free-speak channel for user {user_id}")
+            print(f"🔍 [SETUP] Channel message content: {message_content}")
+            
+            current_state = self.setup_states[user_id]
+            message_content = message_content.strip().lower()
+            
+            # Check if user wants to skip
+            if message_content == 'skip':
+                current_state['free_speak_channel_id'] = None
+                print(f"🔍 [SETUP] User skipped free-speak channel configuration")
+            else:
+                # Extract channel ID
+                channel_id = message_content
+                print(f"🔍 [SETUP] Extracted free-speak channel ID: {channel_id}")
+                
+                if not channel_id or not channel_id.isdigit():
+                    return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only) or type 'skip' to skip this step.\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here\n\n**You can also type `/cancel` to stop the setup process.**"
+                
+                # Store free-speak channel ID
+                current_state['free_speak_channel_id'] = channel_id
+                print(f"🔍 [SETUP] Free-speak channel configured: {channel_id}")
+            
             print(f"🔍 [SETUP] All channels configured, updating config sheet")
             print(f"🔍 [SETUP] Config spreadsheet ID: {current_state['config_spreadsheet_id']}")
             
@@ -882,7 +937,8 @@ class SetupManager:
                         current_state['config_spreadsheet_id'],
                         current_state['task_reminders_channel_id'],
                         current_state['meeting_reminders_channel_id'],
-                        current_state['escalation_channel_id']
+                        current_state['escalation_channel_id'],
+                        current_state.get('free_speak_channel_id')
                     )
                     print(f"🔍 [SETUP] Config sheet updated successfully")
                     break  # Success, exit retry loop
@@ -934,6 +990,7 @@ class SetupManager:
                     'task_reminders_channel_id': current_state['task_reminders_channel_id'],
                     'meeting_reminders_channel_id': current_state['meeting_reminders_channel_id'],
                     'escalation_channel_id': current_state['escalation_channel_id'],
+                    'free_speak_channel_id': current_state.get('free_speak_channel_id'),
                     'config_folder_id': current_state['config_folder_id'],
                     'monthly_folder_id': current_state['monthly_folder_id'],
                     'meeting_minutes_folder_id': current_state['meeting_minutes_folder_id'],
@@ -966,8 +1023,15 @@ class SetupManager:
             message += "**Channel Configuration:**\n"
             message += f"• Task reminders: <#{current_state['task_reminders_channel_id']}>\n"
             message += f"• Meeting reminders: <#{current_state['meeting_reminders_channel_id']}>\n"
-            message += f"• Escalations: <#{current_state['escalation_channel_id']}>\n\n"
-            message += "**Setup Data Persisted:**\n"
+            message += f"• Escalations: <#{current_state['escalation_channel_id']}>\n"
+            
+            # Add free-speak channel info if configured
+            if current_state.get('free_speak_channel_id'):
+                message += f"• Free-speak channel: <#{current_state['free_speak_channel_id']}>\n"
+            else:
+                message += "• Free-speak channel: Not configured (skipped)\n"
+            
+            message += "\n**Setup Data Persisted:**\n"
             message += "• All configuration saved to persistent storage\n"
             message += "• Google Sheets created and configured\n"
             message += "• Executive team members added to people sheet\n"
@@ -977,14 +1041,16 @@ class SetupManager:
             message += "• Use `/meeting set` to schedule meetings\n"
             message += "• Use `/assign` to create tasks\n"
             message += "• I'll automatically parse meeting minutes and create tasks\n"
-            message += "• Task reminders and escalations will be sent to configured channels\n\n"
-            message += "**Need help?** Use `/help` to see all available commands."
+            message += "• Task reminders and escalations will be sent to configured channels\n"
+            if current_state.get('free_speak_channel_id'):
+                message += "• I can speak freely in the free-speak channel without being @'d\n"
+            message += "\n**Need help?** Use `/help` to see all available commands."
             
             return message
             
         except Exception as e:
-            print(f"❌ [SETUP ERROR] Error in escalation channel configuration: {e}")
-            return f"❌ **Escalation Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel ID is correct\n• The bot has access to that channel\n• Try again with a valid channel ID"
+            print(f"❌ [SETUP ERROR] Error in free-speak channel configuration: {e}")
+            return f"❌ **Free-Speak Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel ID is correct\n• The bot has access to that channel\n• Try again with a valid channel ID or type 'skip'"
     
     async def _handle_channel_configuration(self, user_id: str, message_content: str) -> str:
         """
@@ -1025,7 +1091,8 @@ class SetupManager:
                         current_state['config_spreadsheet_id'],
                         channel_ids[0],  # Task reminders
                         channel_ids[1],  # Meeting reminders
-                        channel_ids[2]   # Escalations
+                        channel_ids[2],  # Escalations
+                        None  # Free-speak channel (not configured in old flow)
                     )
                     print(f"🔍 [SETUP] Config sheet updated successfully")
                     break  # Success, exit retry loop
@@ -1077,6 +1144,7 @@ class SetupManager:
                     'task_reminders_channel_id': current_state['task_reminders_channel_id'],
                     'meeting_reminders_channel_id': current_state['meeting_reminders_channel_id'],
                     'escalation_channel_id': current_state['escalation_channel_id'],
+                    'free_speak_channel_id': None,  # Not configured in old flow
                     'config_folder_id': current_state['config_folder_id'],
                     'monthly_folder_id': current_state['monthly_folder_id'],
                     'meeting_minutes_folder_id': current_state['meeting_minutes_folder_id'],
@@ -1103,7 +1171,8 @@ class SetupManager:
             message += "**Channel Configuration:**\n"
             message += f"• Task reminders will be sent to: <#{channel_ids[0]}>\n"
             message += f"• Meeting reminders will be sent to: <#{channel_ids[1]}>\n"
-            message += f"• Escalations will be sent to: <#{channel_ids[2]}>\n\n"
+            message += f"• Escalations will be sent to: <#{channel_ids[2]}>\n"
+            message += "• Free-speak channel: Not configured (use `/config` to add later)\n\n"
             message += "**What happens next:**\n"
             message += "• I'll listen for commands in your DM and public channels\n"
             message += "• Use `/meeting set` to schedule meetings\n"
