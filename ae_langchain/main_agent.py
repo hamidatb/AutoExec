@@ -2724,6 +2724,7 @@ def send_tasks_by_person(limit: int = 10) -> str:
         guild_id = context.get('guild_id')
         channel_id = context.get('channel_id')
         
+        
         if not user_id:
             return "❌ No Discord context found. Please use this command in a Discord server or DM."
         
