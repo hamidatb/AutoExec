@@ -97,8 +97,25 @@ class ClubExecBot(discord.Client):
                 await self.handle_natural_language(message)
             return
             
-        # For public channels, only respond when the bot is mentioned
+        # For public channels, respond when the bot is mentioned OR in free-speak channel
+        should_respond = False
+        
+        # Check if bot is mentioned
         if message.mentions and self.user in message.mentions:
+            should_respond = True
+        
+        # Check if this is the free-speak channel
+        if not should_respond and message.guild:
+            guild_id = str(message.guild.id)
+            all_guilds = self.setup_manager.status_manager.get_all_guilds()
+            club_config = all_guilds.get(guild_id)
+            
+            if club_config and club_config.get('setup_complete', False):
+                free_speak_channel_id = club_config.get('free_speak_channel_id')
+                if free_speak_channel_id and str(message.channel.id) == str(free_speak_channel_id):
+                    should_respond = True
+        
+        if should_respond:
             await self.handle_natural_language(message)
             await self.handle_task_reply(message)
             
@@ -1208,7 +1225,13 @@ async def config_command(
             config_text += f"**Discord Channels:**\n"
             config_text += f"• Task Reminders: <#{club_config.get('task_reminders_channel_id', 'Not set')}>\n"
             config_text += f"• Meeting Reminders: <#{club_config.get('meeting_reminders_channel_id', 'Not set')}>\n"
-            config_text += f"• Escalations: <#{club_config.get('escalation_channel_id', 'Not set')}>\n\n"
+            config_text += f"• Escalations: <#{club_config.get('escalation_channel_id', 'Not set')}>\n"
+            free_speak_channel = club_config.get('free_speak_channel_id')
+            if free_speak_channel:
+                config_text += f"• Free-Speak Channel: <#{free_speak_channel}>\n"
+            else:
+                config_text += f"• Free-Speak Channel: Not configured\n"
+            config_text += "\n"
             config_text += f"**Google Sheets:**\n"
             config_text += f"• Config Sheet: `{club_config.get('config_spreadsheet_id', 'Not set')}`\n"
             monthly_sheets = club_config.get('monthly_sheets', {})
@@ -1223,7 +1246,7 @@ async def config_command(
         elif action.lower() == "update":
             if not setting or not value:
                 await interaction.response.send_message(
-                    "❌ **Invalid Parameters**\n\nUsage: `/config update <setting> <value>`\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
+                    "❌ **Invalid Parameters**\n\nUsage: `/config update <setting> <value>`\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `free_speak_channel` - Discord channel ID for free-speak (optional)\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
                     ephemeral=True
                 )
                 return
@@ -1312,6 +1335,18 @@ async def config_command(
                     return
                 updates['escalation_channel_id'] = value
                 
+            elif setting.lower() == "free_speak_channel":
+                if value.lower() == "none" or value.lower() == "null" or value.lower() == "":
+                    updates['free_speak_channel_id'] = None
+                elif not value.isdigit():
+                    await interaction.response.send_message(
+                        "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only) or 'none' to remove the free-speak channel.",
+                        ephemeral=True
+                    )
+                    return
+                else:
+                    updates['free_speak_channel_id'] = value
+                
             elif setting.lower() == "timezone":
                 # Validate timezone
                 valid_timezones = [
@@ -1365,7 +1400,7 @@ async def config_command(
                 
             else:
                 await interaction.response.send_message(
-                    "❌ **Unknown Setting**\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
+                    "❌ **Unknown Setting**\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `free_speak_channel` - Discord channel ID for free-speak (optional)\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
                     ephemeral=True
                 )
                 return
@@ -1381,7 +1416,8 @@ async def config_command(
                             club_config.get('config_spreadsheet_id'),
                             updates.get('task_reminders_channel_id', club_config.get('task_reminders_channel_id')),
                             updates.get('meeting_reminders_channel_id', club_config.get('meeting_reminders_channel_id')),
-                            updates.get('escalation_channel_id', club_config.get('escalation_channel_id'))
+                            updates.get('escalation_channel_id', club_config.get('escalation_channel_id')),
+                            updates.get('free_speak_channel_id', club_config.get('free_speak_channel_id'))
                         )
                     except Exception as e:
                         print(f"Warning: Failed to update Google Sheets config: {e}")
@@ -1497,6 +1533,7 @@ async def help_command(interaction: discord.Interaction):
 • `/serverconfig update task_reminders_channel <channel_id>` - Update task reminders channel
 • `/serverconfig update meeting_reminders_channel <channel_id>` - Update meeting reminders channel
 • `/serverconfig update escalation_channel <channel_id>` - Update escalation channel
+• `/serverconfig update free_speak_channel <channel_id>` - Update free-speak channel (or 'none' to remove)
 • `/serverconfig update timezone <timezone>` - Update club timezone
 • `/serverconfig update exec_members <json>` - Update executive team members
 
