@@ -1235,6 +1235,7 @@ async def config_command(
             config_text += f"• Task Reminders: <#{club_config.get('task_reminders_channel_id', 'Not set')}>\n"
             config_text += f"• Meeting Reminders: <#{club_config.get('meeting_reminders_channel_id', 'Not set')}>\n"
             config_text += f"• Escalations: <#{club_config.get('escalation_channel_id', 'Not set')}>\n"
+            config_text += f"• General Announcements: <#{club_config.get('general_announcements_channel_id', 'Not set')}>\n"
             free_speak_channel = club_config.get('free_speak_channel_id')
             if free_speak_channel:
                 config_text += f"• Free-Speak Channel: <#{free_speak_channel}>\n"
@@ -1255,7 +1256,7 @@ async def config_command(
         elif action.lower() == "update":
             if not setting or not value:
                 await interaction.response.send_message(
-                    "❌ **Invalid Parameters**\n\nUsage: `/config update <setting> <value>`\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `free_speak_channel` - Discord channel ID for free-speak (optional)\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
+                    "❌ **Invalid Parameters**\n\nUsage: `/config update <setting> <value>`\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `general_announcements_channel` - Discord channel ID for general announcements\n• `free_speak_channel` - Discord channel ID for free-speak (optional)\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
                     ephemeral=True
                 )
                 return
@@ -1344,6 +1345,15 @@ async def config_command(
                     return
                 updates['escalation_channel_id'] = value
                 
+            elif setting.lower() == "general_announcements_channel":
+                if not value.isdigit():
+                    await interaction.response.send_message(
+                        "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).",
+                        ephemeral=True
+                    )
+                    return
+                updates['general_announcements_channel_id'] = value
+                
             elif setting.lower() == "free_speak_channel":
                 if value.lower() == "none" or value.lower() == "null" or value.lower() == "":
                     updates['free_speak_channel_id'] = None
@@ -1409,7 +1419,7 @@ async def config_command(
                 
             else:
                 await interaction.response.send_message(
-                    "❌ **Unknown Setting**\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `free_speak_channel` - Discord channel ID for free-speak (optional)\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
+                    "❌ **Unknown Setting**\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `general_announcements_channel` - Discord channel ID for general announcements\n• `free_speak_channel` - Discord channel ID for free-speak (optional)\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
                     ephemeral=True
                 )
                 return
@@ -1506,58 +1516,129 @@ async def sync_command(interaction: discord.Interaction):
         )
 
 @bot.tree.command(name="help", description="Show help information and available commands")
-async def help_command(interaction: discord.Interaction):
+@app_commands.describe(topic="Help topic (serverconfig, meetings, tasks, setup, or general)")
+async def help_command(interaction: discord.Interaction, topic: str = "general"):
     """Show help information and available commands."""
-    help_text = """**AutoExec Bot Help**
+    
+    if topic.lower() == "serverconfig":
+        help_text = """**Server Configuration Help**
 
-**Setup Commands (DM only):**
-• `/setup` - Start the bot setup process
-• `/cancel` - Cancel the current setup process
-
-**Server Commands:**
-• `/reset` - Reset club configuration (admin only)
-• `/serverconfig view` - View current server configuration (admin only)
-• `/serverconfig update` - Update server configuration (admin only)
-• `/sync` - Sync slash commands (admin only)
-• `/help` - Show this help message
-
-**Meeting Management:**
-• `/meeting set` - Schedule a new meeting
-• `/meeting_upcoming` - Show upcoming meetings
-• `/meeting linkminutes` - Link meeting minutes
-
-**Task Management:**
-• `/assign` - Assign a task to someone
-• `/tasks` - Show your assigned tasks
-
-**Natural Language:**
-• Use `$AE` followed by your question for AI-powered assistance
-• Use `$AEmm` to request meeting minutes
-
-**Configuration Updates:**
+**View Configuration:**
 • `/serverconfig view` - See all current settings
+
+**Update Settings:**
 • `/serverconfig update config_folder <link>` - Update Google Drive config folder
 • `/serverconfig update monthly_folder <link>` - Update Google Drive monthly folder
-• `/serverconfig update meeting_minutes_folder <link>` - Update Google Drive meeting minutes folder
+• `/serverconfig update meeting_minutes_folder <link>` - Update meeting minutes folder
 • `/serverconfig update task_reminders_channel <channel_id>` - Update task reminders channel
 • `/serverconfig update meeting_reminders_channel <channel_id>` - Update meeting reminders channel
 • `/serverconfig update escalation_channel <channel_id>` - Update escalation channel
+• `/serverconfig update general_announcements_channel <channel_id>` - Update general announcements channel
 • `/serverconfig update free_speak_channel <channel_id>` - Update free-speak channel (or 'none' to remove)
 • `/serverconfig update timezone <timezone>` - Update club timezone
 • `/serverconfig update exec_members <json>` - Update executive team members
 
-**Setup Process:**
-1. Send me a DM and use `/setup`
-2. Follow the prompts to configure your club
-3. Set up Google Sheets integration
-4. Configure admin permissions and channels
+**Admin Only:** Only the server admin can use these commands."""
+        
+    elif topic.lower() == "meetings":
+        help_text = """**Meeting Management Help**
 
-**Need to start over?**
-• Use `/cancel` during setup to restart
-• Use `/reset` (admin only) to reset completed configuration
+**Commands:**
+• `/meeting set` - Schedule a new meeting
+• `/meeting_upcoming` - Show upcoming meetings
+• `/meeting linkminutes` - Link meeting minutes to a meeting
 
-**Support:**
-If you need help, contact your server admin or use the natural language features!"""
+**Natural Language Examples:**
+• @AutoExec "Schedule a meeting tomorrow at 3pm"
+• @AutoExec "When is our next meeting?"
+• @AutoExec "Show me upcoming meetings"
+• @AutoExec "Create meeting minutes for today's meeting"
+
+**Meeting Scheduling:**
+The bot will ask for:
+1. Meeting title
+2. Start time
+3. End time
+4. Location/meeting link
+5. Meeting minutes (optional)"""
+        
+    elif topic.lower() == "tasks":
+        help_text = """**Task Management Help**
+
+**Commands:**
+• `/assign` - Assign a task to someone
+• `/tasks` - Show your assigned tasks
+• `/done` - Mark a task as complete
+• `/reschedule` - Reschedule a task
+
+**Natural Language Examples:**
+• @AutoExec "Create a task for John due tomorrow"
+• @AutoExec "Assign the budget review to Sarah due Friday"
+• @AutoExec "What tasks do I have?"
+• @AutoExec "Mark my presentation task as done"
+
+**Task Creation:**
+The bot will ask for:
+1. Task title
+2. Assignee name
+3. Due date
+4. Description (optional)"""
+        
+    elif topic.lower() == "setup":
+        help_text = """**Setup Process Help**
+
+**Getting Started:**
+1. Send me a DM (not in server channels)
+2. Use `/setup` command
+3. Follow the prompts
+
+**Setup Steps:**
+1. **Server ID** - Your Discord server ID
+2. **Club Name** - Your organization name
+3. **Admin Selection** - Choose server admin
+4. **Executive Team** - Add team members
+5. **Google Drive** - Configure folders
+6. **Google Sheets** - Create spreadsheets
+7. **Discord Channels** - Configure channels
+
+**Channel Configuration:**
+• Task reminders channel
+• Meeting reminders channel
+• Escalation channel
+• General announcements channel
+• Free-speak channel (optional)
+
+**Need to Restart?**
+• Use `/cancel` during setup
+• Use `/reset` (admin only) to reset completed setup"""
+        
+    else:  # general
+        help_text = """**AutoExec Bot Help**
+
+**Main Commands:**
+• `/setup` - Start bot setup (DM only)
+• `/meeting set` - Schedule meetings
+• `/assign` - Create tasks
+• `/help <topic>` - Get detailed help
+
+**Help Topics:**
+• `/help serverconfig` - Server configuration commands
+• `/help meetings` - Meeting management
+• `/help tasks` - Task management
+• `/help setup` - Setup process guide
+
+**Natural Language:**
+• In server: @AutoExec "your question"
+• In free-speak channel: Just type your question
+• Examples: "When is our next meeting?", "Create a task for John"
+
+**Admin Commands:**
+• `/serverconfig view/update` - Manage settings
+• `/reset` - Reset configuration
+• `/sync` - Sync slash commands
+
+**Need More Help?**
+Use `/help <topic>` for detailed information!"""
     
     await interaction.response.send_message(help_text, ephemeral=True)
 
