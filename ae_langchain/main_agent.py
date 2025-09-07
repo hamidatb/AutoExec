@@ -225,6 +225,9 @@ EXAMPLES OF WHEN TO USE TOOLS:
 - "What timers are active?" → Use list_active_timers
 - "Is she an exec?" → Use get_exec_info
 - "Who are the execs?" → Use get_exec_info
+- "What are my upcoming tasks?" → Use send_tasks_by_person
+- "Show me my tasks" → Use send_tasks_by_person
+- "What tasks do I have?" → Use send_tasks_by_person
 
 MEETING SCHEDULING CONVERSATION EXAMPLES:
 - User: "Schedule a meeting tomorrow at 3pm" → Use start_meeting_scheduling, then ask "What time should it end?"
@@ -262,7 +265,8 @@ MEETING SCHEDULING CONVERSATION EXAMPLES:
             ask_for_discord_mention,
             get_exec_info,
             parse_meeting_minutes_action_items,
-            create_tasks_from_meeting_minutes
+            create_tasks_from_meeting_minutes,
+            send_tasks_by_person
         ]
         
         # Create agent with memory
@@ -2654,8 +2658,14 @@ Which server would you like me to help you with?"""
                 success, task_id = BOT_INSTANCE.sheets_manager.add_task(tasks_sheet_id, task_data)
                 
                 if success:
+                    task_data['task_id'] = task_id
                     created_tasks.append(f"✅ {person}: {task}")
                     response += f"📊 **Task created in Google Sheets**\n"
+                    
+                    # Schedule reminders for the task if it has a specific deadline
+                    config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+                    if config_spreadsheet_id and task_data.get('due_at'):
+                        timer_count = create_task_timers(task_data, guild_config)
                 else:
                     failed_tasks.append(f"❌ {person}: {task}")
                     response += f"⚠️ **Failed to create task in Google Sheets**\n"
@@ -2678,12 +2688,178 @@ Which server would you like me to help you with?"""
         if not created_tasks and not failed_tasks:
             response += f"💡 **All tasks were already completed - no new tasks created.**\n"
         
+        # Count tasks with reminders scheduled
+        config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+        if config_spreadsheet_id and created_tasks:
+            response += f"\n⏰ **Reminders scheduled for {len(created_tasks)} tasks** (24h, 2h, overdue, escalation)\n"
+        
         response += f"\n📅 **Note:** Tasks without specified deadlines have been set to {default_deadline} (2 weeks from now)."
         
         return response
         
     except Exception as e:
         return f"❌ **Error parsing meeting minutes:** {str(e)}\n\nPlease ensure the document URL is correct and accessible."
+
+@tool
+def send_tasks_by_person(limit: int = 10) -> str:
+    """
+    Retrieves and sends upcoming tasks for the current user.
+    Works in both DMs and servers by checking the user's Discord ID.
+    
+    Args:
+        limit (int): Maximum number of tasks to return (default: 10)
+        
+    Returns:
+        str: Formatted list of user's upcoming tasks with source document links
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get Discord context
+        context = get_discord_context()
+        user_id = context.get('user_id')
+        guild_id = context.get('guild_id')
+        channel_id = context.get('channel_id')
+        
+        if not user_id:
+            return "❌ No Discord context found. Please use this command in a Discord server or DM."
+        
+        # Handle DM context - check if user is admin of any configured servers
+        if not guild_id:
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**\n\nYou are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:\n\n{guild_list}\n\n**How to specify:**\n• Mention the club name: "For [Club Name], what are my tasks?"\n• Mention the server name: "In [Server Name], show my upcoming tasks"\n\n**Example:** "For Computer Science Club, what are my upcoming tasks?"\n\nWhich server would you like me to help you with?"""
+        
+        # Get guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Get tasks spreadsheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        tasks_sheet_id = monthly_sheets.get('tasks')
+        
+        if not tasks_sheet_id:
+            return "❌ No tasks spreadsheet configured. Please run `/setup` first."
+        
+        # Get user's tasks from Google Sheets
+        user_tasks = BOT_INSTANCE.sheets_manager.get_tasks_by_user(tasks_sheet_id, user_id)
+        
+        if not user_tasks:
+            return "📋 **Your Tasks**\n\n✅ You have no upcoming tasks! Great job staying on top of things!"
+        
+        # Filter and sort tasks (upcoming and open tasks first)
+        from datetime import datetime, timezone
+        current_time = datetime.now(timezone.utc)
+        
+        upcoming_tasks = []
+        overdue_tasks = []
+        completed_tasks = []
+        
+        for task in user_tasks:
+            status = task.get('status', 'open').lower()
+            due_at = task.get('due_at', '')
+            
+            if status == 'completed':
+                completed_tasks.append(task)
+            else:
+                # Check if task is overdue
+                try:
+                    if due_at:
+                        due_datetime = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+                        if due_datetime < current_time:
+                            overdue_tasks.append(task)
+                        else:
+                            upcoming_tasks.append(task)
+                    else:
+                        upcoming_tasks.append(task)
+                except:
+                    upcoming_tasks.append(task)
+        
+        # Sort upcoming tasks by due date
+        upcoming_tasks.sort(key=lambda x: x.get('due_at', ''))
+        
+        # Limit results
+        upcoming_tasks = upcoming_tasks[:limit]
+        overdue_tasks = overdue_tasks[:limit]
+        
+        # Format response
+        response = "📋 **Your Tasks**\n\n"
+        
+        if overdue_tasks:
+            response += "🚨 **Overdue Tasks:**\n"
+            for i, task in enumerate(overdue_tasks, 1):
+                title = task.get('title', 'Untitled Task')
+                due_at = task.get('due_at', '')
+                source_doc = task.get('source_doc', '')
+                notes = task.get('notes', '')
+                
+                response += f"{i}. **{title}**\n"
+                if due_at:
+                    try:
+                        due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+                        due_str = due_dt.strftime("%B %d, %Y at %I:%M %p UTC")
+                        response += f"   ⏰ Due: {due_str}\n"
+                    except:
+                        response += f"   ⏰ Due: {due_at}\n"
+                if source_doc:
+                    response += f"   📄 Source: [View Document]({source_doc})\n"
+                if notes:
+                    response += f"   📝 Notes: {notes}\n"
+                response += "\n"
+        
+        if upcoming_tasks:
+            if overdue_tasks:
+                response += "📅 **Upcoming Tasks:**\n"
+            for i, task in enumerate(upcoming_tasks, 1):
+                title = task.get('title', 'Untitled Task')
+                due_at = task.get('due_at', '')
+                source_doc = task.get('source_doc', '')
+                notes = task.get('notes', '')
+                priority = task.get('priority', 'medium')
+                
+                # Priority emoji
+                priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(priority.lower(), "🟡")
+                
+                response += f"{i}. {priority_emoji} **{title}**\n"
+                if due_at:
+                    try:
+                        due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+                        due_str = due_dt.strftime("%B %d, %Y at %I:%M %p UTC")
+                        response += f"   ⏰ Due: {due_str}\n"
+                    except:
+                        response += f"   ⏰ Due: {due_at}\n"
+                if source_doc:
+                    response += f"   📄 Source: [View Document]({source_doc})\n"
+                if notes:
+                    response += f"   📝 Notes: {notes}\n"
+                response += "\n"
+        
+        if completed_tasks:
+            response += f"✅ **Completed Tasks:** {len(completed_tasks)} tasks completed\n"
+        
+        # Add summary
+        total_tasks = len(upcoming_tasks) + len(overdue_tasks)
+        if total_tasks == 0:
+            response += "\n🎉 You're all caught up! No pending tasks."
+        else:
+            response += f"\n📊 **Summary:** {len(overdue_tasks)} overdue, {len(upcoming_tasks)} upcoming"
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error getting user tasks: {e}")
+        return f"❌ Error retrieving your tasks: {str(e)}"
 
 @tool
 def create_tasks_from_meeting_minutes(minutes_doc_url: str) -> str:
@@ -2746,9 +2922,10 @@ Which server would you like me to help you with?"""
         if not guild_config or not guild_config.get('setup_complete', False):
             return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
         
-        # Get the tasks sheet ID
+        # Get the tasks sheet ID and config sheet ID
         monthly_sheets = guild_config.get('monthly_sheets', {})
         tasks_sheet_id = monthly_sheets.get('tasks')
+        config_sheet_id = guild_config.get('config_spreadsheet_id')
         
         if not tasks_sheet_id:
             return "❌ No tasks spreadsheet configured. Please run `/setup` first."
@@ -2763,11 +2940,12 @@ Which server would you like me to help you with?"""
         # Initialize the minutes parser
         minutes_parser = MinutesParser()
         
-        # Create tasks from minutes
+        # Create tasks from minutes (with reminder scheduling)
         created_tasks = minutes_parser.create_tasks_from_minutes(
             minutes_doc_url, 
             tasks_sheet_id, 
-            people_mapping
+            people_mapping,
+            config_sheet_id
         )
         
         if not created_tasks:
@@ -2775,6 +2953,13 @@ Which server would you like me to help you with?"""
         
         # Format response
         response = f"🎉 **Successfully Created {len(created_tasks)} Tasks in Google Sheets!**\n\n"
+        
+        # Count tasks with reminders scheduled
+        tasks_with_reminders = sum(1 for task in created_tasks 
+                                 if task.get('status') != 'completed' and task.get('due_at'))
+        
+        if tasks_with_reminders > 0:
+            response += f"⏰ **Reminders scheduled for {tasks_with_reminders} tasks** (24h, 2h, overdue, escalation)\n\n"
         
         for task in created_tasks:
             status_emoji = "✅" if task['status'] == 'completed' else "⏳"

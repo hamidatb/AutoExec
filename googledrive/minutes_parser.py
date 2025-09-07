@@ -930,15 +930,17 @@ class MinutesParser:
             return deadline_text
     
     def create_tasks_from_minutes(self, doc_url: str, tasks_spreadsheet_id: str, 
-                                 people_mapping: Dict[str, str]) -> List[Dict[str, Any]]:
+                                 people_mapping: Dict[str, str], config_spreadsheet_id: str = None) -> List[Dict[str, Any]]:
         """
         Creates tasks in Google Sheets from parsed meeting minutes.
         Maps emoji completion status to appropriate Google Sheets status.
+        Also schedules reminders for tasks with specific deadlines.
         
         Args:
             doc_url: URL of the minutes document
             tasks_spreadsheet_id: ID of the tasks spreadsheet
             people_mapping: Dictionary mapping names to Discord IDs
+            config_spreadsheet_id: ID of the config spreadsheet (for reminder scheduling)
             
         Returns:
             List of created task dictionaries
@@ -988,6 +990,10 @@ class MinutesParser:
                     task_data['task_id'] = task_id
                     created_tasks.append(task_data)
                     print(f"Created task: {item.get('task', '')} for {item.get('person', '')} (Status: {status})")
+                    
+                    # Schedule reminders for the task if it has a specific deadline and config is available
+                    if config_spreadsheet_id and not completed and task_data.get('due_at'):
+                        self._schedule_task_reminders(task_data, config_spreadsheet_id)
                 else:
                     print(f"Failed to create task: {item.get('task', '')}")
             
@@ -996,3 +1002,55 @@ class MinutesParser:
         except Exception as e:
             print(f"Error creating tasks from minutes: {e}")
             return []
+    
+    def _schedule_task_reminders(self, task_data: Dict[str, Any], config_spreadsheet_id: str):
+        """
+        Schedules reminders for a task using the Timers tab.
+        
+        Args:
+            task_data: Task data dictionary
+            config_spreadsheet_id: ID of the config spreadsheet (for timers)
+        """
+        try:
+            task_id = task_data.get('task_id', '')
+            due_at = task_data.get('due_at', '')
+            
+            if not due_at or due_at in ['next_meeting', 'this_week', 'next_week', 'end_of_month']:
+                print(f"No specific deadline for task {task_id}, skipping reminder scheduling")
+                return
+            
+            # Parse deadline
+            try:
+                deadline = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+            except ValueError:
+                print(f"Invalid deadline format for task {task_id}: {due_at}")
+                return
+            
+            # Schedule reminders at T-24h, T-2h, T+0h (overdue), T+48h (escalation)
+            from datetime import timedelta
+            reminders = [
+                {'type': 'task_reminder_24h', 'fire_at': deadline - timedelta(hours=24)},
+                {'type': 'task_reminder_2h', 'fire_at': deadline - timedelta(hours=2)},
+                {'type': 'task_overdue', 'fire_at': deadline},
+                {'type': 'task_escalate', 'fire_at': deadline + timedelta(hours=48)}
+            ]
+            
+            for reminder in reminders:
+                timer_data = {
+                    'id': f"{task_id}_{reminder['type']}",
+                    'guild_id': '',  # Will be set by caller
+                    'type': reminder['type'],
+                    'ref_type': 'task',
+                    'ref_id': task_id,
+                    'fire_at_utc': reminder['fire_at'].isoformat(),
+                    'channel_id': '',  # Will be set by caller
+                    'state': 'active',
+                    'title': task_data.get('title', ''),
+                    'mention': task_data.get('owner_discord_id', '')
+                }
+                
+                self.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
+                print(f"Scheduled {reminder['type']} reminder for task {task_id} at {reminder['fire_at']}")
+            
+        except Exception as e:
+            print(f"Error scheduling task reminders: {e}")
