@@ -604,12 +604,15 @@ def send_meeting_schedule(amount_of_meetings_to_return: int):
                                 start_time = meeting.get('start_at_local', meeting.get('start_at_utc', 'Time TBD'))
                                 location = meeting.get('location', 'Location TBD')
                                 meeting_link = meeting.get('meeting_link', '')
+                                minutes_link = meeting.get('minutes_link', '')
                                 
                                 meetings_info += f"**{title}**\n"
                                 meetings_info += f"🕐 {start_time}\n"
                                 meetings_info += f"📍 {location}\n"
                                 if meeting_link:
                                     meetings_info += f"🔗 {meeting_link}\n"
+                                if minutes_link:
+                                    meetings_info += f"📄 Minutes: {minutes_link}\n"
                                 meetings_info += "\n"
                     except Exception as sheet_error:
                         print(f"❌ [ERROR] Failed to get meetings from Google Sheets: {sheet_error}")
