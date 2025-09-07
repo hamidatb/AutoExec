@@ -598,62 +598,7 @@ class MinutesParser:
     def _convert_deadline_to_iso(self, deadline_text: str) -> str:
         """
         Converts deadline text to ISO 8601 format with timezone.
-        
-        Args:
-            deadline_text: The deadline text (e.g., "Sep 8", "Sep 8, 2025")
-            
-        Returns:
-            ISO 8601 formatted deadline string (e.g., "2025-09-08T23:59:00+00:00")
-        """
-        try:
-            from datetime import datetime, timezone
-            
-            # Clean up the deadline text
-            deadline_text = deadline_text.strip()
-            
-            # Try different date formats
-            date_formats = [
-                '%b %d, %Y',  # "Sep 8, 2025"
-                '%b %d',      # "Sep 8" (assume current year)
-                '%B %d, %Y',  # "September 8, 2025"
-                '%B %d',      # "September 8" (assume current year)
-                '%Y-%m-%d',   # "2025-09-08"
-                '%m/%d/%Y',   # "09/08/2025"
-                '%m/%d/%y',   # "09/08/25"
-            ]
-            
-            for fmt in date_formats:
-                try:
-                    if fmt in ['%b %d', '%B %d']:
-                        # Add current year
-                        parsed_date = datetime.strptime(deadline_text, fmt)
-                        current_year = datetime.now().year
-                        parsed_date = parsed_date.replace(year=current_year)
-                    else:
-                        parsed_date = datetime.strptime(deadline_text, fmt)
-                    
-                    # Set to end of day (23:59:00) in UTC
-                    parsed_date = parsed_date.replace(hour=23, minute=59, second=0, microsecond=0, tzinfo=timezone.utc)
-                    return parsed_date.isoformat()
-                    
-                except ValueError:
-                    continue
-            
-            # If we can't parse it, return current date + 2 weeks as fallback
-            fallback_date = datetime.now(timezone.utc).replace(hour=23, minute=59, second=0, microsecond=0)
-            return fallback_date.isoformat()
-            
-        except Exception as e:
-            print(f"Error converting deadline to ISO: {e}")
-            # Return current date + 2 weeks as fallback
-            from datetime import datetime, timezone, timedelta
-            fallback_date = datetime.now(timezone.utc) + timedelta(weeks=2)
-            fallback_date = fallback_date.replace(hour=23, minute=59, second=0, microsecond=0)
-            return fallback_date.isoformat()
-
-    def _convert_deadline_to_iso(self, deadline_text: str) -> str:
-        """
-        Converts deadline text to ISO 8601 format with timezone.
+        Ensures consistent deadline formatting for Google Sheets integration.
         
         Args:
             deadline_text: The deadline text (e.g., "Sep 8", "Sep 8, 2025")
