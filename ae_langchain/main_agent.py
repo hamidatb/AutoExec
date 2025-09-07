@@ -147,6 +147,8 @@ IMPORTANT GUIDELINES:
 - For meeting reminder information (like "what reminders are set up") → Use get_meeting_reminder_info
 - For task creation, use create_task_with_timer to automatically set up reminders
 - For sending reminders to specific people, use send_reminder_to_person (not send_announcement)
+- If the person isn't found in exec members, offer alternatives like @everyone or general announcements
+- For general announcements to everyone, use send_announcement with natural headers like "🎉 **Team Recognition**" or "📢 **Club Information**"
 - For meeting scheduling, use start_meeting_scheduling to begin interactive conversation
 - When scheduling meetings, have a back-and-forth conversation to gather all details:
   1. Start with start_meeting_scheduling when user wants to schedule a meeting
@@ -190,6 +192,8 @@ EXAMPLES OF WHEN TO USE TOOLS:
 - "What's our meeting schedule?" → Use send_meeting_schedule with amount_of_meetings_to_return=5
 - "Create a task for John due tomorrow" → Use create_task_with_timer
 - "Send a reminder to Hamidat that she hasn't done her task" → Use send_reminder_to_person
+- "Send a reminder to Sanika about her task" (if Sanika not in exec list) → Show available execs and offer alternatives
+- "Send out an announcement about Victoria's Instagram milestone" → Use send_announcement with "🎉 **Team Recognition**\n\nCongratulations to Victoria for reaching 403 followers on our Instagram! 🎉 Let's keep the momentum going! 🚀"
 - "Schedule a meeting called Team Sync" → Use start_meeting_scheduling to begin interactive flow
 - "Oh I meant hamidat" (after trying to create task for John) → Use create_task_with_timer with corrected name
 - "What timers are active?" → Use list_active_timers
@@ -861,12 +865,12 @@ def send_reminder_to_person(person_name: str, reminder_message: str) -> str:
     This tool finds the person by name and sends them a direct reminder.
     
     **USE THIS TOOL FOR:**
-    - Sending reminders to specific individuals
+    - Sending reminders to specific individuals (e.g., "remind John about his task")
     - Personal notifications that don't need @everyone
     - Individual task reminders or follow-ups
     
     **DO NOT USE THIS FOR:**
-    - General announcements to everyone
+    - General announcements to everyone (use send_announcement instead)
     - Meeting reminders (use meeting tools instead)
     - Creating new tasks (use create_task_with_timer instead)
     
@@ -913,7 +917,24 @@ def send_reminder_to_person(person_name: str, reminder_message: str) -> str:
         # Check if we need to ask for a Discord mention
         if person_discord_id.startswith("NEED_MENTION_FOR_"):
             print(f"🔍 [DEBUG] Need mention for: {clean_person_name}")
-            return ask_for_discord_mention(clean_person_name)
+            # Get the list of available exec members for context
+            exec_members = guild_config.get('exec_members', [])
+            exec_list = "\n".join([f"• {member['name']} ({member['role']})" for member in exec_members])
+            
+            return f"""❓ **Person Not Found**
+
+I couldn't find **{clean_person_name}** in the executive members list.
+
+**Available executives:**
+{exec_list if exec_list else "No executives configured"}
+
+**Options:**
+• Use one of the executives listed above
+• Say "send to @everyone" for a general reminder
+• Say "send without mentioning anyone" for a general message
+• Provide the Discord mention: `{clean_person_name}'s Discord is @username`
+
+Please clarify who you'd like to send the reminder to."""
         
         # Get the task reminders channel
         task_reminders_channel_id = guild_config.get('task_reminders_channel_id')
@@ -952,8 +973,13 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
     **DO NOT USE THIS FOR TASK CREATION** - Use create_task_with_timer instead!
     **DO NOT USE THIS FOR MEETING SCHEDULING** - Use create_meeting_with_timer instead!
     
+    **IMPORTANT:** You can add natural headers to your announcement_message like:
+    - "🎉 **Team Recognition**\n\nCongratulations to Victoria for reaching 403 followers..."
+    - "📢 **Club Information**\n\nOur next meeting has been rescheduled..."
+    - "🚨 **Urgent Update**\n\nPlease note the following changes..."
+    
     Args:
-        announcement_message (str): The announcement message to send (REQUIRED)
+        announcement_message (str): The announcement message to send (REQUIRED) - you can include natural headers like "🎉 **Team Recognition**\n\n[message]"
         announcement_type (str): Type of announcement - "meeting", "task", "general", or "escalation" (optional, defaults to "general")
         
     Returns:
@@ -994,11 +1020,8 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
                 if not channel_id:
                     return f"❌ No {channel_name} channel configured. Please run `/setup` first."
                 
-                # Send the announcement to the specific channel (no @everyone unless it's an escalation)
-                if announcement_type.lower() == "escalation":
-                    formatted_message = f"@everyone 📢 **{announcement_type.title()}**\n\n{announcement_message}"
-                else:
-                    formatted_message = f"📢 **{announcement_type.title()}**\n\n{announcement_message}"
+                # Send the announcement to the specific channel with @everyone tag
+                formatted_message = f"@everyone {announcement_message}"
                 
                 # Since we're running in a thread pool, we can't directly send Discord messages
                 # Instead, we'll use a thread-safe approach by storing the message to be sent
