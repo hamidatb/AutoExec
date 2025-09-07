@@ -128,7 +128,7 @@ class ClubSheetsManager:
             ).execute()
             
             # Initialize timers sheet headers
-            timers_headers = [['id', 'guild_id', 'type', 'ref_type', 'ref_id', 'fire_at_utc', 'channel_id', 'state']]
+            timers_headers = [['id', 'guild_id', 'type', 'ref_type', 'ref_id', 'fire_at_utc', 'channel_id', 'state', 'title', 'mention']]
             self.sheets_service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
                 range='timers!A1',
