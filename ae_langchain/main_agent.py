@@ -142,6 +142,9 @@ CRITICAL DATE HANDLING:
 IMPORTANT GUIDELINES:
 - You can respond directly to simple questions about AutoExec, creator info, and general capabilities
 - Use tools when you need to access specific data (meetings, tasks, setup status) or perform actions
+- **ALWAYS use tools for meeting queries** - Don't say "I don't have access" when you have meeting tools available
+- For questions like "when is our next meeting", "what meetings do we have", "show me upcoming meetings" → Use send_meeting_schedule with appropriate number
+- For meeting reminder information (like "what reminders are set up") → Use get_meeting_reminder_info
 - For task creation, use create_task_with_timer to automatically set up reminders
 - For meeting scheduling, use start_meeting_scheduling to begin interactive conversation
 - When scheduling meetings, have a back-and-forth conversation to gather all details:
@@ -180,7 +183,10 @@ EXAMPLES OF DIRECT RESPONSES (no tools needed):
 - "Hello" → Greet directly
 
 EXAMPLES OF WHEN TO USE TOOLS:
-- "What meetings do I have?" → Use send_meeting_schedule
+- "What meetings do I have?" → Use send_meeting_schedule with amount_of_meetings_to_return=5
+- "When is our next meeting?" → Use send_meeting_schedule with amount_of_meetings_to_return=1
+- "Show me upcoming meetings" → Use send_meeting_schedule with amount_of_meetings_to_return=3
+- "What's our meeting schedule?" → Use send_meeting_schedule with amount_of_meetings_to_return=5
 - "Create a task for John due tomorrow" → Use create_task_with_timer
 - "Schedule a meeting called Team Sync" → Use start_meeting_scheduling to begin interactive flow
 - "Oh I meant hamidat" (after trying to create task for John) → Use create_task_with_timer with corrected name
@@ -487,11 +493,12 @@ def send_output_to_discord(messageToSend:str) -> str:
 def send_meeting_schedule(amount_of_meetings_to_return: int):
     """
     Retrieves a formatted string representation of the upcoming few meetings from Google Sheets.
+    Use this when users ask "what meetings do we have", "show me upcoming meetings", or "what's our schedule".
 
     **This function REQUIRES an argument. It will raise an error if none is provided.**
 
     Args:
-        amount_of_meetings_to_return (int): The number of meetings to return (REQUIRED).
+        amount_of_meetings_to_return (int): The number of meetings to return (REQUIRED). Use 3-5 for general queries.
         
     Returns:
         str: Formatted meeting schedule information to be sent to Discord.
@@ -667,8 +674,10 @@ def cleanup_past_meetings():
 @tool
 def get_meeting_reminder_info():
     """
-    Get information about the next upcoming meeting for display purposes.
-    Use this when users ask about meeting reminders or upcoming meetings.
+    Get information about meeting reminders and reminder settings.
+    Use this when users ask about reminder settings, "what reminders are set up", or meeting reminder information.
+    For actual meeting details, use send_meeting_schedule instead.
+    This tool automatically gets the next meeting without requiring parameters.
     """
 
     try:
