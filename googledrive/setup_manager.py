@@ -74,6 +74,10 @@ class SetupManager:
                 'step': 'guild_id' if not guild_id else 'club_name',
                 'club_name': None,
                 'admin_discord_id': None,
+                'timezone': 'America/Edmonton',  # Default timezone
+                'exec_members': [],  # List of exec team members
+                'exec_count': None,  # Number of exec members
+                'current_exec_index': 0,  # Current exec member being collected
                 'guild_id': guild_id,
                 'guild_name': guild_name,
                 'config_folder_id': None,
@@ -131,6 +135,10 @@ class SetupManager:
             print(f"🔍 [SETUP] Handling setup response for user {user_id}")
             print(f"🔍 [SETUP] Message content: {message_content}")
             
+            # Check for /cancel command
+            if message_content.lower().strip() == '/cancel':
+                return self.cancel_setup(user_id)
+            
             if user_id not in self.setup_states:
                 print(f"❌ [SETUP ERROR] No setup session found for user {user_id}")
                 return "❌ Setup session not found. Please start setup again with `/setup`."
@@ -145,6 +153,12 @@ class SetupManager:
                 return await self._handle_club_name(user_id, message_content)
             elif current_step == 'admin_selection':
                 return await self._handle_admin_selection(user_id, message_content)
+            elif current_step == 'timezone':
+                return await self._handle_timezone(user_id, message_content)
+            elif current_step == 'exec_count':
+                return await self._handle_exec_count(user_id, message_content)
+            elif current_step == 'exec_member':
+                return await self._handle_exec_member(user_id, message_content)
             elif current_step == 'folder_selection':
                 return await self._handle_folder_selection(user_id, message_content)
             elif current_step == 'sheets_initialization':
@@ -179,7 +193,7 @@ class SetupManager:
             
             # Validate guild ID format (should be numeric)
             if not guild_id.isdigit():
-                return "❌ **Invalid Server ID**\n\nPlease provide a valid Discord server ID (numbers only).\n\n**How to get your Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'\n3. Paste the ID here"
+                return "❌ **Invalid Server ID**\n\nPlease provide a valid Discord server ID (numbers only).\n\n**How to get your Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'\n3. Paste the ID here\n\n**You can also type `/cancel` to stop the setup process.**"
             
             # Check if this guild is already set up
             if self.status_manager.is_setup_complete(guild_id):
@@ -246,26 +260,22 @@ class SetupManager:
             admin_discord_id = self._extract_discord_id(admin_mention)
             
             if not admin_discord_id:
-                return "❌ Please @mention the admin user (e.g., @username)."
+                return "❌ **Invalid Admin Mention**\n\nPlease @mention the admin user (e.g., @username).\n\n**You can also type `/cancel` to stop the setup process.**"
             
             # Store admin Discord ID
             self.setup_states[user_id]['admin_discord_id'] = admin_discord_id
-            self.setup_states[user_id]['step'] = 'folder_selection'
+            self.setup_states[user_id]['step'] = 'timezone'
             
             message = f"✅ **Admin Set: <@{admin_discord_id}>**\n\n"
-            message += "**Step 4: Google Sheets Initialization**\n"
-            message += "Before I create the Google Sheets, I need to know where to put them.\n\n"
-            message += "**IMPORTANT**: Please make sure you have shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**!\n\n"
-            message += "**No OAuth needed** - the bot will access only the folders you specifically share.\n\n"
-            message += "Please provide the Google Drive folder links for:\n"
-            message += "• **Main Config Folder** - Where to store the Task Manager Config sheet\n"
-            message += "• **Monthly Sheets Folder** - Where to store monthly task and meeting sheets\n"
-            message += "• **Meeting Minutes Folder** - Where to store meeting minutes documents\n\n"
-            message += "You can get folder links by:\n"
-            message += "1. Right-clicking the folder in Google Drive\n"
-            message += "2. Selecting 'Get link'\n"
-            message += "3. Copying the link\n\n"
-            message += "**Format**: Please provide all three links separated by a new line or comma."
+            message += "**Step 4: Timezone Configuration**\n"
+            message += "What timezone should I use for your club? (Press Enter to use the default)\n\n"
+            message += "**Default:** America/Edmonton\n\n"
+            message += "**Examples:**\n"
+            message += "• America/New_York\n"
+            message += "• America/Los_Angeles\n"
+            message += "• Europe/London\n"
+            message += "• Asia/Tokyo\n\n"
+            message += "**Note:** This will be used for all meeting times and reminders."
             
             # Get current month
             current_month = datetime.now().strftime("%B %Y")
@@ -277,6 +287,190 @@ class SetupManager:
         except Exception as e:
             print(f"Error handling admin selection: {e}")
             return "❌ Error setting admin. Please try again."
+    
+    async def _handle_timezone(self, user_id: str, timezone_input: str) -> str:
+        """
+        Handles timezone input.
+        
+        Args:
+            user_id: Discord ID of the user
+            timezone_input: Timezone input from user
+            
+        Returns:
+            Next setup message
+        """
+        try:
+            timezone_input = timezone_input.strip()
+            
+            # If empty, use default
+            if not timezone_input:
+                timezone_input = 'America/Edmonton'
+            
+            # Basic timezone validation (you could make this more robust)
+            valid_timezones = [
+                'America/Edmonton', 'America/New_York', 'America/Los_Angeles', 
+                'America/Chicago', 'America/Denver', 'Europe/London', 'Europe/Paris',
+                'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney', 'UTC'
+            ]
+            
+            # Store timezone
+            self.setup_states[user_id]['timezone'] = timezone_input
+            self.setup_states[user_id]['step'] = 'exec_count'
+            
+            message = f"✅ **Timezone Set: {timezone_input}**\n\n"
+            message += "**Step 5: Executive Team**\n"
+            message += "How many executive team members do you have?\n\n"
+            message += "**Note:** This includes all exec positions (President, VP, Treasurer, etc.)\n"
+            message += "You can always add more members later through the configuration."
+            
+            return message
+            
+        except Exception as e:
+            print(f"Error handling timezone: {e}")
+            return "❌ Error setting timezone. Please try again."
+    
+    async def _handle_exec_count(self, user_id: str, count_input: str) -> str:
+        """
+        Handles executive team count input.
+        
+        Args:
+            user_id: Discord ID of the user
+            count_input: Number of exec members
+            
+        Returns:
+            Next setup message
+        """
+        try:
+            count_input = count_input.strip()
+            
+            # Validate count
+            try:
+                exec_count = int(count_input)
+                if exec_count < 0:
+                    return "❌ **Invalid Count**\n\nPlease enter a valid number of executive members (0 or more).\n\n**You can also type `/cancel` to stop the setup process.**"
+            except ValueError:
+                return "❌ **Invalid Count**\n\nPlease enter a valid number (e.g., 5).\n\n**You can also type `/cancel` to stop the setup process.**"
+            
+            # Store count and initialize exec collection
+            self.setup_states[user_id]['exec_count'] = exec_count
+            self.setup_states[user_id]['exec_members'] = []
+            self.setup_states[user_id]['current_exec_index'] = 0
+            
+            if exec_count == 0:
+                # Skip exec collection, go to folder selection
+                self.setup_states[user_id]['step'] = 'folder_selection'
+                message = f"✅ **Executive Team Count Set: {exec_count}**\n\n"
+                message += "**Step 6: Google Drive Folders**\n"
+                message += "Before I create the Google Sheets, I need to know where to put them.\n\n"
+                message += "**IMPORTANT**: Please make sure you have shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**!\n\n"
+                message += "**No OAuth needed** - the bot will access only the folders you specifically share.\n\n"
+                message += "Please provide the Google Drive folder links for:\n"
+                message += "• **Main Config Folder** - Where to store the Task Manager Config sheet\n"
+                message += "• **Monthly Sheets Folder** - Where to store monthly task and meeting sheets\n"
+                message += "• **Meeting Minutes Folder** - Where to store meeting minutes documents\n\n"
+                message += "You can get folder links by:\n"
+                message += "1. Right-clicking the folder in Google Drive\n"
+                message += "2. Selecting 'Get link'\n"
+                message += "3. Copying the link\n\n"
+                message += "**Format**: Please provide all three links separated by a new line or comma."
+            else:
+                # Start collecting exec members
+                self.setup_states[user_id]['step'] = 'exec_member'
+                message = f"✅ **Executive Team Count Set: {exec_count}**\n\n"
+                message += "**Step 6: Executive Team Members**\n"
+                message += f"Now I'll collect information for each of your {exec_count} executive members.\n\n"
+                message += "**For each member, please provide:**\n"
+                message += "• First and last name\n"
+                message += "• Role/position (optional - defaults to 'General Team Member')\n"
+                message += "• Discord ID\n\n"
+                message += "**Format:** `FirstName LastName, Role, @DiscordUser`\n"
+                message += "**Example:** `John Smith, President, @johnsmith`\n\n"
+                message += f"**Member 1 of {exec_count}:**"
+            
+            return message
+            
+        except Exception as e:
+            print(f"Error handling exec count: {e}")
+            return "❌ Error setting executive count. Please try again."
+    
+    async def _handle_exec_member(self, user_id: str, member_input: str) -> str:
+        """
+        Handles executive member input.
+        
+        Args:
+            user_id: Discord ID of the user
+            member_input: Member information input
+            
+        Returns:
+            Next setup message
+        """
+        try:
+            current_state = self.setup_states[user_id]
+            current_index = current_state['current_exec_index']
+            total_count = current_state['exec_count']
+            
+            # Parse member input
+            parts = [part.strip() for part in member_input.split(',')]
+            
+            if len(parts) < 2:
+                return "❌ **Invalid Format**\n\nPlease provide: `FirstName LastName, Role, @DiscordUser`\n\n**Example:** `John Smith, President, @johnsmith`\n\n**Note:** Role is optional - you can omit it.\n\n**You can also type `/cancel` to stop the setup process.**"
+            
+            # Extract name, role, and Discord ID
+            name = parts[0].strip()
+            discord_mention = parts[-1].strip()  # Last part should be Discord mention
+            
+            # Role is optional (middle part if provided)
+            role = "General Team Member"  # Default
+            if len(parts) == 3:
+                role = parts[1].strip()
+            
+            # Extract Discord ID from mention
+            discord_id = self._extract_discord_id(discord_mention)
+            if not discord_id:
+                return "❌ **Invalid Discord ID**\n\nPlease @mention the Discord user (e.g., @username).\n\n**You can also type `/cancel` to stop the setup process.**"
+            
+            # Validate name
+            if not name or len(name.split()) < 2:
+                return "❌ **Invalid Name**\n\nPlease provide both first and last name.\n\n**You can also type `/cancel` to stop the setup process.**"
+            
+            # Store member
+            member_info = {
+                'name': name,
+                'role': role,
+                'discord_id': discord_id
+            }
+            current_state['exec_members'].append(member_info)
+            current_state['current_exec_index'] += 1
+            
+            # Check if we've collected all members
+            if current_state['current_exec_index'] >= total_count:
+                # All members collected, move to folder selection
+                current_state['step'] = 'folder_selection'
+                message = f"✅ **Member {current_index + 1} Added: {name} ({role})**\n\n"
+                message += f"✅ **All {total_count} executive members collected!**\n\n"
+                message += "**Step 7: Google Drive Folders**\n"
+                message += "Before I create the Google Sheets, I need to know where to put them.\n\n"
+                message += "**IMPORTANT**: Please make sure you have shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**!\n\n"
+                message += "**No OAuth needed** - the bot will access only the folders you specifically share.\n\n"
+                message += "Please provide the Google Drive folder links for:\n"
+                message += "• **Main Config Folder** - Where to store the Task Manager Config sheet\n"
+                message += "• **Monthly Sheets Folder** - Where to store monthly task and meeting sheets\n"
+                message += "• **Meeting Minutes Folder** - Where to store meeting minutes documents\n\n"
+                message += "You can get folder links by:\n"
+                message += "1. Right-clicking the folder in Google Drive\n"
+                message += "2. Selecting 'Get link'\n"
+                message += "3. Copying the link\n\n"
+                message += "**Format**: Please provide all three links separated by a new line or comma."
+            else:
+                # More members to collect
+                message = f"✅ **Member {current_index + 1} Added: {name} ({role})**\n\n"
+                message += f"**Member {current_index + 2} of {total_count}:**"
+            
+            return message
+            
+        except Exception as e:
+            print(f"Error handling exec member: {e}")
+            return "❌ Error adding executive member. Please try again."
     
     async def _handle_folder_selection(self, user_id: str, message_content: str) -> str:
         """
@@ -489,7 +683,9 @@ class SetupManager:
             # Create master config sheet
             try:
                 config_spreadsheet_id = self.sheets_manager.create_master_config_sheet(
-                    club_name, admin_discord_id, config_folder_id
+                    club_name, admin_discord_id, config_folder_id, 
+                    current_state.get('timezone', 'America/Edmonton'),
+                    current_state.get('exec_members', [])
                 )
                 print(f"🔍 [SETUP] Config sheet created with ID: {config_spreadsheet_id}")
             except Exception as e:
@@ -532,7 +728,7 @@ class SetupManager:
             message += f"• Config Sheet: `{config_spreadsheet_id}`\n"
             message += f"• Tasks Sheet: `{monthly_sheets['tasks']}`\n"
             message += f"• Meetings Sheet: `{monthly_sheets['meetings']}`\n\n"
-            message += "**Step 6a: Task Reminders Channel**\n"
+            message += "**Step 8a: Task Reminders Channel**\n"
             message += "Now I need to know which Discord channels to use for different types of messages.\n\n"
             message += "First, which channel should I use for task reminders?\n\n"
             message += "This is where I'll send:\n"
@@ -567,7 +763,7 @@ class SetupManager:
             print(f"🔍 [SETUP] Extracted task reminders channel ID: {channel_id}")
             
             if not channel_id or not channel_id.isdigit():
-                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here"
+                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here\n\n**You can also type `/cancel` to stop the setup process.**"
             
             # Store task reminders channel ID
             current_state = self.setup_states[user_id]
@@ -578,7 +774,7 @@ class SetupManager:
             
             message = "✅ **Task Reminders Channel Set!**\n\n"
             message += f"Task reminders will be sent to: <#{channel_id}>\n\n"
-            message += "**Step 6b: Meeting Reminders Channel**\n"
+            message += "**Step 8b: Meeting Reminders Channel**\n"
             message += "Now, which channel should I use for meeting reminders?\n\n"
             message += "This is where I'll send:\n"
             message += "• Meeting notifications (T-2h, T-0)\n"
@@ -611,7 +807,7 @@ class SetupManager:
             print(f"🔍 [SETUP] Extracted meeting reminders channel ID: {channel_id}")
             
             if not channel_id or not channel_id.isdigit():
-                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here"
+                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here\n\n**You can also type `/cancel` to stop the setup process.**"
             
             # Store meeting reminders channel ID
             current_state = self.setup_states[user_id]
@@ -622,7 +818,7 @@ class SetupManager:
             
             message = "✅ **Meeting Reminders Channel Set!**\n\n"
             message += f"Meeting reminders will be sent to: <#{channel_id}>\n\n"
-            message += "**Step 6c: Escalation Channel**\n"
+            message += "**Step 8c: Escalation Channel**\n"
             message += "Finally, which channel should I use for escalations?\n\n"
             message += "This is where I'll send:\n"
             message += "• Overdue task alerts\n"
@@ -656,7 +852,7 @@ class SetupManager:
             print(f"🔍 [SETUP] Extracted escalation channel ID: {channel_id}")
             
             if not channel_id or not channel_id.isdigit():
-                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here"
+                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here\n\n**You can also type `/cancel` to stop the setup process.**"
             
             # Store escalation channel ID
             current_state = self.setup_states[user_id]
@@ -722,6 +918,8 @@ class SetupManager:
                     'guild_name': current_state.get('guild_name', 'Unknown Guild'),
                     'club_name': current_state['club_name'],
                     'admin_user_id': current_state['admin_discord_id'],
+                    'timezone': current_state.get('timezone', 'America/Edmonton'),
+                    'exec_members': current_state.get('exec_members', []),
                     'config_spreadsheet_id': current_state['config_spreadsheet_id'],
                     'task_reminders_channel_id': current_state['task_reminders_channel_id'],
                     'meeting_reminders_channel_id': current_state['meeting_reminders_channel_id'],
@@ -748,17 +946,28 @@ class SetupManager:
             print(f"🔍 [SETUP] Setup completed successfully for user {user_id}")
             
             message = "🎉 **Setup Complete!** 🎉\n\n"
-            message += f"Your club **{current_state['club_name']}** is now configured!\n\n"
+            message += f"Your club **{current_state['club_name']}** is now fully configured and ready to use!\n\n"
+            message += "**Configuration Summary:**\n"
+            message += f"• **Club Name:** {current_state['club_name']}\n"
+            message += f"• **Admin:** <@{current_state['admin_discord_id']}>\n"
+            message += f"• **Timezone:** {current_state.get('timezone', 'America/Edmonton')}\n"
+            message += f"• **Executive Members:** {len(current_state.get('exec_members', []))} members added\n"
+            message += f"• **Config Sheet:** Created with config, people, logs, and timers tabs\n\n"
             message += "**Channel Configuration:**\n"
-            message += f"• Task reminders will be sent to: <#{current_state['task_reminders_channel_id']}>\n"
-            message += f"• Meeting reminders will be sent to: <#{current_state['meeting_reminders_channel_id']}>\n"
-            message += f"• Escalations will be sent to: <#{current_state['escalation_channel_id']}>\n\n"
-            message += "**What happens next:**\n"
-            message += "• I'll listen for commands in your DM and public channels\n"
+            message += f"• Task reminders: <#{current_state['task_reminders_channel_id']}>\n"
+            message += f"• Meeting reminders: <#{current_state['meeting_reminders_channel_id']}>\n"
+            message += f"• Escalations: <#{current_state['escalation_channel_id']}>\n\n"
+            message += "**Setup Data Persisted:**\n"
+            message += "• All configuration saved to persistent storage\n"
+            message += "• Google Sheets created and configured\n"
+            message += "• Executive team members added to people sheet\n"
+            message += "• Timezone settings applied\n\n"
+            message += "**Ready to Use:**\n"
+            message += "• All features are now unlocked\n"
             message += "• Use `/meeting set` to schedule meetings\n"
             message += "• Use `/assign` to create tasks\n"
             message += "• I'll automatically parse meeting minutes and create tasks\n"
-            message += "• Task reminders and escalations will be sent to the configured channels\n\n"
+            message += "• Task reminders and escalations will be sent to configured channels\n\n"
             message += "**Need help?** Use `/help` to see all available commands."
             
             return message
@@ -852,6 +1061,8 @@ class SetupManager:
                     'guild_name': current_state.get('guild_name', 'Unknown Guild'),
                     'club_name': current_state['club_name'],
                     'admin_user_id': current_state['admin_discord_id'],
+                    'timezone': current_state.get('timezone', 'America/Edmonton'),
+                    'exec_members': current_state.get('exec_members', []),
                     'config_spreadsheet_id': current_state['config_spreadsheet_id'],
                     'task_reminders_channel_id': current_state['task_reminders_channel_id'],
                     'meeting_reminders_channel_id': current_state['meeting_reminders_channel_id'],
