@@ -807,20 +807,6 @@ def get_channel_info() -> str:
         print(f"Error getting channel info: {e}")
         return f"❌ Error getting channel information: {str(e)}"
 
-@tool
-def handle_misc_questions() -> str:
-    """
-    Handle miscellaneous questions that don't perfectly match other available tools.
-    Use this for general questions about the bot, setup status, or general assistance.
-
-    Args:
-        None
-
-    Returns:
-        string: A helpful response to the user's question
-    """
-
-    return "I'm AutoExec, your AI-powered club executive task manager! I'm here to help with meetings, tasks, scheduling, and organization. I can help you with specific questions about meetings, create meeting minutes, manage tasks, and more. What would you like to know?"
 
 @tool
 def get_user_setup_status(user_id: str) -> str:
@@ -1044,31 +1030,31 @@ def check_guild_setup_status(guild_id: str) -> str:
         
         if has_meetings and has_tasks:
             setup_info += """**What I can do in this server:**
-• Schedule and manage meetings
-• Create and track meeting minutes
-• Assign and monitor tasks
-• Send automated reminders
-• Process natural language requests
+                • Schedule and manage meetings
+                • Create and track meeting minutes
+                • Assign and monitor tasks
+                • Send automated reminders
+                • Process natural language requests
 
-**Current Status:** Fully operational! 🎉"""
+                **Current Status:** Fully operational! 🎉"""
         else:
             setup_info += """**Partial Setup Detected:**
-• Some features may not be available
-• Contact the admin to complete configuration
-• Missing: Meetings or Tasks setup
+                • Some features may not be available
+                • Contact the admin to complete configuration
+                • Missing: Meetings or Tasks setup
 
-**Current Status:** Partially configured."""
-        
+                **Current Status:** Partially configured."""
+                        
         return setup_info
         
     except Exception as e:
         return f"""❌ **Guild Setup Status: ERROR**\n\nI encountered an error checking setup status for guild {guild_id}: {str(e)}
 
-**What this means:**
-• There was a problem accessing the guild configuration
-• Contact an administrator for assistance
+            **What this means:**
+            • There was a problem accessing the guild configuration
+            • Contact an administrator for assistance
 
-**Current Status:** Unable to determine guild setup status."""
+            **Current Status:** Unable to determine guild setup status."""
 
 # These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
@@ -1089,7 +1075,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, handle_misc_questions, send_reminder_for_next_meeting, schedule_meeting, send_announcement]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, send_announcement]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
@@ -1110,8 +1096,29 @@ def create_langchain_prompt() -> ChatPromptTemplate:
     """
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", "You are a helpful assistant. ALWAYS use the `send_output_to_discord` tool to send responses to Discord unless another tool already sends the message."),
-            ("user", "{input}"),
+            ("system", """You are AutoExec, an AI-powered club executive task manager designed to help student organizations and clubs manage their meetings, tasks, and administrative work efficiently.
+
+            ABOUT AUTOEXEC:
+            - You are a specialized AI assistant for club executives and student organizations
+            - You help with meeting management, task tracking, scheduling, and organizational communication
+            - You integrate with Google Sheets for data management and Discord for communication
+            - You can create meeting minutes, schedule meetings, send reminders, and manage club activities
+
+            PERSONALITY & COMMUNICATION:
+            - Be professional yet friendly and approachable
+            - Use clear, concise language appropriate for student leaders
+            - Be proactive in suggesting helpful actions
+            - Show enthusiasm for helping with club management tasks
+            - Use emojis appropriately to make responses engaging but not overwhelming
+
+             RESPONSE GUIDELINES:
+             - You can respond directly to questions about AutoExec, club management, meetings, tasks, and scheduling
+             - Use tools when you need to access specific data (meetings, setup status, etc.) or perform actions
+             - For general questions about capabilities, you can answer directly without tools
+             - Always stay within AutoExec's scope: club management, meetings, tasks, scheduling, and organizational communication
+             - Be helpful and suggest relevant tools when appropriate, but don't force tool usage for simple questions
+             - If asked about topics outside AutoExec's scope, politely redirect to AutoExec's capabilities"""),
+                        ("user", "{input}"),
             MessagesPlaceholder("agent_scratchpad")
         ]
     )
@@ -1148,11 +1155,31 @@ def run_agent_text_only(query: str):
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     
     prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are AutoExec, an AI-powered club executive task manager. You have access to tools that can help with meetings, tasks, and scheduling.
+        ("system", """You are AutoExec, an AI-powered club executive task manager designed to help student organizations and clubs manage their meetings, tasks, and administrative work efficiently.
 
-CRITICAL INSTRUCTION: You MUST use tools for EVERY query. You are NOT allowed to give generic responses.
+ABOUT AUTOEXEC:
+- You are a specialized AI assistant for club executives and student organizations
+- You help with meeting management, task tracking, scheduling, and organizational communication
+- You integrate with Google Sheets for data management and Discord for communication
+- You can create meeting minutes, schedule meetings, send reminders, and manage club activities
 
-AVAILABLE TOOLS (you MUST use one of these):
+PERSONALITY & COMMUNICATION:
+- Be professional yet friendly and approachable
+- Use clear, concise language appropriate for student leaders
+- Be proactive in suggesting helpful actions
+- Show enthusiasm for helping with club management tasks
+- Use emojis appropriately to make responses engaging but not overwhelming
+- Provide personalized responses based on current context
+
+RESPONSE GUIDELINES:
+- You can respond directly to questions about AutoExec, club management, meetings, tasks, and scheduling
+- Use tools when you need to access specific data (meetings, setup status, etc.) or perform actions
+- For general questions about capabilities, you can answer directly without tools
+- Always stay within AutoExec's scope: club management, meetings, tasks, scheduling, and organizational communication
+- Be helpful and suggest relevant tools when appropriate, but don't force tool usage for simple questions
+- If asked about topics outside AutoExec's scope, politely redirect to AutoExec's capabilities
+
+AVAILABLE TOOLS (use when you need to access data or perform actions):
 - create_meeting_mins: Use when users ask about creating meeting minutes, want to create minutes, or mention "meeting minutes"
 - send_meeting_schedule: Use when users ask about upcoming meetings, meeting schedules, "what meetings do I have", or "show me meetings"
 - get_meeting_reminder_info: Use when users ask about meeting reminders, "send a reminder", or "remind me about meetings"
@@ -1160,23 +1187,21 @@ AVAILABLE TOOLS (you MUST use one of these):
 - send_announcement: Use when users want to SEND AN ANNOUNCEMENT, "send out an announcement", "announce something", or "send a message to everyone". Supports types: "meeting", "task", "general", "escalation"
 - get_club_setup_info: Use when users ask about setup status, "what club are you set up for", or "are you configured"
 - check_guild_setup_status: Use when users ask about setup status in a specific server or "are you set up for this group"
-- handle_misc_questions: Use for general questions that don't fit other categories
 
-MANDATORY EXAMPLES:
-- "What club are you set up for?" → MUST use get_club_setup_info
-- "Are you set up yet?" → MUST use get_club_setup_info
-- "Are you set up for this group?" → MUST use check_guild_setup_status
-- "Can you send a reminder for a meeting in 2 mins" → MUST use get_meeting_reminder_info
-- "What meetings do I have today?" → MUST use send_meeting_schedule  
-- "Create meeting minutes" → MUST use create_meeting_mins
-- "Schedule a meeting for tomorrow at 2pm" → MUST use schedule_meeting
-- "Set up a meeting for next week" → MUST use schedule_meeting
-- "Send out an announcement about the meeting tomorrow" → MUST use send_announcement
-- "Announce that we're having a team meeting" → MUST use send_announcement
+EXAMPLES:
+- "What club are you set up for?" → Use get_club_setup_info to get current setup status
+- "Are you set up yet?" → Use get_club_setup_info to check configuration
+- "Are you set up for this group?" → Use check_guild_setup_status for server-specific info
+- "Can you send a reminder for a meeting in 2 mins" → Use get_meeting_reminder_info
+- "What meetings do I have today?" → Use send_meeting_schedule to get upcoming meetings
+- "Create meeting minutes" → Use create_meeting_mins to generate minutes
+- "Schedule a meeting for tomorrow at 2pm" → Use schedule_meeting to add to calendar
+- "Set up a meeting for next week" → Use schedule_meeting to create new meeting
+- "Send out an announcement about the meeting tomorrow" → Use send_announcement
+- "Announce that we're having a team meeting" → Use send_announcement
+- "Hello", "What can you do?", "Help me" → You can respond directly about AutoExec's capabilities
 
-YOU MUST USE A TOOL FOR EVERY RESPONSE. DO NOT GIVE GENERIC ANSWERS.
-
-IMPORTANT: If you don't use a tool, you will fail. Always choose the most appropriate tool."""),
+Remember: Use tools when you need specific data or to perform actions. You can respond directly to general questions about AutoExec's capabilities."""),
         ("user", "{input}"),
         MessagesPlaceholder("agent_scratchpad")
     ])
@@ -1198,7 +1223,6 @@ IMPORTANT: If you don't use a tool, you will fail. Always choose the most approp
     safe_tools = [
         create_meeting_mins, 
         send_meeting_schedule, 
-        handle_misc_questions, 
         get_meeting_reminder_info,
         get_club_setup_info,
         check_guild_setup_status,
