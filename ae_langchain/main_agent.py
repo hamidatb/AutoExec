@@ -266,7 +266,9 @@ MEETING SCHEDULING CONVERSATION EXAMPLES:
             get_exec_info,
             parse_meeting_minutes_action_items,
             create_tasks_from_meeting_minutes,
-            send_tasks_by_person
+            send_tasks_by_person,
+            search_tasks_by_title,
+            complete_task
         ]
         
         # Create agent with memory
@@ -2863,6 +2865,252 @@ def send_tasks_by_person(limit: int = 10) -> str:
         return f"❌ Error retrieving your tasks: {str(e)}"
 
 @tool
+def search_tasks_by_title(task_title: str) -> str:
+    """
+    Search for tasks by title to help users find the exact task they want to complete.
+    This tool helps confirm task details before marking them as completed.
+    
+    Args:
+        task_title (str): The title or partial title of the task to search for
+        
+    Returns:
+        str: List of matching tasks with their details and IDs
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get Discord context
+        context = get_discord_context()
+        user_id = context.get('user_id')
+        guild_id = context.get('guild_id')
+        
+        if not user_id:
+            return "❌ No Discord context found. Please use this command in a Discord server or DM."
+        
+        # Handle DM context - check if user is admin of any configured servers
+        if not guild_id:
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**\n\nYou are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:\n\n{guild_list}\n\n**How to specify:**\n• Mention the club name: "For [Club Name], search for task [title]"\n• Mention the server name: "In [Server Name], find task [title]"\n\n**Example:** "For Computer Science Club, search for task budget review"\n\nWhich server would you like me to help you with?"""
+        
+        # Get guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Get tasks spreadsheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        tasks_sheet_id = monthly_sheets.get('tasks')
+        
+        if not tasks_sheet_id:
+            return "❌ No tasks spreadsheet configured. Please run `/setup` first."
+        
+        # Search for tasks by title
+        matching_tasks = BOT_INSTANCE.sheets_manager.search_tasks_by_title(tasks_sheet_id, task_title)
+        
+        if not matching_tasks:
+            return f"🔍 **Task Search Results**\n\nNo tasks found matching '{task_title}'.\n\n**Try:**\n• Using a shorter search term\n• Checking for typos\n• Using different keywords from the task title"
+        
+        # Format response
+        response = f"🔍 **Task Search Results for '{task_title}'**\n\n"
+        
+        for i, task in enumerate(matching_tasks, 1):
+            task_id = task.get('task_id', 'Unknown ID')
+            title = task.get('title', 'Untitled Task')
+            owner_name = task.get('owner_name', 'Unknown')
+            status = task.get('status', 'open')
+            due_at = task.get('due_at', '')
+            priority = task.get('priority', 'medium')
+            notes = task.get('notes', '')
+            
+            # Status emoji
+            status_emoji = {
+                'open': '🟡',
+                'in_progress': '🔵', 
+                'done': '✅',
+                'blocked': '🔴'
+            }.get(status.lower(), '🟡')
+            
+            # Priority emoji
+            priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(priority.lower(), "🟡")
+            
+            response += f"**{i}. {status_emoji} {title}**\n"
+            response += f"   📋 **Task ID:** `{task_id}`\n"
+            response += f"   👤 **Assigned to:** {owner_name}\n"
+            response += f"   📊 **Status:** {status.title()}\n"
+            response += f"   {priority_emoji} **Priority:** {priority.title()}\n"
+            
+            if due_at:
+                try:
+                    from datetime import datetime
+                    due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+                    due_str = due_dt.strftime("%B %d, %Y at %I:%M %p UTC")
+                    response += f"   ⏰ **Due:** {due_str}\n"
+                except:
+                    response += f"   ⏰ **Due:** {due_at}\n"
+            
+            if notes:
+                response += f"   📝 **Notes:** {notes}\n"
+            
+            response += "\n"
+        
+        response += f"**Found {len(matching_tasks)} matching task(s).**\n\n"
+        response += "**To complete a task:** Use the task ID with the complete_task tool.\n"
+        response += "**Example:** \"Complete task with ID abc123\" or \"Mark task abc123 as done\""
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error searching tasks: {e}")
+        return f"❌ Error searching for tasks: {str(e)}"
+
+@tool
+def complete_task(task_id: str) -> str:
+    """
+    Mark a task as completed and cancel any pending reminders.
+    This tool will confirm the task details before marking it as done.
+    
+    Args:
+        task_id (str): The unique ID of the task to complete
+        
+    Returns:
+        str: Confirmation message with task details and completion status
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get Discord context
+        context = get_discord_context()
+        user_id = context.get('user_id')
+        guild_id = context.get('guild_id')
+        
+        if not user_id:
+            return "❌ No Discord context found. Please use this command in a Discord server or DM."
+        
+        # Handle DM context - check if user is admin of any configured servers
+        if not guild_id:
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**\n\nYou are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:\n\n{guild_list}\n\n**How to specify:**\n• Mention the club name: "For [Club Name], complete task [ID]"\n• Mention the server name: "In [Server Name], mark task [ID] as done"\n\n**Example:** "For Computer Science Club, complete task abc123"\n\nWhich server would you like me to help you with?"""
+        
+        # Get guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Get tasks spreadsheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        tasks_sheet_id = monthly_sheets.get('tasks')
+        config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+        
+        if not tasks_sheet_id:
+            return "❌ No tasks spreadsheet configured. Please run `/setup` first."
+        
+        # Find the task by ID
+        all_tasks = BOT_INSTANCE.sheets_manager.get_all_tasks(tasks_sheet_id)
+        target_task = None
+        
+        for task in all_tasks:
+            if task.get('task_id') == task_id:
+                target_task = task
+                break
+        
+        if not target_task:
+            return f"❌ **Task Not Found**\n\nNo task found with ID `{task_id}`.\n\n**To find tasks:** Use the search_tasks_by_title tool to search for tasks by name.\n**Example:** \"Search for task budget review\""
+        
+        # Check if task is already completed
+        current_status = target_task.get('status', 'open').lower()
+        if current_status == 'done':
+            return f"✅ **Task Already Completed**\n\n**Task:** {target_task.get('title', 'Untitled Task')}\n**Status:** Already marked as done\n**Task ID:** `{task_id}`\n\nThis task was already completed!"
+        
+        # Get task details for confirmation
+        task_title = target_task.get('title', 'Untitled Task')
+        owner_name = target_task.get('owner_name', 'Unknown')
+        due_at = target_task.get('due_at', '')
+        priority = target_task.get('priority', 'medium')
+        notes = target_task.get('notes', '')
+        
+        # Update task status to 'done' in Google Sheets
+        success = BOT_INSTANCE.sheets_manager.update_task_status(tasks_sheet_id, task_id, 'done')
+        
+        # Cancel all pending reminders for this task
+        cancelled_count = 0
+        if success and config_spreadsheet_id:
+            try:
+                # Get all timers for this task
+                task_timers = BOT_INSTANCE.sheets_manager.get_timers_by_ref(config_spreadsheet_id, 'task', task_id)
+                
+                # Cancel all active timers for this task
+                for timer in task_timers:
+                    if timer.get('state') == 'active':
+                        timer_id = timer.get('id')
+                        if timer_id:
+                            cancel_success = BOT_INSTANCE.sheets_manager.update_timer_state(config_spreadsheet_id, timer_id, 'cancelled')
+                            if cancel_success:
+                                cancelled_count += 1
+                                print(f"Cancelled timer {timer_id} for task {task_id}")
+                
+                print(f"Cancelled {cancelled_count} reminders for task {task_id}")
+            except Exception as e:
+                print(f"Error cancelling task reminders: {e}")
+                # Don't fail the whole operation if reminder cancellation fails
+        
+        if success:
+            # Format completion message
+            response = f"✅ **Task Completed Successfully!**\n\n"
+            response += f"**Task:** {task_title}\n"
+            response += f"**Assigned to:** {owner_name}\n"
+            response += f"**Task ID:** `{task_id}`\n"
+            response += f"**Priority:** {priority.title()}\n"
+            
+            if due_at:
+                try:
+                    from datetime import datetime
+                    due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+                    due_str = due_dt.strftime("%B %d, %Y at %I:%M %p UTC")
+                    response += f"**Original Due Date:** {due_str}\n"
+                except:
+                    response += f"**Original Due Date:** {due_at}\n"
+            
+            if notes:
+                response += f"**Notes:** {notes}\n"
+            
+            response += f"\n**Status:** ✅ Completed\n"
+            if cancelled_count > 0:
+                response += f"**Reminders:** {cancelled_count} pending reminder(s) cancelled.\n\n"
+            else:
+                response += f"**Reminders:** No pending reminders found for this task.\n\n"
+            response += f"Great job completing this task! 🎉"
+            
+            return response
+        else:
+            return f"❌ **Failed to Complete Task**\n\n**Task:** {task_title}\n**Task ID:** `{task_id}`\n\nThere was an error updating the task status. Please try again or contact support."
+        
+    except Exception as e:
+        print(f"Error completing task: {e}")
+        return f"❌ Error completing task: {str(e)}"
+
+@tool
 def create_tasks_from_meeting_minutes(minutes_doc_url: str) -> str:
     """
     Parse meeting minutes and create tasks in Google Sheets for the current month.
@@ -3396,6 +3644,13 @@ def create_langchain_prompt() -> ChatPromptTemplate:
             - When multiple meetings match a title, present numbered options for user selection
             - Automatically cancel reminders when meetings are canceled or rescheduled
             
+            TASK COMPLETION CAPABILITIES:
+            - Users can mark tasks as completed by mentioning the task title or using the task ID
+            - When users say they've completed a task, search for the task first to confirm details
+            - Always confirm the exact task details (title, assignee, due date) before marking as complete
+            - Automatically cancel all pending reminders when a task is marked as completed
+            - Handle both specific task IDs and rough task title mentions intelligently
+            
             IMPORTANT TOOL USAGE RULES:
             - When users say "cancel [meeting name]" or "cancel the [meeting name]", ALWAYS use the cancel_meeting tool
             - When users say "update [meeting name]" or "change [meeting name]", use the update_meeting tool
@@ -3404,6 +3659,9 @@ def create_langchain_prompt() -> ChatPromptTemplate:
             - NEVER use schedule_meeting for cancellation or updates - use the appropriate cancel_meeting or update_meeting tools
             - If multiple meetings match a title, use search_meetings_by_title first to show options, then wait for user to specify which one
             - ALWAYS show the full meeting details from search_meetings_by_title in your response to the user
+            - When users say they've "completed [task]", "finished [task]", "done with [task]", or "marked [task] as done", use search_tasks_by_title first to find the task, then use complete_task with the task ID
+            - If multiple tasks match a title, show the options and ask the user to confirm which specific task they completed
+            - ALWAYS confirm task details before marking as completed to avoid mistakes
             
             CREATOR INFORMATION:
             - Created by Hamidat Bello 👋
