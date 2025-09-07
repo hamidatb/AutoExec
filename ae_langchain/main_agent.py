@@ -29,6 +29,9 @@ _pending_announcements = []
 # Global variable for Discord context
 _discord_context = {}
 
+# Global agent executor with memory for conversation continuity
+_agent_executor_with_memory = None
+
 def set_discord_context(guild_id: str, channel_id: str, user_id: str):
     """Set the Discord context for LangChain tools."""
     global _discord_context
@@ -41,6 +44,121 @@ def set_discord_context(guild_id: str, channel_id: str, user_id: str):
 def get_discord_context():
     """Get the current Discord context."""
     return _discord_context
+
+def get_agent_executor_with_memory():
+    """Get or create the agent executor with conversation memory."""
+    global _agent_executor_with_memory
+    
+    if _agent_executor_with_memory is None:
+        from langchain.memory import ConversationBufferMemory
+        from langchain.agents import AgentExecutor
+        
+        # Create memory
+        memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True
+        )
+        
+        # Create LLM
+        llm = ChatOpenAI(
+            model="gpt-3.5-turbo",
+            temperature=0.1,
+            max_tokens=None,
+            timeout=None,
+            max_retries=2,
+        )
+        
+        # Create prompt with memory
+        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are AutoExec, an AI-powered club executive task manager designed to help student organizations and clubs manage their meetings, tasks, and administrative work efficiently.
+
+ABOUT AUTOEXEC:
+- You are a specialized AI assistant for club executives and student organizations
+- You help with meeting management, task tracking, scheduling, and organizational communication
+- You integrate with Google Sheets for data management and Discord for communication
+- You can create meeting minutes, schedule meetings, send reminders, and manage club activities
+
+CREATOR INFORMATION:
+- Created by Hamidat Bello 👋
+- 4th Year Computing Science Specialization student at the University of Alberta
+- Passionate about building impactful software and harnessing technology to spark positive social change
+- Portfolio: https://hamidatb.github.io
+- GitHub: https://github.com/hamidatb
+
+PERSONALITY & COMMUNICATION:
+- Be professional yet friendly and approachable
+- Use clear, concise language appropriate for student leaders
+- Show enthusiasm for helping with club management tasks
+- Be proactive in suggesting improvements and best practices
+- Use emojis sparingly but effectively to add warmth
+
+CORE CAPABILITIES:
+1. **Meeting Management**: Create meeting minutes, schedule meetings, send meeting reminders
+2. **Task Management**: Create tasks with automatic reminders, track deadlines, manage assignments
+3. **Communication**: Send announcements, reminders, and notifications via Discord
+4. **Organization**: Help with club setup, member management, and administrative tasks
+
+IMPORTANT GUIDELINES:
+- Always use the available tools to perform actions rather than just describing what you would do
+- For task creation, use create_task_with_timer to automatically set up reminders
+- For meeting scheduling, use create_meeting_with_timer to set up meeting reminders
+- When users provide Discord mentions for unknown people, use that information to complete task creation
+- Be conversational and maintain context across multiple messages in the same conversation
+- If a user provides additional information (like Discord mentions), use it to complete previous requests
+- Pay attention to conversation history - if a user says "I meant [name]" or "actually [name]", they're correcting a previous request
+- When users make corrections, use the corrected information to complete the original task/meeting creation
+- Look at the chat_history to understand what the user was trying to do originally
+- If a user asks "what did I ask you last" or similar questions, refer to the conversation history
+- Always consider the full conversation context when responding to any message
+
+Remember: You have access to powerful tools - use them to actually help users accomplish their goals!"""),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ])
+        
+        # Get safe tools (no Discord sending)
+        safe_tools = [
+            create_meeting_mins,
+            send_meeting_schedule,
+            get_meeting_reminder_info,
+            get_club_setup_info,
+            check_guild_setup_status,
+            schedule_meeting,
+            send_announcement,
+            get_setup_info,
+            get_meeting_sheet_info,
+            get_task_sheet_info,
+            get_channel_info,
+            create_task_with_timer,
+            create_meeting_with_timer,
+            list_active_timers,
+            clear_all_timers,
+            ask_for_discord_mention
+        ]
+        
+        # Create agent with memory
+        from langchain.agents import create_openai_functions_agent
+        agent = create_openai_functions_agent(llm, safe_tools, prompt)
+        
+        _agent_executor_with_memory = AgentExecutor(
+            agent=agent,
+            tools=safe_tools,
+            memory=memory,
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=3
+        )
+    
+    return _agent_executor_with_memory
+
+def clear_conversation_memory():
+    """Clear the conversation memory to start fresh."""
+    global _agent_executor_with_memory
+    _agent_executor_with_memory = None
+    print("🧹 Conversation memory cleared")
 
 @tool 
 def start_discord_bot():
@@ -1110,6 +1228,7 @@ def create_task_with_timer(task_title: str, assignee_name: str, due_date: str, p
     from datetime import datetime, timezone, timedelta
     import re
     
+    
     if BOT_INSTANCE is None:
         return "❌ ERROR: The bot instance is not running."
     
@@ -1135,20 +1254,24 @@ def create_task_with_timer(task_title: str, assignee_name: str, due_date: str, p
         if not due_datetime:
             return f"❌ Could not parse due date: '{due_date}'. Please use formats like 'September 9th', 'next Friday', or '2025-01-15 14:30'"
         
+        
+        # Clean the assignee name (remove @ symbol if present)
+        clean_assignee_name = assignee_name.lstrip('@').strip()
+        
         # Find the assignee by name (this is a simplified lookup)
-        assignee_discord_id = find_user_by_name(assignee_name, guild_config)
+        assignee_discord_id = find_user_by_name(clean_assignee_name, guild_config)
         if not assignee_discord_id:
-            return f"❌ Could not find user '{assignee_name}'. Please use a Discord username or mention."
+            return f"❌ Could not find user '{clean_assignee_name}'. Please use a Discord username or mention."
         
         # Check if we need to ask for a Discord mention
         if assignee_discord_id.startswith("NEED_MENTION_FOR_"):
-            return ask_for_discord_mention(assignee_name)
+            return ask_for_discord_mention(clean_assignee_name)
         
         # Create task data
         task_data = {
             'title': task_title,
             'owner_discord_id': assignee_discord_id,
-            'owner_name': assignee_name,
+            'owner_name': clean_assignee_name,
             'due_at': due_datetime.isoformat(),
             'status': 'open',
             'priority': priority,
@@ -1457,10 +1580,16 @@ def parse_due_date(date_str: str) -> datetime:
         if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
             if ' ' in date_str and len(date_str.split()) >= 2:
                 # Has time
-                return datetime.strptime(date_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                parsed_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
             else:
                 # Just date, assume end of day
-                return datetime.strptime(date_str, "%Y-%m-%d").replace(hour=23, minute=59, tzinfo=timezone.utc)
+                parsed_date = datetime.strptime(date_str, "%Y-%m-%d").replace(hour=23, minute=59, tzinfo=timezone.utc)
+            
+            # Fix obvious year mistakes (e.g., 2023 when we're in 2025)
+            if parsed_date.year < now.year - 1:
+                parsed_date = parsed_date.replace(year=now.year)
+            
+            return parsed_date
     except:
         pass
     
@@ -1496,8 +1625,8 @@ def parse_due_date(date_str: str) -> datetime:
         if match:
             day = int(match.group(1))
             year = now.year
-            # If the month has passed this year, use next year
-            if month < now.month or (month == now.month and day < now.day):
+            # If the month/day has already passed this year, use next year
+            if month < now.month or (month == now.month and day <= now.day):
                 year += 1
             return datetime(year, month, day, 17, 0, 0, tzinfo=timezone.utc)
     
@@ -1552,12 +1681,20 @@ def parse_meeting_time(time_str: str) -> datetime:
 def find_user_by_name(name: str, guild_config: dict) -> str:
     """Find a user's Discord mention by their name."""
     exec_members = guild_config.get('exec_members', [])
+    name_lower = name.lower().strip()
+    
+    # Remove any Discord mention formatting if present
+    name_lower = name_lower.replace('<@', '').replace('>', '').replace('@', '')
+    
     for member in exec_members:
-        if name.lower() in member.get('name', '').lower():
+        member_name = member.get('name', '').lower()
+        # Check if the provided name matches the first name, last name, or full name
+        if (name_lower == member_name or  # Exact match
+            name_lower in member_name or  # Partial match (e.g., "hamidat" in "hamidat bello")
+            any(name_lower == part.strip() for part in member_name.split())):  # First/last name match
             discord_id = member.get('discord_id', '')
             if discord_id:
                 return f"<@{discord_id}>"
-    
     # If not found in exec members, return a placeholder that indicates we need the mention
     return f"NEED_MENTION_FOR_{name}"
 
@@ -1579,12 +1716,13 @@ def create_task_timers(task_data: dict, guild_config: dict) -> int:
             ('task_escalate', due_at + timedelta(hours=48))
         ]
         
+        
         config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
         if not config_spreadsheet_id:
             return 0
         
         # Get the assignee mention
-        assignee_name = task_data.get('assignee', '')
+        assignee_name = task_data.get('owner_name', '')
         assignee_mention = find_user_by_name(assignee_name, guild_config)
         
         timer_count = 0
@@ -1888,56 +2026,12 @@ Remember: Use tools when you need specific data or to perform actions. You can r
         MessagesPlaceholder("agent_scratchpad")
     ])
     
-    # Create a simple LLM without the Discord tools
-    llm = ChatOpenAI(
-        model="gpt-3.5-turbo",
-        temperature=0,
-        max_tokens=None,
-        timeout=None,
-        max_retries=2,
-    )
-    
-    # Create a simple agent without Discord tools
-    from langchain.agents import AgentExecutor, create_openai_functions_agent
-    from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
-    
-    # Include tools that don't require Discord sending but are useful for queries
-    safe_tools = [
-        create_meeting_mins, 
-        send_meeting_schedule, 
-        get_meeting_reminder_info,
-        get_club_setup_info,
-        check_guild_setup_status,
-        schedule_meeting,
-        send_announcement,
-        get_setup_info,
-        get_meeting_sheet_info,
-        get_task_sheet_info,
-        get_channel_info,
-        create_task_with_timer,
-        create_meeting_with_timer,
-        list_active_timers,
-        clear_all_timers,
-        ask_for_discord_mention
-    ]
-    
-    print(f"🔧 Available tools: {[tool.name for tool in safe_tools]}")
-    
-    # Use OpenAI functions agent which is more reliable for tool calling
-    agent = create_openai_functions_agent(llm, safe_tools, prompt)
-    agent_executor = AgentExecutor(
-        agent=agent, 
-        tools=safe_tools, 
-        verbose=True, 
-        handle_parsing_errors=True,
-        max_iterations=3,
-        early_stopping_method="generate",
-        return_intermediate_steps=True
-    )
+    # Get the agent executor with memory for conversation continuity
+    agent_executor = get_agent_executor_with_memory()
     
     try:
         print(f"🔍 Invoking agent with query: {query}")
-        print(f"🔍 Available tools: {[tool.name for tool in safe_tools]}")
+        print(f"🔧 Available tools: {[tool.name for tool in agent_executor.tools]}")
         
         response = agent_executor.invoke({"input": f"{query}"})
         print(f"🔍 Agent response: {response}")
