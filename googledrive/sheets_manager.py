@@ -633,7 +633,7 @@ class ClubSheetsManager:
     
     def update_config_channels(self, config_spreadsheet_id: str, task_channel_id: str, 
                               meeting_channel_id: str, escalation_channel_id: str, 
-                              free_speak_channel_id: str = None) -> bool:
+                              free_speak_channel_id: str = None, general_announcements_channel_id: str = None) -> bool:
         """
         Updates the channel configuration in the config sheet.
         
@@ -643,6 +643,7 @@ class ClubSheetsManager:
             meeting_channel_id: Channel ID for meeting reminders
             escalation_channel_id: Channel ID for escalations
             free_speak_channel_id: Channel ID for free-speak (optional)
+            general_announcements_channel_id: Channel ID for general announcements (optional)
             
         Returns:
             bool: True if successful, False otherwise
@@ -654,6 +655,10 @@ class ClubSheetsManager:
                 ['meeting_reminder_channel_id', meeting_channel_id],
                 ['escalation_channel_id', escalation_channel_id]
             ]
+            
+            # Add general announcements channel if provided
+            if general_announcements_channel_id:
+                config_data.append(['general_announcements_channel_id', general_announcements_channel_id])
             
             # Add free-speak channel if provided
             if free_speak_channel_id:

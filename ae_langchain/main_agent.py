@@ -896,8 +896,8 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
                     channel_id = guild_config.get('escalation_channel_id')
                     channel_name = "escalation"
                 else:  # general or default
-                    # For general announcements, use meeting reminders channel as default
-                    channel_id = guild_config.get('meeting_reminders_channel_id')
+                    # For general announcements, use dedicated general announcements channel
+                    channel_id = guild_config.get('general_announcements_channel_id')
                     channel_name = "general announcements"
                 
                 if not channel_id:
@@ -1152,6 +1152,7 @@ def get_channel_info() -> str:
                 task_channel = guild_config.get('task_reminders_channel_id')
                 meeting_channel = guild_config.get('meeting_reminders_channel_id')
                 escalation_channel = guild_config.get('escalation_channel_id')
+                general_announcements_channel = guild_config.get('general_announcements_channel_id')
                 
                 if task_channel:
                     channel_info += f"📋 **Task Reminders:** <#{task_channel}>\n"
@@ -1170,6 +1171,12 @@ def get_channel_info() -> str:
                     channel_info += f"   - Used for: Important alerts, escalation notifications\n"
                 else:
                     channel_info += f"⚠️ **Escalation:** Not configured\n"
+                
+                if general_announcements_channel:
+                    channel_info += f"📢 **General Announcements:** <#{general_announcements_channel}>\n"
+                    channel_info += f"   - Used for: General club announcements, congratulations, updates\n"
+                else:
+                    channel_info += f"📢 **General Announcements:** Not configured\n"
                 
                 channel_info += f"\n🏠 **Server:** {guild_config.get('guild_name', 'Unknown')}\n"
                 channel_info += f"👥 **Club:** {guild_config.get('club_name', 'Unknown')}\n"

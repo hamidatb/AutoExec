@@ -742,11 +742,16 @@ class SetupManager:
             message += f"• Meetings Sheet: `{monthly_sheets['meetings']}`\n\n"
             message += "**Step 8a: Task Reminders Channel**\n"
             message += "Now I need to know which Discord channels to use for different types of messages.\n\n"
+            message += "**💡 Important:** You can use the same channel for multiple purposes! For example, you could use your main club channel for both task reminders and general announcements.\n\n"
             message += "First, which channel should I use for task reminders?\n\n"
             message += "This is where I'll send:\n"
             message += "• Task deadline reminders (T-24h, T-2h)\n"
             message += "• Overdue task notifications\n"
             message += "• Task completion confirmations\n\n"
+            message += "**How to get channel ID:**\n"
+            message += "1. Right-click on the channel in Discord\n"
+            message += "2. Select 'Copy ID'\n"
+            message += "3. Paste the ID here\n\n"
             message += "Please provide the channel ID:"
             
             return message
@@ -870,24 +875,75 @@ class SetupManager:
             current_state = self.setup_states[user_id]
             current_state['escalation_channel_id'] = channel_id
             
-            # Move to free-speak channel step
-            current_state['step'] = 'free_speak_channel'
+            # Move to general announcements channel step
+            current_state['step'] = 'general_announcements_channel'
             
             message = "✅ **Escalation Channel Set!**\n\n"
             message += f"Escalations will be sent to: <#{channel_id}>\n\n"
-            message += "**Step 8d: Free-Speak Channel (Optional)**\n"
-            message += "Would you like to configure a channel where the bot can speak freely without being @'d?\n\n"
-            message += "This is useful for:\n"
-            message += "• General announcements\n"
-            message += "• Status updates\n"
-            message += "• Automated responses\n\n"
-            message += "**Type 'skip' to skip this step, or provide a channel ID:**"
+            message += "**Step 8d: General Announcements Channel**\n"
+            message += "Which channel should I use for general announcements and notifications?\n\n"
+            message += "This is where I'll send:\n"
+            message += "• General club announcements\n"
+            message += "• Congratulations and celebrations\n"
+            message += "• Important updates\n"
+            message += "• Other non-meeting, non-task messages\n\n"
+            message += "**💡 Tip:** You can use the same channel for multiple purposes! For example, you could use your main club channel for both general announcements and meeting reminders.\n\n"
+            message += "**How to get channel ID:**\n"
+            message += "1. Right-click on the channel in Discord\n"
+            message += "2. Select 'Copy ID'\n"
+            message += "3. Paste the ID here\n\n"
+            message += "Please provide the channel ID:"
             
             return message
             
         except Exception as e:
             print(f"❌ [SETUP ERROR] Error in escalation channel configuration: {e}")
             return f"❌ **Escalation Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel ID is correct\n• The bot has access to that channel\n• Try again with a valid channel ID"
+    
+    async def _handle_general_announcements_channel(self, user_id: str, message_content: str) -> str:
+        """
+        Handles general announcements channel configuration.
+        
+        Args:
+            user_id: Discord ID of the user
+            message_content: Channel ID for general announcements
+            
+        Returns:
+            Next setup message
+        """
+        try:
+            print(f"🔍 [SETUP] Processing general announcements channel for user {user_id}")
+            print(f"🔍 [SETUP] Channel message content: {message_content}")
+            
+            # Extract channel ID
+            channel_id = message_content.strip()
+            print(f"🔍 [SETUP] Extracted general announcements channel ID: {channel_id}")
+            
+            if not channel_id or not channel_id.isdigit():
+                return "❌ **Invalid Channel ID**\n\nPlease provide a valid Discord channel ID (numbers only).\n\n**How to get channel ID:**\n1. Right-click on the channel in Discord\n2. Select 'Copy ID'\n3. Paste the ID here\n\n**You can also type `/cancel` to stop the setup process.**"
+            
+            # Store general announcements channel ID
+            current_state = self.setup_states[user_id]
+            current_state['general_announcements_channel_id'] = channel_id
+            
+            # Move to free-speak channel step
+            current_state['step'] = 'free_speak_channel'
+            
+            message = "✅ **General Announcements Channel Set!**\n\n"
+            message += f"General announcements will be sent to: <#{channel_id}>\n\n"
+            message += "**Step 8e: Free-Speak Channel (Optional)**\n"
+            message += "Would you like to configure a channel where the bot can speak freely without being @'d?\n\n"
+            message += "This is useful for:\n"
+            message += "• Automated responses\n"
+            message += "• Status updates\n"
+            message += "• Bot interactions\n\n"
+            message += "**Type 'skip' to skip this step, or provide a channel ID:**"
+            
+            return message
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Error in general announcements channel configuration: {e}")
+            return f"❌ **General Announcements Channel Configuration Failed**\n\nError: {str(e)}\n\n**Please check:**\n• The channel ID is correct\n• The bot has access to that channel\n• Try again with a valid channel ID"
     
     async def _handle_free_speak_channel(self, user_id: str, message_content: str) -> str:
         """
@@ -938,7 +994,8 @@ class SetupManager:
                         current_state['task_reminders_channel_id'],
                         current_state['meeting_reminders_channel_id'],
                         current_state['escalation_channel_id'],
-                        current_state.get('free_speak_channel_id')
+                        current_state.get('free_speak_channel_id'),
+                        current_state['general_announcements_channel_id']
                     )
                     print(f"🔍 [SETUP] Config sheet updated successfully")
                     break  # Success, exit retry loop
@@ -990,6 +1047,7 @@ class SetupManager:
                     'task_reminders_channel_id': current_state['task_reminders_channel_id'],
                     'meeting_reminders_channel_id': current_state['meeting_reminders_channel_id'],
                     'escalation_channel_id': current_state['escalation_channel_id'],
+                    'general_announcements_channel_id': current_state['general_announcements_channel_id'],
                     'free_speak_channel_id': current_state.get('free_speak_channel_id'),
                     'config_folder_id': current_state['config_folder_id'],
                     'monthly_folder_id': current_state['monthly_folder_id'],
@@ -1024,6 +1082,7 @@ class SetupManager:
             message += f"• Task reminders: <#{current_state['task_reminders_channel_id']}>\n"
             message += f"• Meeting reminders: <#{current_state['meeting_reminders_channel_id']}>\n"
             message += f"• Escalations: <#{current_state['escalation_channel_id']}>\n"
+            message += f"• General announcements: <#{current_state['general_announcements_channel_id']}>\n"
             
             # Add free-speak channel info if configured
             if current_state.get('free_speak_channel_id'):
