@@ -11,9 +11,9 @@ As a student leader, I found myself constantly:
 - Coordinating meeting schedules and attendance
 - Managing Google Drive documents and spreadsheets
 
-**AutoExec eliminates all of this manual work** by using AI to understand natural language, automatically extract tasks from meeting minutes, and intelligently manage the entire student organization workflow.
+**AutoExec significantly reduces this manual work** by using AI to understand natural language, automatically extract tasks from meeting minutes, and intelligently manage the student organization workflow.
 
-## 🚀 Current Features (Production-Ready)
+## 🚀 Current Features (In Production)
 
 ### **AI Agent Task Management**
 - **Smart Document Parsing**: I integrated **LangChain** and **OpenAI GPT-4** to automatically extract action items from meeting minutes
@@ -27,12 +27,12 @@ As a student leader, I found myself constantly:
 - **Agenda Generation**: Creates structured meeting agendas with action item templates
 
 ### **Production-Grade Infrastructure**
-- **99.9% Uptime**: Deployed on **Cybera Rapid Access Cloud** with systemd services and automated monitoring
+- **High Reliability**: Deployed on **Cybera Rapid Access Cloud** with systemd services and automated monitoring
 - **Scalable Architecture**: Designed to handle multiple organizations and growing user bases
 - **Google APIs Integration**: Seamless integration with **Google Drive**, **Google Sheets**, and **Google Docs**
-- **Automated Backups**: Daily backups with rollback capabilities for zero data loss
+- **Automated Backups**: Daily backups with rollback capabilities for data protection
 
-### **Enterprise-Level Features**
+### **Advanced Features**
 - **Multi-Organization Support**: Each Discord server gets its own isolated workspace
 - **Role-Based Permissions**: Admins, moderators, and members have different access levels
 - **Audit Trail**: Complete history of all task assignments, completions, and modifications
@@ -41,7 +41,7 @@ As a student leader, I found myself constantly:
 ## 🛠️ Technical Architecture
 
 ### **Backend Stack**
-- **Python 3.9+** with **asyncio** for high-performance concurrent operations
+- **Python 3.9+** with **asyncio** for concurrent operations
 - **LangChain Framework** for AI agent orchestration and prompt management
 - **OpenAI GPT-4 API** for natural language understanding and task extraction
 - **Discord.py** for real-time communication and slash command handling
@@ -56,7 +56,7 @@ As a student leader, I found myself constantly:
 - **Google Sheets API** for structured data storage and real-time collaboration
 - **Google Drive API** for document management and automatic file organization
 - **Google Docs API** for intelligent content parsing and task extraction
-- **SQLite** for local caching and performance optimization
+- **JSON Files** for local configuration and state management
 
 ## 🔧 Technology Stack
 
@@ -71,7 +71,6 @@ As a student leader, I found myself constantly:
 - **Python 3.9+** - Core programming language
 - **asyncio** - Asynchronous programming for concurrent operations
 - **Discord.py** - Discord API wrapper for bot development
-- **aiohttp** - Asynchronous HTTP client/server framework
 - **python-dotenv** - Environment variable management
 - **pytz** - Timezone handling and date manipulation
 - **python-dateutil** - Advanced date parsing and manipulation
@@ -90,10 +89,8 @@ As a student leader, I found myself constantly:
 - **Google Sheets API** - Spreadsheet operations and data manipulation
 - **Google Docs API** - Document content parsing and extraction
 - **Google Service Account** - Server-to-server authentication
-- **Google Cloud Storage** - File organization and backup
 
 ### **Database & Data Management**
-- **SQLite** - Lightweight database for local caching
 - **Google Sheets** - Cloud-based data storage and collaboration
 - **JSON** - Configuration and data serialization
 - **CSV** - Data export and import operations
@@ -121,6 +118,7 @@ As a student leader, I found myself constantly:
 - **Shell Scripting** - Automation and deployment scripts
 - **Cron Jobs** - Scheduled task execution
 - **Process Management** - Service lifecycle control
+- **pytest** - Testing framework for comprehensive test coverage
 
 ## 📊 Real-World Impact
 
@@ -128,14 +126,14 @@ AutoExec has proven its value in real student organization environments, deliver
 - **High reliability** with robust uptime and automated monitoring
 - **Significant efficiency gains** in task and meeting management
 - **Seamless integration** with existing student workflows
-- **Zero data loss** with comprehensive backup systems
+- **Data protection** with comprehensive backup systems
 
 ## 🔮 Planned Features (Roadmap)
 
 ### **Enhanced AI Capabilities**
 - **Advanced Analytics Dashboard**: Task completion metrics, team performance insights, and productivity trends
 - **Smart Scheduling**: AI-powered meeting time optimization based on team availability and preferences
-- **Predictive Task Management**: Machine learning models to predict task completion times and identify bottlenecks
+- **Smart Task Management**: AI-powered task prioritization and deadline optimization
 
 ### **Platform Expansion**
 - **Web Dashboard**: React-based admin interface for non-Discord users

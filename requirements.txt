@@ -1,6 +1,5 @@
 # Core Discord bot dependencies
 discord.py>=2.3.0
-aiohttp>=3.8.0
 
 # Google API dependencies
 google-api-python-client>=2.163.0
