@@ -161,6 +161,8 @@ class SetupManager:
                 return await self._handle_exec_member(user_id, message_content)
             elif current_step == 'folder_selection':
                 return await self._handle_folder_selection(user_id, message_content)
+            elif current_step == 'sheets_creation':
+                return await self._handle_sheets_creation(user_id, message_content)
             elif current_step == 'sheets_initialization':
                 return await self._handle_sheets_initialization(user_id, message_content)
             elif current_step == 'task_reminders_channel':
@@ -521,8 +523,8 @@ class SetupManager:
             self.setup_states[user_id]['monthly_folder_id'] = monthly_folder_id
             self.setup_states[user_id]['meeting_minutes_folder_id'] = meeting_minutes_folder_id
             
-            # Move to sheets initialization step
-            self.setup_states[user_id]['step'] = 'sheets_initialization'
+            # Move to sheets creation step
+            self.setup_states[user_id]['step'] = 'sheets_creation'
             
             # Immediately verify folder access instead of waiting for user input
             print(f"🔍 [SETUP] Starting immediate folder verification for user {user_id}")
@@ -575,6 +577,9 @@ class SetupManager:
             initial_message += f"• **{self.setup_states[user_id]['club_name']} Tasks - {datetime.now().strftime('%B %Y')}** - Task tracking\n"
             initial_message += f"• **{self.setup_states[user_id]['club_name']} Meetings - {datetime.now().strftime('%B %Y')}** - Meeting management\n\n"
             initial_message += "This may take a few moments..."
+            
+            # Move to sheets creation step and create sheets immediately
+            self.setup_states[user_id]['step'] = 'sheets_creation'
             
             return initial_message
             
@@ -666,6 +671,31 @@ class SetupManager:
             print(f"Error extracting folder ID: {e}")
             return ""
     
+    async def _handle_sheets_creation(self, user_id: str, message_content: str) -> str:
+        """
+        Handles the automatic sheets creation step.
+        
+        Args:
+            user_id: Discord ID of the user
+            message_content: User's response (ignored, this step is automatic)
+            
+        Returns:
+            Sheets creation result message
+        """
+        try:
+            print(f"🔍 [SETUP] Starting automatic sheets creation for user {user_id}")
+            
+            # Add a small delay to make the process feel more natural
+            import asyncio
+            await asyncio.sleep(2)
+            
+            # Create the sheets
+            return await self._handle_sheets_initialization(user_id, "")
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Error in sheets creation: {e}")
+            return f"❌ **Error creating sheets:** {str(e)}"
+
     async def _handle_sheets_initialization(self, user_id: str, message_content: str) -> str:
         """
         Handles Google Sheets initialization.
