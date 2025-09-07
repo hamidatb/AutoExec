@@ -853,6 +853,7 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
                     'end_at_local': None,
                     'location': location or '',
                     'meeting_link': meeting_link or '',
+                    'minutes_link': '',  # Will be set when meeting minutes are created
                     'channel_id': '',  # Will be set by the meeting manager
                     'created_by': 'langchain_agent'
                 }
@@ -891,7 +892,14 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
 def search_meetings_by_title(meeting_title: str) -> str:
     """
     Search for meetings by title to help with cancellation or updates.
-    Use this when users want to cancel or update a meeting but there might be multiple matches.
+    
+    **USE THIS TOOL WHEN:**
+    - User wants to cancel or update a meeting but there might be multiple matches
+    - User says "add meeting minutes to [meeting name]" or "add minutes to [meeting name]"
+    - User wants to see details of meetings with a specific title
+    - You need to find a meeting before performing an action on it
+    
+    **IMPORTANT:** Always show the full meeting details from this tool in your response to the user.
     
     Args:
         meeting_title (str): The title or partial title of the meeting to search for
@@ -934,7 +942,7 @@ def search_meetings_by_title(meeting_title: str) -> str:
         
         if len(matching_meetings) == 1:
             meeting = matching_meetings[0]
-            return f"✅ Found 1 matching meeting:\n\n**{meeting.get('title', 'Untitled')}**\n🆔 ID: `{meeting.get('meeting_id', 'N/A')}`\n🕐 Date: {meeting.get('start_at_local', 'N/A')}\n📍 Location: {meeting.get('location', 'N/A')}\n🔗 Link: {meeting.get('meeting_link', 'N/A')}"
+            return f"✅ Found 1 matching meeting:\n\n**{meeting.get('title', 'Untitled')}**\n🆔 ID: `{meeting.get('meeting_id', 'N/A')}`\n🕐 Date: {meeting.get('start_at_local', 'N/A')}\n📍 Location: {meeting.get('location', 'N/A')}\n🔗 Meeting Link: {meeting.get('meeting_link', 'N/A')}\n📄 Minutes Link: {meeting.get('minutes_link', 'N/A')}"
         
         # Multiple matches - show numbered list
         result = f"🔍 Found {len(matching_meetings)} meetings matching '{meeting_title}':\n\n"
@@ -943,7 +951,8 @@ def search_meetings_by_title(meeting_title: str) -> str:
             result += f"   🆔 ID: `{meeting.get('meeting_id', 'N/A')}`\n"
             result += f"   🕐 Date: {meeting.get('start_at_local', 'N/A')}\n"
             result += f"   📍 Location: {meeting.get('location', 'N/A')}\n"
-            result += f"   🔗 Link: {meeting.get('meeting_link', 'N/A')}\n\n"
+            result += f"   🔗 Meeting Link: {meeting.get('meeting_link', 'N/A')}\n"
+            result += f"   📄 Minutes Link: {meeting.get('minutes_link', 'N/A')}\n\n"
         
         result += "Please specify which meeting you want to cancel or update by saying the number (1, 2, 3, etc.) or the meeting ID."
         return result
@@ -1063,15 +1072,18 @@ def cancel_meeting(meeting_identifier: str) -> str:
 
 @tool
 def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time: str = "", 
-                  new_location: str = "", new_meeting_link: str = "") -> str:
+                  new_location: str = "", new_meeting_link: str = "", new_minutes_link: str = "") -> str:
     """
     Update a scheduled meeting with new information.
     
     **USE THIS TOOL WHEN:**
     - User says "update [meeting name]" or "change [meeting name]"
     - User says "reschedule [meeting name]" (use new_start_time parameter)
-    - User wants to modify meeting details (time, location, title, link)
+    - User wants to modify meeting details (time, location, title, link, minutes)
     - User says "move [meeting name] to [new time]"
+    - User says "add meeting minutes to [meeting name]" (use new_minutes_link parameter)
+    - User wants to add or update meeting minutes link
+    - After using search_meetings_by_title and user specifies which meeting to update
     
     **DO NOT USE THIS TOOL FOR:**
     - Creating new meetings (use schedule_meeting instead)
@@ -1083,6 +1095,7 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
         new_start_time (str): New start time in format "YYYY-MM-DD HH:MM" (optional)
         new_location (str): New location for the meeting (optional)
         new_meeting_link (str): New meeting link (optional)
+        new_minutes_doc_url (str): New meeting minutes document URL (optional)
         
     Returns:
         str: Confirmation message about the update
@@ -1142,6 +1155,8 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
                 updates['location'] = new_location
             if new_meeting_link:
                 updates['meeting_link'] = new_meeting_link
+            if new_minutes_link:
+                updates['minutes_link'] = new_minutes_link
             
             if not updates:
                 return "❌ No updates provided. Please specify what you want to change."
@@ -1159,7 +1174,9 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
                 if new_location:
                     result += f"📍 New location: {new_location}\n"
                 if new_meeting_link:
-                    result += f"🔗 New link: {new_meeting_link}\n"
+                    result += f"🔗 New meeting link: {new_meeting_link}\n"
+                if new_minutes_link:
+                    result += f"📄 New minutes link: {new_minutes_link}\n"
                 return result
             else:
                 return f"❌ Failed to update meeting '{meeting.get('title', 'Untitled')}'. Please try again."
@@ -1197,6 +1214,8 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
                     updates['location'] = new_location
                 if new_meeting_link:
                     updates['meeting_link'] = new_meeting_link
+                if new_minutes_link:
+                    updates['minutes_link'] = new_minutes_link
                 
                 if not updates:
                     return "❌ No updates provided. Please specify what you want to change."
@@ -1214,7 +1233,9 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
                     if new_location:
                         result += f"📍 New location: {new_location}\n"
                     if new_meeting_link:
-                        result += f"🔗 New link: {new_meeting_link}\n"
+                        result += f"🔗 New meeting link: {new_meeting_link}\n"
+                    if new_minutes_link:
+                        result += f"📄 New minutes link: {new_minutes_link}\n"
                     return result
                 else:
                     return f"❌ Failed to update meeting '{meeting.get('title', 'Untitled')}'. Please try again."
@@ -2894,8 +2915,10 @@ def create_langchain_prompt() -> ChatPromptTemplate:
             - When users say "cancel [meeting name]" or "cancel the [meeting name]", ALWAYS use the cancel_meeting tool
             - When users say "update [meeting name]" or "change [meeting name]", use the update_meeting tool
             - When users say "reschedule [meeting name]", use the update_meeting tool with new_start_time
+            - When users say "add meeting minutes to [meeting name]" or "add minutes to [meeting name]", use search_meetings_by_title first, then update_meeting with new_minutes_link
             - NEVER use schedule_meeting for cancellation or updates - use the appropriate cancel_meeting or update_meeting tools
-            - If multiple meetings match a title, use search_meetings_by_title first to show options
+            - If multiple meetings match a title, use search_meetings_by_title first to show options, then wait for user to specify which one
+            - ALWAYS show the full meeting details from search_meetings_by_title in your response to the user
             
             CREATOR INFORMATION:
             - Created by Hamidat Bello 👋

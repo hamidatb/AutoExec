@@ -230,7 +230,7 @@ class ClubSheetsManager:
             # Initialize meetings sheet headers
             meetings_headers = [
                 ['meeting_id', 'title', 'start_at_utc', 'end_at_utc', 'start_at_local', 
-                 'end_at_local', 'location', 'meeting_link', 'channel_id', 'minutes_doc_url', 'status', 'created_by', 'created_at_utc', 'updated_at']
+                 'end_at_local', 'location', 'meeting_link', 'channel_id', 'minutes_link', 'status', 'created_by', 'created_at_utc', 'updated_at']
             ]
             
             self.sheets_service.spreadsheets().values().update(
@@ -336,7 +336,7 @@ class ClubSheetsManager:
                 meeting_data.get('location', ''),
                 meeting_data.get('meeting_link', ''),
                 meeting_data.get('channel_id', ''),
-                meeting_data.get('minutes_doc_url', ''),
+                meeting_data.get('minutes_link', ''),
                 meeting_data.get('status', 'scheduled'),
                 meeting_data.get('created_by', ''),
                 now,
