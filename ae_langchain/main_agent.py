@@ -5,6 +5,7 @@ It will intialize the discord bot on startup, and any messages to the bot are ro
 import os
 import asyncio
 from asyncio import create_task
+from typing import Optional
 from langchain.tools import tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -132,6 +133,7 @@ IMPORTANT GUIDELINES:
 - Use tools when you need to access specific data (meetings, tasks, setup status) or perform actions
 - For task creation, use create_task_with_timer to automatically set up reminders
 - For meeting scheduling, use create_meeting_with_timer to set up meeting reminders
+- When scheduling meetings, always ask for duration if not provided (e.g., "How long should the meeting be?")
 - When users provide Discord mentions for unknown people, use that information to complete task creation
 - Be conversational and maintain context across multiple messages in the same conversation
 - If a user provides additional information (like Discord mentions), use it to complete previous requests
@@ -152,6 +154,7 @@ EXAMPLES OF DIRECT RESPONSES (no tools needed):
 EXAMPLES OF WHEN TO USE TOOLS:
 - "What meetings do I have?" → Use send_meeting_schedule
 - "Create a task for John due tomorrow" → Use create_task_with_timer
+- "Schedule a meeting tomorrow at 3pm for 1 hour" → Use create_meeting_with_timer
 - "Oh I meant hamidat" (after trying to create task for John) → Use create_task_with_timer with corrected name
 - "What timers are active?" → Use list_active_timers
 - "Is she an exec?" → Use get_exec_info
@@ -1516,7 +1519,7 @@ The task and all timers have been added to your Google Sheets!"""
         return f"❌ Error creating task: {str(e)}"
 
 @tool
-def create_meeting_with_timer(meeting_title: str, start_time: str, location: str = "", meeting_link: str = "") -> str:
+def create_meeting_with_timer(meeting_title: str, start_time: str, duration: str = "1 hour", location: str = "", meeting_link: str = "") -> str:
     """
     Create a new meeting and automatically set up timers for reminders.
     This tool parses natural language and creates both the meeting and associated timers.
@@ -1524,6 +1527,7 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, location: str
     Args:
         meeting_title (str): The title of the meeting
         start_time (str): Start time in natural language (e.g., "September 9th at 2pm", "next Friday 3:30pm", "2025-01-15 14:30")
+        duration (str): Meeting duration in natural language (e.g., "1 hour", "2 hours", "30 minutes", "1.5 hours")
         location (str): Meeting location or venue (optional)
         meeting_link (str): Meeting link for virtual meetings (optional)
         
@@ -1558,13 +1562,20 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, location: str
         if not start_datetime:
             return f"❌ Could not parse start time: '{start_time}'. Please use formats like 'September 9th at 2pm', 'next Friday 3:30pm', or '2025-01-15 14:30'"
         
+        # Parse the duration and calculate end time
+        duration_minutes = parse_duration(duration)
+        if not duration_minutes:
+            return f"❌ Could not parse duration: '{duration}'. Please use formats like '1 hour', '2 hours', '30 minutes', or '1.5 hours'"
+        
+        end_datetime = start_datetime + timedelta(minutes=duration_minutes)
+        
         # Create meeting data
         meeting_data = {
             'title': meeting_title,
             'start_at_utc': start_datetime.isoformat(),
-            'end_at_utc': None,
+            'end_at_utc': end_datetime.isoformat(),
             'start_at_local': start_datetime.strftime("%B %d, %Y at %I:%M %p"),
-            'end_at_local': None,
+            'end_at_local': end_datetime.strftime("%B %d, %Y at %I:%M %p"),
             'location': location,
             'meeting_link': meeting_link,
             'channel_id': channel_id,
@@ -1897,6 +1908,41 @@ def parse_due_date(date_str: str) -> datetime:
             if month < now.month or (month == now.month and day <= now.day):
                 year += 1
             return datetime(year, month, day, 17, 0, 0, tzinfo=timezone.utc)
+    
+    return None
+
+def parse_duration(duration_str: str) -> Optional[int]:
+    """
+    Parse duration string and return minutes.
+    
+    Args:
+        duration_str: Duration in natural language (e.g., "1 hour", "2 hours", "30 minutes", "1.5 hours")
+        
+    Returns:
+        int: Duration in minutes, or None if parsing failed
+    """
+    import re
+    
+    duration_str = duration_str.lower().strip()
+    
+    # Handle various duration formats
+    patterns = [
+        (r'(\d+(?:\.\d+)?)\s*hours?', lambda m: float(m.group(1)) * 60),
+        (r'(\d+(?:\.\d+)?)\s*hrs?', lambda m: float(m.group(1)) * 60),
+        (r'(\d+(?:\.\d+)?)\s*minutes?', lambda m: float(m.group(1))),
+        (r'(\d+(?:\.\d+)?)\s*mins?', lambda m: float(m.group(1))),
+        (r'(\d+(?:\.\d+)?)\s*h', lambda m: float(m.group(1)) * 60),
+        (r'(\d+(?:\.\d+)?)\s*m', lambda m: float(m.group(1))),
+    ]
+    
+    for pattern, converter in patterns:
+        match = re.search(pattern, duration_str)
+        if match:
+            try:
+                minutes = int(converter(match))
+                return max(1, minutes)  # Ensure at least 1 minute
+            except (ValueError, TypeError):
+                continue
     
     return None
 
