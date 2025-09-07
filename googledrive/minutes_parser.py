@@ -16,6 +16,7 @@ class MinutesParser:
         """Initialize the minutes parser with credentials."""
         creds = get_credentials()
         self.docs_service = build("docs", "v1", credentials=creds)
+        self.drive_service = build("drive", "v3", credentials=creds)
         self.sheets_manager = ClubSheetsManager()
         
     def parse_minutes_doc(self, doc_url: str) -> List[Dict[str, Any]]:
@@ -75,7 +76,8 @@ class MinutesParser:
     
     def _convert_doc_to_markdown(self, doc_id: str) -> Optional[str]:
         """
-        Converts a Google Doc to markdown format using doctomarkdown.
+        Converts a Google Doc to markdown by exporting HTML via Drive API,
+        then converting HTML → Markdown locally.
         
         Args:
             doc_id: Google Doc document ID
@@ -84,19 +86,225 @@ class MinutesParser:
             Markdown content as string or None if conversion fails
         """
         try:
-            from doctomarkdown import convert
+            print(f"🔍 [DEBUG] Converting document {doc_id} to markdown via Drive export (HTML)...")
             
-            # Convert the Google Doc to markdown
-            markdown_content = convert(f"https://docs.google.com/document/d/{doc_id}/edit")
+            from googleapiclient.http import MediaIoBaseDownload
+            import io
+            
+            # 1) Export the Google Doc as HTML using the **Drive** API
+            request = self.drive_service.files().export_media(
+                fileId=doc_id,
+                mimeType="text/html"  # or "text/plain" if you prefer a simpler base
+            )
+            
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+            
+            html = fh.getvalue().decode("utf-8")
+            
+            # 2) Convert HTML → Markdown locally
+            try:
+                # Try to use markdownify if available
+                import markdownify
+                markdown_content = markdownify.markdownify(html, heading_style="ATX")
+                print(f"✅ [DEBUG] HTML to Markdown conversion successful with markdownify")
+            except ImportError:
+                # Fallback: if markdownify isn't available, use a simple HTML to markdown conversion
+                print("⚠️ [WARN] markdownify not available; using simple HTML to markdown conversion.")
+                markdown_content = self._simple_html_to_markdown(html)
+            except Exception as e:
+                print(f"⚠️ [WARN] markdownify conversion failed: {e}; using simple HTML to markdown conversion.")
+                markdown_content = self._simple_html_to_markdown(html)
+            
+            print(f"✅ [DEBUG] Conversion successful, length: {len(markdown_content)}")
             return markdown_content
             
         except Exception as e:
-            print(f"Error converting document to markdown: {e}")
+            print(f"❌ [ERROR] Error converting document to markdown: {e}")
+            print(f"🔍 [DEBUG] Exception type: {type(e)}")
+            import traceback
+            print(f"🔍 [DEBUG] Traceback: {traceback.format_exc()}")
             return None
+    
+    def _simple_html_to_markdown(self, html: str) -> str:
+        """
+        Simple HTML to Markdown converter as a fallback when markdownify is not available.
+        Handles basic HTML elements commonly found in Google Docs exports.
+        
+        Args:
+            html: HTML content to convert
+            
+        Returns:
+            Markdown content as string
+        """
+        try:
+            import re
+            
+            # Remove HTML comments
+            html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
+            
+            # Convert headers
+            html = re.sub(r'<h1[^>]*>(.*?)</h1>', r'# \1\n', html, flags=re.DOTALL)
+            html = re.sub(r'<h2[^>]*>(.*?)</h2>', r'## \1\n', html, flags=re.DOTALL)
+            html = re.sub(r'<h3[^>]*>(.*?)</h3>', r'### \1\n', html, flags=re.DOTALL)
+            html = re.sub(r'<h4[^>]*>(.*?)</h4>', r'#### \1\n', html, flags=re.DOTALL)
+            html = re.sub(r'<h5[^>]*>(.*?)</h5>', r'##### \1\n', html, flags=re.DOTALL)
+            html = re.sub(r'<h6[^>]*>(.*?)</h6>', r'###### \1\n', html, flags=re.DOTALL)
+            
+            # Convert bold and italic
+            html = re.sub(r'<strong[^>]*>(.*?)</strong>', r'**\1**', html, flags=re.DOTALL)
+            html = re.sub(r'<b[^>]*>(.*?)</b>', r'**\1**', html, flags=re.DOTALL)
+            html = re.sub(r'<em[^>]*>(.*?)</em>', r'*\1*', html, flags=re.DOTALL)
+            html = re.sub(r'<i[^>]*>(.*?)</i>', r'*\1*', html, flags=re.DOTALL)
+            
+            # Convert links
+            html = re.sub(r'<a[^>]*href=["\']([^"\']*)["\'][^>]*>(.*?)</a>', r'[\2](\1)', html, flags=re.DOTALL)
+            
+            # Convert line breaks
+            html = re.sub(r'<br[^>]*>', '\n', html)
+            html = re.sub(r'<p[^>]*>', '\n', html)
+            html = re.sub(r'</p>', '\n', html)
+            
+            # Convert lists
+            html = re.sub(r'<ul[^>]*>', '', html)
+            html = re.sub(r'</ul>', '\n', html)
+            html = re.sub(r'<ol[^>]*>', '', html)
+            html = re.sub(r'</ol>', '\n', html)
+            html = re.sub(r'<li[^>]*>', '- ', html)
+            html = re.sub(r'</li>', '\n', html)
+            
+            # Convert tables (basic support)
+            html = re.sub(r'<table[^>]*>', '', html)
+            html = re.sub(r'</table>', '\n', html)
+            html = re.sub(r'<tr[^>]*>', '', html)
+            html = re.sub(r'</tr>', '\n', html)
+            html = re.sub(r'<td[^>]*>', '| ', html)
+            html = re.sub(r'</td>', '', html)
+            html = re.sub(r'<th[^>]*>', '| ', html)
+            html = re.sub(r'</th>', '', html)
+            
+            # Remove remaining HTML tags
+            html = re.sub(r'<[^>]+>', '', html)
+            
+            # Decode HTML entities
+            html = html.replace('&amp;', '&')
+            html = html.replace('&lt;', '<')
+            html = html.replace('&gt;', '>')
+            html = html.replace('&quot;', '"')
+            html = html.replace('&#39;', "'")
+            html = html.replace('&nbsp;', ' ')
+            
+            # Clean up whitespace
+            html = re.sub(r'\n\s*\n', '\n\n', html)
+            html = html.strip()
+            
+            return html
+            
+        except Exception as e:
+            print(f"❌ [ERROR] Error in simple HTML to markdown conversion: {e}")
+            return html  # Return original HTML if conversion fails
+    
+    def _convert_doc_to_markdown_fallback(self, doc_id: str) -> Optional[str]:
+        """
+        Fallback method to convert Google Doc to markdown using Google Docs API.
+        
+        Args:
+            doc_id: Google Doc document ID
+            
+        Returns:
+            Markdown content as string or None if conversion fails
+        """
+        try:
+            print(f"🔍 [DEBUG] Using fallback method for document {doc_id}")
+            
+            # Get document content using Google Docs API
+            doc = self.docs_service.documents().get(documentId=doc_id).execute()
+            print(f"🔍 [DEBUG] Retrieved document from Google Docs API")
+            
+            # Convert to a simple markdown-like format
+            markdown_content = self._convert_doc_structure_to_markdown(doc)
+            print(f"🔍 [DEBUG] Converted to markdown, content length: {len(markdown_content) if markdown_content else 0}")
+            
+            return markdown_content
+            
+        except Exception as e:
+            print(f"❌ [ERROR] Fallback conversion failed: {e}")
+            return None
+    
+    def _convert_doc_structure_to_markdown(self, doc: Dict[str, Any]) -> str:
+        """
+        Converts Google Docs structure to markdown format.
+        
+        Args:
+            doc: Google Docs document object
+            
+        Returns:
+            Markdown content as string
+        """
+        try:
+            markdown_content = []
+            
+            for element in doc.get('body', {}).get('content', []):
+                if 'paragraph' in element:
+                    paragraph = element['paragraph']
+                    text = self._extract_text_from_paragraph(paragraph)
+                    if text.strip():
+                        markdown_content.append(text)
+                elif 'table' in element:
+                    table_markdown = self._convert_table_to_markdown(element['table'])
+                    if table_markdown:
+                        markdown_content.append(table_markdown)
+            
+            return '\n'.join(markdown_content)
+            
+        except Exception as e:
+            print(f"❌ [ERROR] Error converting doc structure to markdown: {e}")
+            return ""
+    
+    def _extract_text_from_paragraph(self, paragraph: Dict[str, Any]) -> str:
+        """Extract text from a paragraph element."""
+        text = ""
+        for element in paragraph.get('elements', []):
+            if 'textRun' in element:
+                text += element['textRun'].get('content', '')
+        return text
+    
+    def _convert_table_to_markdown(self, table: Dict[str, Any]) -> str:
+        """Convert a table to markdown format."""
+        try:
+            rows = []
+            for row in table.get('tableRows', []):
+                cells = []
+                for cell in row.get('tableCells', []):
+                    cell_text = ""
+                    for content in cell.get('content', []):
+                        if 'paragraph' in content:
+                            cell_text += self._extract_text_from_paragraph(content['paragraph'])
+                    cells.append(cell_text.strip())
+                if cells:
+                    rows.append('| ' + ' | '.join(cells) + ' |')
+            
+            if rows:
+                # Add separator row after header
+                if len(rows) > 1:
+                    separator = '|' + '|'.join([' --- ' for _ in rows[0].split('|')[1:-1]]) + '|'
+                    rows.insert(1, separator)
+                
+                return '\n'.join(rows)
+            
+            return ""
+            
+        except Exception as e:
+            print(f"❌ [ERROR] Error converting table to markdown: {e}")
+            return ""
     
     def _parse_markdown_action_items(self, markdown_content: str) -> List[Dict[str, Any]]:
         """
-        Parses markdown content to extract action items from the Action Items table.
+        Parses markdown content to extract action items from the Action Items section.
+        Handles both table format and list format with emoji checkboxes.
         
         Args:
             markdown_content: The markdown content of the document
@@ -107,64 +315,118 @@ class MinutesParser:
         action_items = []
         
         try:
+            print(f"🔍 [DEBUG] Parsing markdown content, length: {len(markdown_content)}")
+            print(f"🔍 [DEBUG] First 500 characters: {markdown_content[:500]}")
+            
             # Split content into lines
             lines = markdown_content.split('\n')
+            print(f"🔍 [DEBUG] Total lines: {len(lines)}")
             
-            # Find the Action Items table
-            in_action_items_table = False
-            table_headers = []
+            # Find the Action Items section
+            in_action_items_section = False
+            current_role = ""
+            current_person = ""
             
             for i, line in enumerate(lines):
-                # Look for the Action Items table header
-                if 'Action Items To Be Done By Next Meeting' in line or 'Action Items' in line:
-                    # Check if this is a table row (contains |)
-                    if '|' in line:
-                        in_action_items_table = True
-                        # Extract headers from the next line
-                        if i + 1 < len(lines) and '|' in lines[i + 1]:
-                            header_line = lines[i + 1]
-                            table_headers = [h.strip() for h in header_line.split('|') if h.strip()]
-                        continue
+                print(f"🔍 [DEBUG] Line {i}: {line[:100]}...")
                 
-                # If we're in the action items table, parse the rows
-                if in_action_items_table and '|' in line:
-                    # Skip separator lines (containing only |, -, and spaces)
-                    if re.match(r'^[\s\|\-]+$', line):
-                        continue
+                # Look for the Action Items section header
+                if 'Action Items To Be Done By Next Meeting' in line:
+                    print(f"🔍 [DEBUG] Found Action Items header at line {i}")
+                    in_action_items_section = True
+                    continue
+                
+                # If we're in the action items section, parse the content
+                if in_action_items_section:
+                    line = line.strip()
                     
-                    # Parse the table row
-                    cells = [cell.strip() for cell in line.split('|') if cell.strip()]
+                    # Check if this is a role header (like "President", "Vice President", etc.)
+                    if line and not line.startswith('-') and not line.startswith('|') and not line.startswith('#'):
+                        # This might be a role or person name
+                        if line in ['President', 'Vice President', 'Treasurer', 'Secretary', 'Tech Lead', 'Social Media Lead', 'Events Lead']:
+                            current_role = line
+                            print(f"🔍 [DEBUG] Found role: {current_role}")
+                            continue
+                        elif current_role and not line.startswith('-') and not line.startswith('|'):
+                            # This might be a person's name
+                            current_person = line
+                            print(f"🔍 [DEBUG] Found person: {current_person}")
+                            continue
                     
-                    if len(cells) >= 3:  # Should have Role, Team Member, Action Items columns
-                        role = cells[0] if len(cells) > 0 else ""
-                        team_member = cells[1] if len(cells) > 1 else ""
-                        action_items_text = cells[2] if len(cells) > 2 else ""
+                    # Check for action items with emoji checkboxes (including HTML entities)
+                    if line.startswith('-') and ('✅' in line or '❌' in line or '&#9989;' in line or '&#10060;' in line):
+                        print(f"🔍 [DEBUG] Found action item: {line[:100]}...")
                         
-                        # Parse individual action items from the action items text
-                        individual_items = self._parse_action_items_from_text(action_items_text)
+                        # Parse the action item
+                        individual_items = self._parse_action_items_from_text(line)
+                        print(f"🔍 [DEBUG] Parsed {len(individual_items)} individual items")
                         
                         for item in individual_items:
                             action_items.append({
-                                'role': role,
-                                'person': team_member,
+                                'role': current_role,
+                                'person': current_person,
                                 'task': item['task'],
                                 'deadline': item.get('deadline'),
                                 'completed': item['completed']
                             })
-                
-                # Stop parsing if we hit another major section
-                elif in_action_items_table and line.strip().startswith('#'):
-                    break
+                    
+                    # Check for table format (fallback)
+                    elif '|' in line and in_action_items_section:
+                        print(f"🔍 [DEBUG] Processing table row: {line[:100]}...")
+                        
+                        # Skip separator lines (containing only |, :, -, and spaces)
+                        if re.match(r'^[\s\|\:\-]+$', line):
+                            print(f"🔍 [DEBUG] Skipping separator line")
+                            continue
+                        
+                        # Skip header row if we encounter it again
+                        if 'Action Items To Be Done By Next Meeting' in line:
+                            print(f"🔍 [DEBUG] Skipping header row")
+                            continue
+                        
+                        # Parse the table row
+                        cells = [cell.strip() for cell in line.split('|') if cell.strip()]
+                        print(f"🔍 [DEBUG] Parsed cells: {cells}")
+                        
+                        if len(cells) >= 3:  # Should have Role, Team Member, Action Items columns
+                            role = cells[0] if len(cells) > 0 else ""
+                            team_member = cells[1] if len(cells) > 1 else ""
+                            action_items_text = cells[2] if len(cells) > 2 else ""
+                            
+                            print(f"🔍 [DEBUG] Role: {role}, Member: {team_member}")
+                            print(f"🔍 [DEBUG] Action items text: {action_items_text[:200]}...")
+                            
+                            # Parse individual action items from the action items text
+                            individual_items = self._parse_action_items_from_text(action_items_text)
+                            print(f"🔍 [DEBUG] Parsed {len(individual_items)} individual items")
+                            
+                            for item in individual_items:
+                                action_items.append({
+                                    'role': role,
+                                    'person': team_member,
+                                    'task': item['task'],
+                                    'deadline': item.get('deadline'),
+                                    'completed': item['completed']
+                                })
+                    
+                    # Stop parsing if we hit another major section
+                    elif line.strip().startswith('#'):
+                        print(f"🔍 [DEBUG] Found new section, stopping parsing")
+                        break
             
+            print(f"🔍 [DEBUG] Total action items found: {len(action_items)}")
             return action_items
             
         except Exception as e:
-            print(f"Error parsing markdown action items: {e}")
+            print(f"❌ [ERROR] Error parsing markdown action items: {e}")
+            import traceback
+            print(f"🔍 [DEBUG] Traceback: {traceback.format_exc()}")
             return []
     
     def _parse_action_items_from_text(self, action_items_text: str) -> List[Dict[str, Any]]:
         """
         Parses individual action items from a text block containing checkboxes and tasks.
+        Handles Google Docs emoji checkboxes (✅ and ❌).
         
         Args:
             action_items_text: Text containing action items with checkboxes
@@ -175,19 +437,43 @@ class MinutesParser:
         items = []
         
         try:
-            # Split by lines and process each line
-            lines = action_items_text.split('\n')
+            print(f"🔍 [DEBUG] Parsing action items from text: {action_items_text[:200]}...")
             
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
+            # Handle single line input (most common case)
+            line = action_items_text.strip()
+            print(f"🔍 [DEBUG] Processing line: '{line}'")
+            
+            if not line:
+                return items
+            
+            # Check for Google Docs emoji checkbox patterns: ✅ or ❌ (including HTML entities)
+            emoji_checkbox_match = re.match(r'^-\s*(✅|❌|&#9989;|&#10060;)\s*(.*)', line)
+            if emoji_checkbox_match:
+                checkbox_char = emoji_checkbox_match.group(1)
+                is_completed = checkbox_char in ['✅', '&#9989;']
+                task_text = emoji_checkbox_match.group(2).strip()
                 
-                # Check for checkbox patterns: [x] or [ ]
+                print(f"🔍 [DEBUG] Found emoji checkbox: completed={is_completed}, task='{task_text[:50]}...'")
+                
+                # Remove strikethrough text (~~text~~)
+                task_text = re.sub(r'~~([^~]+)~~', r'\1', task_text)
+                
+                # Look for deadline in the task text
+                deadline = self._extract_deadline_from_task(task_text)
+                
+                items.append({
+                    'task': task_text,
+                    'completed': is_completed,
+                    'deadline': deadline
+                })
+            else:
+                # Check for traditional checkbox patterns: [x] or [ ]
                 checkbox_match = re.match(r'^-\s*\[([x\s])\]\s*(.*)', line)
                 if checkbox_match:
                     is_completed = checkbox_match.group(1) == 'x'
                     task_text = checkbox_match.group(2).strip()
+                    
+                    print(f"🔍 [DEBUG] Found traditional checkbox: completed={is_completed}, task='{task_text[:50]}...'")
                     
                     # Remove strikethrough text (~~text~~)
                     task_text = re.sub(r'~~([^~]+)~~', r'\1', task_text)
@@ -207,16 +493,21 @@ class MinutesParser:
                         task_text = line[1:].strip()
                         deadline = self._extract_deadline_from_task(task_text)
                         
+                        print(f"🔍 [DEBUG] Found bullet point: task='{task_text[:50]}...'")
+                        
                         items.append({
                             'task': task_text,
                             'completed': False,
                             'deadline': deadline
                         })
             
+            print(f"🔍 [DEBUG] Parsed {len(items)} action items")
             return items
             
         except Exception as e:
-            print(f"Error parsing action items from text: {e}")
+            print(f"❌ [ERROR] Error parsing action items from text: {e}")
+            import traceback
+            print(f"🔍 [DEBUG] Traceback: {traceback.format_exc()}")
             return []
     
     def _extract_deadline_from_task(self, task_text: str) -> Optional[str]:
