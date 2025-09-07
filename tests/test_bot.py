@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Test script for the Club Exec Task Manager Bot.
+Legacy test script for the Club Exec Task Manager Bot.
 This script tests basic functionality without actually running the bot.
+
+NOTE: This is the legacy test file. For comprehensive testing, use run_tests.py
 """
 
 import sys
@@ -9,7 +11,7 @@ import os
 from pathlib import Path
 
 # Add the project root to the Python path
-project_root = Path(__file__).parent
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 def test_imports():
