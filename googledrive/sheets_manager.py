@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -259,7 +259,7 @@ class ClubSheetsManager:
             print(f"Error creating monthly sheets: {error}")
             return {}
     
-    def add_task(self, spreadsheet_id: str, task_data: Dict[str, Any]) -> bool:
+    def add_task(self, spreadsheet_id: str, task_data: Dict[str, Any]) -> tuple[bool, str]:
         """
         Adds a new task to the tasks sheet.
         
@@ -268,7 +268,7 @@ class ClubSheetsManager:
             task_data: Dictionary containing task information
             
         Returns:
-            bool: True if successful, False otherwise
+            tuple: (success: bool, task_id: str)
         """
         try:
             task_id = str(uuid.uuid4())
@@ -304,13 +304,13 @@ class ClubSheetsManager:
                 body={'values': [task_row]}
             ).execute()
             
-            return True
+            return True, task_id
             
         except HttpError as error:
             print(f"Error adding task: {error}")
-            return False
+            return False, ""
     
-    def add_meeting(self, spreadsheet_id: str, meeting_data: Dict[str, Any]) -> bool:
+    def add_meeting(self, spreadsheet_id: str, meeting_data: Dict[str, Any]) -> tuple[bool, str]:
         """
         Adds a new meeting to the meetings sheet.
         
@@ -319,7 +319,7 @@ class ClubSheetsManager:
             meeting_data: Dictionary containing meeting information
             
         Returns:
-            bool: True if successful, False otherwise
+            tuple: (success: bool, meeting_id: str)
         """
         try:
             meeting_id = str(uuid.uuid4())
@@ -357,11 +357,11 @@ class ClubSheetsManager:
                 body={'values': [meeting_row]}
             ).execute()
             
-            return True
+            return True, meeting_id
             
         except HttpError as error:
             print(f"Error adding meeting: {error}")
-            return False
+            return False, ""
     
     def get_tasks_by_user(self, spreadsheet_id: str, discord_id: str) -> List[Dict[str, Any]]:
         """
@@ -728,7 +728,9 @@ class ClubSheetsManager:
                 timer_data.get('ref_id', ''),
                 timer_data.get('fire_at_utc', ''),
                 timer_data.get('channel_id', ''),
-                timer_data.get('state', 'active')
+                timer_data.get('state', 'active'),
+                timer_data.get('title', 'Unknown'),
+                timer_data.get('mention', '')
             ]
             
             # Find the next empty row
@@ -765,7 +767,7 @@ class ClubSheetsManager:
         try:
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=config_spreadsheet_id,
-                range='timers!A:H'
+                range='timers!A:J'
             ).execute()
             
             values = result.get('values', [])
@@ -801,7 +803,7 @@ class ClubSheetsManager:
         try:
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=config_spreadsheet_id,
-                range='timers!A:H'
+                range='timers!A:J'
             ).execute()
             
             values = result.get('values', [])
@@ -810,7 +812,7 @@ class ClubSheetsManager:
             
             # Find the row with the timer_id
             for i, row in enumerate(values[1:], start=2):
-                if row[0] == timer_id:  # id column
+                if len(row) > 0 and row[0] == timer_id:  # id column
                     # Update state
                     self.sheets_service.spreadsheets().values().update(
                         spreadsheetId=config_spreadsheet_id,
@@ -912,3 +914,168 @@ class ClubSheetsManager:
         except Exception as e:
             print(f"Error getting or creating monthly sheets: {e}")
             return {}
+    
+    def get_active_timers(self, config_spreadsheet_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all active timers from the timers sheet.
+        
+        Args:
+            config_spreadsheet_id: ID of the config spreadsheet
+            
+        Returns:
+            List of active timer dictionaries
+        """
+        try:
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=config_spreadsheet_id,
+                range='timers!A:H'
+            ).execute()
+            
+            values = result.get('values', [])
+            if len(values) < 2:
+                return []
+            
+            headers = values[0]
+            active_timers = []
+            
+            for row in values[1:]:
+                if len(row) >= len(headers):
+                    timer = dict(zip(headers, row))
+                    if timer.get('state') == 'active':
+                        active_timers.append(timer)
+            
+            return active_timers
+            
+        except HttpError as error:
+            print(f"Error getting active timers: {error}")
+            return []
+    
+    def cleanup_old_timers(self, config_spreadsheet_id: str, days_old: int = 7):
+        """
+        Clean up old fired/failed timers to keep the sheet manageable.
+        
+        Args:
+            config_spreadsheet_id: ID of the config spreadsheet
+            days_old: Number of days old timers to clean up (default: 7)
+        """
+        try:
+            # Get all timers
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=config_spreadsheet_id,
+                range='timers!A:H'
+            ).execute()
+            
+            values = result.get('values', [])
+            if len(values) < 2:
+                return
+            
+            headers = values[0]
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
+            
+            # Find rows to delete (old fired/failed timers)
+            rows_to_delete = []
+            for i, row in enumerate(values[1:], start=2):  # Start from row 2 (after header)
+                if len(row) >= len(headers):
+                    timer = dict(zip(headers, row))
+                    if timer.get('state') in ['fired', 'failed']:
+                        try:
+                            fire_at = datetime.fromisoformat(timer.get('fire_at_utc', ''))
+                            if fire_at < cutoff_date:
+                                rows_to_delete.append(i)
+                        except ValueError:
+                            continue
+            
+            # Delete rows (in reverse order to maintain row numbers)
+            for row_num in reversed(rows_to_delete):
+                self.sheets_service.spreadsheets().batchUpdate(
+                    spreadsheetId=config_spreadsheet_id,
+                    body={
+                        'requests': [{
+                            'deleteDimension': {
+                                'range': {
+                                    'sheetId': 0,  # Assuming timers is the first sheet
+                                    'dimension': 'ROWS',
+                                    'startIndex': row_num - 1,
+                                    'endIndex': row_num
+                                }
+                            }
+                        }]
+                    }
+                ).execute()
+            
+            print(f"Cleaned up {len(rows_to_delete)} old timers")
+            
+        except HttpError as error:
+            print(f"Error cleaning up old timers: {error}")
+    
+    def get_timer_by_id(self, config_spreadsheet_id: str, timer_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific timer by ID.
+        
+        Args:
+            config_spreadsheet_id: ID of the config spreadsheet
+            timer_id: ID of the timer to find
+            
+        Returns:
+            Timer dictionary or None if not found
+        """
+        try:
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=config_spreadsheet_id,
+                range='timers!A:H'
+            ).execute()
+            
+            values = result.get('values', [])
+            if len(values) < 2:
+                return None
+            
+            headers = values[0]
+            
+            for row in values[1:]:
+                if len(row) >= len(headers):
+                    timer = dict(zip(headers, row))
+                    if timer.get('id') == timer_id:
+                        return timer
+            
+            return None
+            
+        except HttpError as error:
+            print(f"Error getting timer by ID: {error}")
+            return None
+    
+    def get_timers_by_ref(self, config_spreadsheet_id: str, ref_type: str, ref_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all timers for a specific reference (task or meeting).
+        
+        Args:
+            config_spreadsheet_id: ID of the config spreadsheet
+            ref_type: Type of reference ('task' or 'meeting')
+            ref_id: ID of the reference
+            
+        Returns:
+            List of timer dictionaries
+        """
+        try:
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=config_spreadsheet_id,
+                range='timers!A:H'
+            ).execute()
+            
+            values = result.get('values', [])
+            if len(values) < 2:
+                return []
+            
+            headers = values[0]
+            matching_timers = []
+            
+            for row in values[1:]:
+                if len(row) >= len(headers):
+                    timer = dict(zip(headers, row))
+                    if timer.get('ref_type') == ref_type and timer.get('ref_id') == ref_id:
+                        matching_timers.append(timer)
+            
+            return matching_timers
+            
+        except HttpError as error:
+            print(f"Error getting timers by reference: {error}")
+            return []

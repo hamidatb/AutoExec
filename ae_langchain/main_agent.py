@@ -26,6 +26,22 @@ if not os.getenv("OPENAI_API_KEY"):
 # Global variable for pending announcements
 _pending_announcements = []
 
+# Global variable for Discord context
+_discord_context = {}
+
+def set_discord_context(guild_id: str, channel_id: str, user_id: str):
+    """Set the Discord context for LangChain tools."""
+    global _discord_context
+    _discord_context = {
+        'guild_id': guild_id,
+        'channel_id': channel_id,
+        'user_id': user_id
+    }
+
+def get_discord_context():
+    """Get the current Discord context."""
+    return _discord_context
+
 @tool 
 def start_discord_bot():
     """
@@ -484,7 +500,15 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
 def send_announcement(announcement_message: str, announcement_type: str = "general") -> str:
     """
     Send an announcement message to Discord to the appropriate channel based on the type.
-    Use this for meeting reminders, general announcements, or any other messages.
+    
+    **USE THIS TOOL FOR:**
+    - General announcements and notifications
+    - Meeting reminders and updates
+    - Urgent messages that need immediate attention
+    - Informational messages
+    
+    **DO NOT USE THIS FOR TASK CREATION** - Use create_task_with_timer instead!
+    **DO NOT USE THIS FOR MEETING SCHEDULING** - Use create_meeting_with_timer instead!
     
     Args:
         announcement_message (str): The announcement message to send (REQUIRED)
@@ -1056,6 +1080,650 @@ def check_guild_setup_status(guild_id: str) -> str:
 
             **Current Status:** Unable to determine guild setup status."""
 
+@tool
+def create_task_with_timer(task_title: str, assignee_name: str, due_date: str, priority: str = "medium", notes: str = "") -> str:
+    """
+    **PRIORITY TOOL FOR TASK CREATION** - Use this when users mention someone has a task, assignment, or deadline.
+    
+    Create a new task and automatically set up timers for reminders.
+    This tool parses natural language and creates both the task and associated timers in Google Sheets.
+    
+    **USE THIS TOOL WHEN:**
+    - User says someone "has a task due [date]"
+    - User mentions "assign [person] [task] due [date]"
+    - User wants to create a task with a deadline
+    - User mentions someone needs to do something by a specific date
+    
+    **DO NOT USE send_announcement for task creation - use this tool instead!**
+    
+    Args:
+        task_title (str): The title/description of the task
+        assignee_name (str): Name of the person assigned to the task (can be Discord username or real name)
+        due_date (str): Due date in natural language (e.g., "September 9th", "next Friday", "2025-01-15 14:30")
+        priority (str): Task priority - "low", "medium", "high", or "urgent" (default: "medium")
+        notes (str): Additional notes or context for the task
+        
+    Returns:
+        str: Confirmation message with task details and timer information
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    from datetime import datetime, timezone, timedelta
+    import re
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get the Discord context from the current message
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        channel_id = context.get('channel_id')
+        user_id = context.get('user_id')
+        
+        if not guild_id:
+            return "❌ No Discord context found. Please use this command in a Discord server."
+        
+        # Get the guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Parse the due date
+        due_datetime = parse_due_date(due_date)
+        if not due_datetime:
+            return f"❌ Could not parse due date: '{due_date}'. Please use formats like 'September 9th', 'next Friday', or '2025-01-15 14:30'"
+        
+        # Find the assignee by name (this is a simplified lookup)
+        assignee_discord_id = find_user_by_name(assignee_name, guild_config)
+        if not assignee_discord_id:
+            return f"❌ Could not find user '{assignee_name}'. Please use a Discord username or mention."
+        
+        # Check if we need to ask for a Discord mention
+        if assignee_discord_id.startswith("NEED_MENTION_FOR_"):
+            return ask_for_discord_mention(assignee_name)
+        
+        # Create task data
+        task_data = {
+            'title': task_title,
+            'owner_discord_id': assignee_discord_id,
+            'owner_name': assignee_name,
+            'due_at': due_datetime.isoformat(),
+            'status': 'open',
+            'priority': priority,
+            'source_doc': '',
+            'channel_id': channel_id,
+            'notes': notes,
+            'created_by': user_id,
+            'guild_id': guild_id
+        }
+        
+        # Get the tasks sheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        tasks_sheet_id = monthly_sheets.get('tasks')
+        
+        if not tasks_sheet_id:
+            return "❌ No tasks spreadsheet configured. Please run `/setup` first."
+        
+        # Add the task and get the generated task_id
+        success, task_id = BOT_INSTANCE.sheets_manager.add_task(tasks_sheet_id, task_data)
+        
+        if success:
+            # Update task_data with the generated task_id
+            task_data['task_id'] = task_id
+            # Create timers for the task
+            timer_count = create_task_timers(task_data, guild_config)
+            
+            response = f"""✅ **Task Created Successfully!**
+
+**Task:** {task_title}
+**Assigned to:** {assignee_name}
+**Due:** {due_datetime.strftime('%B %d, %Y at %I:%M %p')}
+**Priority:** {priority.title()}
+**Timers Created:** {timer_count} automatic reminders
+
+**What happens next:**
+• 24-hour reminder will be sent
+• 2-hour reminder will be sent  
+• Overdue notification if not completed
+• Escalation after 48 hours overdue
+
+The task and all timers have been added to your Google Sheets!"""
+            
+            return response
+        else:
+            return "❌ Failed to create task. Please try again."
+            
+    except Exception as e:
+        return f"❌ Error creating task: {str(e)}"
+
+@tool
+def create_meeting_with_timer(meeting_title: str, start_time: str, location: str = "", meeting_link: str = "") -> str:
+    """
+    Create a new meeting and automatically set up timers for reminders.
+    This tool parses natural language and creates both the meeting and associated timers.
+    
+    Args:
+        meeting_title (str): The title of the meeting
+        start_time (str): Start time in natural language (e.g., "September 9th at 2pm", "next Friday 3:30pm", "2025-01-15 14:30")
+        location (str): Meeting location or venue (optional)
+        meeting_link (str): Meeting link for virtual meetings (optional)
+        
+    Returns:
+        str: Confirmation message with meeting details and timer information
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    from datetime import datetime, timezone, timedelta
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get the Discord context from the current message
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        channel_id = context.get('channel_id')
+        user_id = context.get('user_id')
+        
+        if not guild_id:
+            return "❌ No Discord context found. Please use this command in a Discord server."
+        
+        # Get the guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Parse the start time
+        start_datetime = parse_meeting_time(start_time)
+        if not start_datetime:
+            return f"❌ Could not parse start time: '{start_time}'. Please use formats like 'September 9th at 2pm', 'next Friday 3:30pm', or '2025-01-15 14:30'"
+        
+        # Create meeting data
+        meeting_data = {
+            'title': meeting_title,
+            'start_at_utc': start_datetime.isoformat(),
+            'end_at_utc': None,
+            'start_at_local': start_datetime.strftime("%B %d, %Y at %I:%M %p"),
+            'end_at_local': None,
+            'location': location,
+            'meeting_link': meeting_link,
+            'channel_id': channel_id,
+            'created_by': user_id,
+            'guild_id': guild_id,
+            'status': 'scheduled'
+        }
+        
+        # Get the meetings sheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        meetings_sheet_id = monthly_sheets.get('meetings')
+        
+        if not meetings_sheet_id:
+            return "❌ No meetings spreadsheet configured. Please run `/setup` first."
+        
+        # Add the meeting and get the generated meeting_id
+        success, meeting_id = BOT_INSTANCE.sheets_manager.add_meeting(meetings_sheet_id, meeting_data)
+        
+        if success:
+            # Update meeting_data with the generated meeting_id
+            meeting_data['meeting_id'] = meeting_id
+            # Create timers for the meeting
+            timer_count = create_meeting_timers(meeting_data, guild_config)
+            
+            response = f"""✅ **Meeting Scheduled Successfully!**
+
+**Meeting:** {meeting_title}
+**Start:** {start_datetime.strftime('%B %d, %Y at %I:%M %p')}
+**Location:** {location if location else 'TBD'}
+**Link:** {meeting_link if meeting_link else 'TBD'}
+**Timers Created:** {timer_count} automatic reminders
+
+**What happens next:**
+• 2-hour reminder will be sent
+• Meeting start notification
+
+The meeting and all timers have been added to your Google Sheets!"""
+            
+            return response
+        else:
+            return "❌ Failed to schedule meeting. Please try again."
+            
+    except Exception as e:
+        return f"❌ Error scheduling meeting: {str(e)}"
+
+@tool
+def list_active_timers() -> str:
+    """
+    List all active timers from the Timers tab in Google Sheets.
+    Use this when users ask about upcoming reminders, timers, or scheduled notifications.
+    
+    Returns:
+        str: Formatted list of active timers
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get all configured guilds
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        configured_guilds = {gid: config for gid, config in all_guilds.items() if config.get('setup_complete', False)}
+        
+        if not configured_guilds:
+            return "❌ No configured guilds found. Please run `/setup` first."
+        
+        all_timers = []
+        
+        for guild_id, guild_config in configured_guilds.items():
+            config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+            if config_spreadsheet_id:
+                timers = BOT_INSTANCE.sheets_manager.get_timers(config_spreadsheet_id)
+                active_timers = [t for t in timers if t.get('state') == 'active']
+                all_timers.extend(active_timers)
+        
+        if not all_timers:
+            return "📅 **No Active Timers**\n\nThere are currently no active reminders or timers scheduled."
+        
+        # Sort by fire time
+        all_timers.sort(key=lambda x: x.get('fire_at_utc', ''))
+        
+        response = f"⏰ **Active Timers ({len(all_timers)})**\n\n"
+        
+        for timer in all_timers[:10]:  # Show next 10 timers
+            timer_type = timer.get('type', 'unknown')
+            fire_at = timer.get('fire_at_utc', '')
+            ref_type = timer.get('ref_type', 'unknown')
+            ref_id = timer.get('ref_id', 'unknown')
+            guild_id = timer.get('guild_id', '')
+            
+            # Parse fire time
+            try:
+                fire_datetime = datetime.fromisoformat(fire_at.replace('Z', '+00:00'))
+                fire_str = fire_datetime.strftime('%B %d, %Y at %I:%M %p')
+            except:
+                fire_str = fire_at
+            
+            # Get the title and mention from the timer data
+            title = timer.get('title', 'Unknown')
+            mention = timer.get('mention', '')
+            
+            # Format timer type for display
+            type_display = timer_type.replace('_', ' ').title()
+            
+            response += f"**{type_display}**\n"
+            response += f"• {ref_type.title()}: {title}\n"
+            response += f"• Fire at: {fire_str}\n"
+            if mention:
+                response += f"• Mention: {mention}\n"
+            response += "\n"
+        
+        if len(all_timers) > 10:
+            response += f"... and {len(all_timers) - 10} more timers"
+        
+        return response
+        
+    except Exception as e:
+        return f"❌ Error listing timers: {str(e)}"
+
+@tool
+def ask_for_discord_mention(person_name: str) -> str:
+    """
+    Ask the user to provide the Discord mention for a person whose name doesn't match any executive.
+    Use this when you can't find a matching executive for a task assignee.
+    
+    Args:
+        person_name: The name of the person who needs a Discord mention
+        
+    Returns:
+        str: Message asking for the Discord mention
+    """
+    return f"❓ **Discord Mention Needed**\n\nI couldn't find a matching executive for **{person_name}**. Please provide their Discord mention (e.g., @username or <@123456789>) so I can create the task reminder properly.\n\nYou can reply with: `{person_name}'s Discord is @username`"
+
+@tool
+def clear_all_timers() -> str:
+    """
+    Clear all active timers from the Timers tab in Google Sheets.
+    Use this when users ask to clear, delete, or remove all timers.
+    
+    **USE THIS TOOL WHEN:**
+    - User says "clear all timers"
+    - User says "delete all timers"
+    - User says "remove all timers"
+    - User wants to reset the timer system
+    
+    Returns:
+        str: Confirmation message with number of timers cleared
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get Discord context to know which guild
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        
+        if not guild_id:
+            return "❌ No Discord context found. Please use this command in a Discord server."
+        
+        # Get guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+        if not config_spreadsheet_id:
+            return "❌ No config spreadsheet configured."
+        
+        # Get all active timers
+        timers = BOT_INSTANCE.sheets_manager.get_timers(config_spreadsheet_id)
+        active_timers = [t for t in timers if t.get('state') == 'active']
+        
+        if not active_timers:
+            return "📅 **No Active Timers**\n\nThere are no active timers to clear."
+        
+        # Clear all active timers by setting their state to 'cancelled'
+        cleared_count = 0
+        for timer in active_timers:
+            timer_id = timer.get('id')
+            if timer_id:
+                success = BOT_INSTANCE.sheets_manager.update_timer_state(config_spreadsheet_id, timer_id, 'cancelled')
+                if success:
+                    cleared_count += 1
+        
+        return f"✅ **Timers Cleared Successfully!**\n\n**Cleared:** {cleared_count} active timers\n\nAll timers have been cancelled and will no longer fire."
+        
+    except Exception as e:
+        return f"❌ Error clearing timers: {str(e)}"
+
+# Helper functions for the new tools
+def parse_due_date(date_str: str) -> datetime:
+    """Parse natural language due dates into datetime objects."""
+    from datetime import datetime, timezone, timedelta
+    import re
+    
+    date_str = date_str.strip().lower()
+    now = datetime.now(timezone.utc)
+    
+    # Handle specific date formats
+    try:
+        # Try ISO format first
+        if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
+            if ' ' in date_str and len(date_str.split()) >= 2:
+                # Has time
+                return datetime.strptime(date_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+            else:
+                # Just date, assume end of day
+                return datetime.strptime(date_str, "%Y-%m-%d").replace(hour=23, minute=59, tzinfo=timezone.utc)
+    except:
+        pass
+    
+    # Handle relative dates
+    if 'tomorrow' in date_str:
+        return (now + timedelta(days=1)).replace(hour=17, minute=0, second=0, microsecond=0)
+    elif 'next week' in date_str:
+        return (now + timedelta(weeks=1)).replace(hour=17, minute=0, second=0, microsecond=0)
+    elif 'next friday' in date_str:
+        days_ahead = 4 - now.weekday()  # Friday is 4
+        if days_ahead <= 0:  # Target day already happened this week
+            days_ahead += 7
+        return (now + timedelta(days=days_ahead)).replace(hour=17, minute=0, second=0, microsecond=0)
+    
+    # Handle month day formats
+    month_patterns = [
+        (r'september (\d{1,2})', 9),
+        (r'october (\d{1,2})', 10),
+        (r'november (\d{1,2})', 11),
+        (r'december (\d{1,2})', 12),
+        (r'january (\d{1,2})', 1),
+        (r'february (\d{1,2})', 2),
+        (r'march (\d{1,2})', 3),
+        (r'april (\d{1,2})', 4),
+        (r'may (\d{1,2})', 5),
+        (r'june (\d{1,2})', 6),
+        (r'july (\d{1,2})', 7),
+        (r'august (\d{1,2})', 8),
+    ]
+    
+    for pattern, month in month_patterns:
+        match = re.search(pattern, date_str)
+        if match:
+            day = int(match.group(1))
+            year = now.year
+            # If the month has passed this year, use next year
+            if month < now.month or (month == now.month and day < now.day):
+                year += 1
+            return datetime(year, month, day, 17, 0, 0, tzinfo=timezone.utc)
+    
+    return None
+
+def parse_meeting_time(time_str: str) -> datetime:
+    """Parse natural language meeting times into datetime objects."""
+    from datetime import datetime, timezone, timedelta
+    import re
+    
+    time_str = time_str.strip().lower()
+    now = datetime.now(timezone.utc)
+    
+    # Handle ISO format
+    try:
+        if re.match(r'\d{4}-\d{2}-\d{2}', time_str):
+            if ' ' in time_str and len(time_str.split()) >= 2:
+                return datetime.strptime(time_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+    except:
+        pass
+    
+    # Handle relative times
+    if 'tomorrow' in time_str:
+        base_date = now + timedelta(days=1)
+    elif 'next week' in time_str:
+        base_date = now + timedelta(weeks=1)
+    elif 'next friday' in time_str:
+        days_ahead = 4 - now.weekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+        base_date = now + timedelta(days=days_ahead)
+    else:
+        base_date = now
+    
+    # Extract time
+    time_match = re.search(r'(\d{1,2}):?(\d{2})?\s*(am|pm)?', time_str)
+    if time_match:
+        hour = int(time_match.group(1))
+        minute = int(time_match.group(2)) if time_match.group(2) else 0
+        period = time_match.group(3)
+        
+        if period == 'pm' and hour != 12:
+            hour += 12
+        elif period == 'am' and hour == 12:
+            hour = 0
+        
+        return base_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    
+    # Default to 2 PM if no time specified
+    return base_date.replace(hour=14, minute=0, second=0, microsecond=0)
+
+def find_user_by_name(name: str, guild_config: dict) -> str:
+    """Find a user's Discord mention by their name."""
+    exec_members = guild_config.get('exec_members', [])
+    for member in exec_members:
+        if name.lower() in member.get('name', '').lower():
+            discord_id = member.get('discord_id', '')
+            if discord_id:
+                return f"<@{discord_id}>"
+    
+    # If not found in exec members, return a placeholder that indicates we need the mention
+    return f"NEED_MENTION_FOR_{name}"
+
+def create_task_timers(task_data: dict, guild_config: dict) -> int:
+    """Create timers for a task and return the count."""
+    from datetime import datetime, timezone, timedelta
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    try:
+        due_at = datetime.fromisoformat(task_data['due_at'])
+        task_id = task_data.get('task_id', 'unknown')
+        guild_id = task_data.get('guild_id', '')
+        
+        # Create timer types
+        timer_types = [
+            ('task_reminder_24h', due_at - timedelta(hours=24)),
+            ('task_reminder_2h', due_at - timedelta(hours=2)),
+            ('task_overdue', due_at),
+            ('task_escalate', due_at + timedelta(hours=48))
+        ]
+        
+        config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+        if not config_spreadsheet_id:
+            return 0
+        
+        # Get the assignee mention
+        assignee_name = task_data.get('assignee', '')
+        assignee_mention = find_user_by_name(assignee_name, guild_config)
+        
+        timer_count = 0
+        for timer_type, fire_at in timer_types:
+            timer_id = f"{task_id}_{timer_type}"
+            timer_data = {
+                'id': timer_id,
+                'guild_id': guild_id,
+                'type': timer_type,
+                'ref_type': 'task',
+                'ref_id': task_id,
+                'fire_at_utc': fire_at.isoformat(),
+                'channel_id': task_data.get('channel_id', ''),
+                'state': 'active',
+                'title': task_data.get('title', 'Unknown Task'),
+                'mention': assignee_mention
+            }
+            
+            success = BOT_INSTANCE.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
+            if success:
+                timer_count += 1
+        
+        return timer_count
+        
+    except Exception as e:
+        print(f"Error creating task timers: {e}")
+        return 0
+
+def create_meeting_timers(meeting_data: dict, guild_config: dict) -> int:
+    """Create timers for a meeting and return the count."""
+    from datetime import datetime, timezone, timedelta
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    try:
+        start_at = datetime.fromisoformat(meeting_data['start_at_utc'])
+        meeting_id = meeting_data.get('meeting_id', 'unknown')
+        guild_id = meeting_data.get('guild_id', '')
+        
+        # Create timer types
+        timer_types = [
+            ('meeting_reminder_2h', start_at - timedelta(hours=2)),
+            ('meeting_start', start_at)
+        ]
+        
+        config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+        if not config_spreadsheet_id:
+            return 0
+        
+        timer_count = 0
+        for timer_type, fire_at in timer_types:
+            timer_id = f"{meeting_id}_{timer_type}"
+            timer_data = {
+                'id': timer_id,
+                'guild_id': guild_id,
+                'type': timer_type,
+                'ref_type': 'meeting',
+                'ref_id': meeting_id,
+                'fire_at_utc': fire_at.isoformat(),
+                'channel_id': meeting_data.get('channel_id', ''),
+                'state': 'active',
+                'title': meeting_data.get('title', 'Unknown Meeting'),
+                'mention': '@everyone'  # Meeting reminders go to everyone
+            }
+            
+            success = BOT_INSTANCE.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
+            if success:
+                timer_count += 1
+        
+        return timer_count
+        
+    except Exception as e:
+        print(f"Error creating meeting timers: {e}")
+        return 0
+
+def get_task_title_by_id(task_id: str, guild_id: str, bot_instance) -> str:
+    """Get task title by task ID."""
+    try:
+        if not bot_instance:
+            return "Unknown Task"
+        
+        # Get guild configuration
+        all_guilds = bot_instance.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config:
+            return "Unknown Task"
+        
+        # Get tasks sheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        tasks_sheet_id = monthly_sheets.get('tasks')
+        
+        if not tasks_sheet_id:
+            return "Unknown Task"
+        
+        # Get all tasks and find the one with matching ID
+        tasks = bot_instance.sheets_manager.get_all_tasks(tasks_sheet_id)
+        
+        for task in tasks:
+            if task.get('task_id') == task_id:
+                return task.get('title', 'Unknown Task')
+        
+        return "Unknown Task"
+        
+    except Exception as e:
+        print(f"Error getting task title: {e}")
+        return "Unknown Task"
+
+def get_meeting_title_by_id(meeting_id: str, guild_id: str, bot_instance) -> str:
+    """Get meeting title by meeting ID."""
+    try:
+        if not bot_instance:
+            return "Unknown Meeting"
+        
+        # Get guild configuration
+        all_guilds = bot_instance.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config:
+            return "Unknown Meeting"
+        
+        # Get meetings sheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        meetings_sheet_id = monthly_sheets.get('meetings')
+        
+        if not meetings_sheet_id:
+            return "Unknown Meeting"
+        
+        # Get all meetings and find the one with matching ID
+        meetings = bot_instance.sheets_manager.get_all_meetings(meetings_sheet_id)
+        for meeting in meetings:
+            if meeting.get('meeting_id') == meeting_id:
+                return meeting.get('title', 'Unknown Meeting')
+        
+        return "Unknown Meeting"
+        
+    except Exception as e:
+        print(f"Error getting meeting title: {e}")
+        return "Unknown Meeting"
+
 # These are agent helper functions for instantiation
 def create_llm_with_tools() -> ChatOpenAI:
     """
@@ -1075,7 +1743,7 @@ def create_llm_with_tools() -> ChatOpenAI:
         max_retries=2,
     )
 
-    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, send_announcement]
+    tools = [send_meeting_mins_summary, start_discord_bot, send_output_to_discord, create_meeting_mins, send_meeting_schedule, send_reminder_for_next_meeting, schedule_meeting, send_announcement, create_task_with_timer, create_meeting_with_timer, list_active_timers, clear_all_timers, ask_for_discord_mention]
     prompt = create_langchain_prompt()
 
     # give the llm access to the tool functions 
@@ -1245,7 +1913,12 @@ Remember: Use tools when you need specific data or to perform actions. You can r
         get_setup_info,
         get_meeting_sheet_info,
         get_task_sheet_info,
-        get_channel_info
+        get_channel_info,
+        create_task_with_timer,
+        create_meeting_with_timer,
+        list_active_timers,
+        clear_all_timers,
+        ask_for_discord_mention
     ]
     
     print(f"🔧 Available tools: {[tool.name for tool in safe_tools]}")

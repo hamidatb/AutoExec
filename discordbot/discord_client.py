@@ -10,6 +10,7 @@ from googledrive.meeting_manager import MeetingManager
 from googledrive.task_manager import TaskManager
 from googledrive.setup_manager import SetupManager
 from googledrive.minutes_parser import MinutesParser
+from googledrive.timer_scheduler import TimerScheduler
 from ae_langchain.main_agent import run_agent
 from config import Config
 
@@ -39,6 +40,7 @@ class ClubExecBot(discord.Client):
         self.task_manager = TaskManager()
         self.setup_manager = SetupManager()
         self.minutes_parser = MinutesParser()
+        self.timer_scheduler = TimerScheduler(self)
         
         # Store active reminders and timers
         self.active_reminders = {}
@@ -63,9 +65,7 @@ class ClubExecBot(discord.Client):
         except Exception as e:
             print(f"❌ Error syncing slash commands: {e}")
         
-        # Start background tasks
-        asyncio.create_task(self.reminder_loop())
-        asyncio.create_task(self.meeting_reminder_loop())
+        # Background tasks are now handled by the timer scheduler
         
     async def on_ready(self):
         """Called when the bot successfully logs in."""
@@ -76,12 +76,10 @@ class ClubExecBot(discord.Client):
         # Load existing club configurations
         await self.load_club_configurations()
         
-        # Rehydrate reminders from Timers tab
-        await self.rehydrate_reminders()
+        # Start the timer scheduler (replaces old reminder system)
+        await self.timer_scheduler.start()
         
-        # Start reminder loops
-        asyncio.create_task(self.reminder_loop())
-        asyncio.create_task(self.meeting_reminder_loop())
+        # Start reconciliation loop
         asyncio.create_task(self.reconciliation_loop())
         
     async def on_message(self, message: discord.Message):
@@ -174,6 +172,13 @@ class ClubExecBot(discord.Client):
         
         # Check for AutoExec commands
         if content.startswith('$AE'):
+            # Set Discord context for LangChain tools
+            from ae_langchain.main_agent import set_discord_context
+            set_discord_context(
+                guild_id=str(message.guild.id) if message.guild else None,
+                channel_id=str(message.channel.id),
+                user_id=str(message.author.id)
+            )
             await self.handle_autoexec_command(message)
             return
             
@@ -190,6 +195,13 @@ class ClubExecBot(discord.Client):
         # Check for general natural language queries
         if self.should_use_langchain(content):
             print(f"🔍 Using LangChain for message: {content}")
+            # Set Discord context for LangChain tools
+            from ae_langchain.main_agent import set_discord_context
+            set_discord_context(
+                guild_id=str(message.guild.id) if message.guild else None,
+                channel_id=str(message.channel.id),
+                user_id=str(message.author.id)
+            )
             await self.handle_langchain_query(message)
             return
         else:
@@ -198,6 +210,13 @@ class ClubExecBot(discord.Client):
         # Special handling for DMs ONLY if no other handler was used
         # This prevents duplicate processing and welcome messages in wrong contexts
         if isinstance(message.channel, discord.DMChannel):
+            # Set Discord context for LangChain tools (DM context)
+            from ae_langchain.main_agent import set_discord_context
+            set_discord_context(
+                guild_id=None,  # DMs don't have guild context
+                channel_id=str(message.channel.id),
+                user_id=str(message.author.id)
+            )
             await self.handle_dm_general_query(message)
             return
             
@@ -549,7 +568,11 @@ The `/serverconfig` command is a **slash command**. Please use the Discord slash
             'what is', 'when is', 'where is', 'why', 'how',
             'i need', 'i want', 'i would like', 'tell me', 'show me',
             'what can you', 'how do you work', 'send', 'announcement', 'schedule',
-            'create', 'make', 'do', 'get', 'find', 'check'
+            'create', 'make', 'do', 'get', 'find', 'check',
+            'has a task', 'has a meeting', 'task due', 'meeting on', 'meeting at',
+            'due on', 'due at', 'due tomorrow', 'due next', 'remind me',
+            'set up', 'schedule a', 'plan a', 'organize', 'assign', 'assignment',
+            'deadline', 'reminder', 'notify', 'alert', 'timers', 'active'
         ]
         
         # Check for natural language patterns
@@ -821,20 +844,6 @@ I am **NOT** set up for any student groups yet.
             return False
         return True
     
-    async def rehydrate_reminders(self):
-        """Rehydrates reminders from the Timers tab on startup."""
-        try:
-            for guild_id, club_config in self.club_configs.items():
-                if 'config_spreadsheet_id' in club_config:
-                    # Load timers from Timers tab
-                    timers = self.sheets_manager.get_timers(club_config['config_spreadsheet_id'])
-                    for timer in timers:
-                        if timer.get('state') == 'active':
-                            # Schedule the timer
-                            await self._schedule_timer(timer)
-            print("✅ Reminders rehydrated from Timers tab")
-        except Exception as e:
-            print(f"Error rehydrating reminders: {e}")
     
     async def reconciliation_loop(self):
         """Reconciliation job that runs every 15 minutes to ensure timers match current data."""
@@ -849,37 +858,40 @@ I am **NOT** set up for any student groups yet.
     async def reconcile_timers(self):
         """Reconciles timers with current Tasks and Meetings sheets."""
         try:
-            for guild_id, club_config in self.club_configs.items():
-                if 'config_spreadsheet_id' in club_config:
-                    # Get current timers
-                    current_timers = self.sheets_manager.get_timers(club_config['config_spreadsheet_id'])
-                    
-                    # Get current tasks and meetings
-                    tasks = []
-                    meetings = []
-                    if 'tasks_sheet_id' in club_config:
-                        tasks = self.sheets_manager.get_all_tasks(club_config['tasks_sheet_id'])
-                    if 'meetings_sheet_id' in club_config:
-                        meetings = self.sheets_manager.get_all_meetings(club_config['meetings_sheet_id'])
-                    
-                    # Update timers based on current data
-                    await self._update_timers_from_data(current_timers, tasks, meetings, club_config['config_spreadsheet_id'])
+            # Get all guild configurations
+            all_guilds = self.setup_manager.status_manager.get_all_guilds()
+            
+            for guild_id, guild_config in all_guilds.items():
+                if not guild_config.get('setup_complete', False):
+                    continue
+                
+                config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+                if not config_spreadsheet_id:
+                    continue
+                
+                # Get current timers
+                current_timers = self.sheets_manager.get_timers(config_spreadsheet_id)
+                
+                # Get current tasks and meetings from monthly sheets
+                tasks = []
+                meetings = []
+                monthly_sheets = guild_config.get('monthly_sheets', {})
+                
+                if 'tasks' in monthly_sheets:
+                    tasks = self.sheets_manager.get_all_tasks(monthly_sheets['tasks'])
+                if 'meetings' in monthly_sheets:
+                    meetings = self.sheets_manager.get_all_meetings(monthly_sheets['meetings'])
+                
+                # Update timers based on current data
+                await self._update_timers_from_data(current_timers, tasks, meetings, config_spreadsheet_id)
+                
+                # Clean up old timers (run once per reconciliation cycle)
+                self.sheets_manager.cleanup_old_timers(config_spreadsheet_id)
             
             print("✅ Timer reconciliation completed")
         except Exception as e:
             print(f"Error in timer reconciliation: {e}")
     
-    async def _schedule_timer(self, timer: Dict[str, Any]):
-        """Schedules a timer based on its configuration."""
-        try:
-            # This would integrate with a proper scheduling system
-            # For now, we'll just store it in active_reminders
-            timer_id = timer.get('id')
-            if timer_id:
-                self.active_reminders[timer_id] = timer
-                print(f"Scheduled timer: {timer_id}")
-        except Exception as e:
-            print(f"Error scheduling timer: {e}")
     
     async def _update_timers_from_data(self, current_timers: List[Dict[str, Any]], 
                                      tasks: List[Dict[str, Any]], 
@@ -887,49 +899,161 @@ I am **NOT** set up for any student groups yet.
                                      config_spreadsheet_id: str):
         """Updates timers based on current tasks and meetings data."""
         try:
-            # This would implement the reconciliation logic
-            # For now, we'll just log that reconciliation is happening
-            print(f"Reconciling {len(current_timers)} timers with {len(tasks)} tasks and {len(meetings)} meetings")
+            # Build expected timers from current data
+            expected_timers = {}
+            
+            # Process tasks
+            for task in tasks:
+                if task.get('status') in ['open', 'in_progress'] and task.get('due_at'):
+                    task_timers = self._build_expected_task_timers(task)
+                    expected_timers.update(task_timers)
+            
+            # Process meetings
+            for meeting in meetings:
+                if meeting.get('status') == 'scheduled' and meeting.get('start_at_utc'):
+                    meeting_timers = self._build_expected_meeting_timers(meeting)
+                    expected_timers.update(meeting_timers)
+            
+            # Compare with current timers
+            current_timer_map = {t['id']: t for t in current_timers if t.get('state') == 'active'}
+            
+            # Find timers to add/update
+            timers_added = 0
+            timers_updated = 0
+            timers_cancelled = 0
+            
+            for timer_id, expected_timer in expected_timers.items():
+                if timer_id not in current_timer_map:
+                    # New timer - add it
+                    await self._add_timer_to_system(expected_timer, config_spreadsheet_id)
+                    timers_added += 1
+                else:
+                    # Check if timer needs updating
+                    current_timer = current_timer_map[timer_id]
+                    if self._timer_needs_update(current_timer, expected_timer):
+                        await self._update_timer_in_system(expected_timer, config_spreadsheet_id)
+                        timers_updated += 1
+            
+            # Find timers to cancel
+            for timer_id, current_timer in current_timer_map.items():
+                if timer_id not in expected_timers:
+                    # Timer no longer needed - cancel it
+                    await self._cancel_timer_in_system(timer_id, config_spreadsheet_id)
+                    timers_cancelled += 1
+            
+            print(f"✅ Reconciled timers: {timers_added} added, {timers_updated} updated, {timers_cancelled} cancelled")
+            
         except Exception as e:
             print(f"Error updating timers from data: {e}")
+    
+    def _build_expected_task_timers(self, task: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """Build expected timers for a task"""
+        timers = {}
+        task_id = task['task_id']
+        due_at = task['due_at']
         
-    async def reminder_loop(self):
-        """Background loop for sending task reminders."""
-        while True:
+        if due_at and due_at not in ['next_meeting', 'this_week', 'next_week', 'end_of_month']:
             try:
-                # Send task reminders every hour
-                for guild_id, club_config in self.club_configs.items():
-                    if 'tasks_sheet_id' in club_config:
-                        await self.task_manager.send_task_reminders(
-                            club_config['tasks_sheet_id'],
-                            club_config.get('task_reminder_channel_id', 0),
-                            self
-                        )
-                        
-                await asyncio.sleep(3600)  # Wait 1 hour
+                deadline = datetime.fromisoformat(due_at)
                 
-            except Exception as e:
-                print(f"Error in reminder loop: {e}")
-                await asyncio.sleep(60)  # Wait 1 minute on error
+                # Build timer types
+                timer_types = [
+                    ('task_reminder_24h', deadline - timedelta(hours=24)),
+                    ('task_reminder_2h', deadline - timedelta(hours=2)),
+                    ('task_overdue', deadline),
+                    ('task_escalate', deadline + timedelta(hours=48))
+                ]
                 
-    async def meeting_reminder_loop(self):
-        """Background loop for sending meeting reminders."""
-        while True:
-            try:
-                # Send meeting reminders every 5 minutes
-                for guild_id, club_config in self.club_configs.items():
-                    if 'meetings_sheet_id' in club_config:
-                        await self.meeting_manager.send_meeting_reminders(
-                            club_config['meetings_sheet_id'],
-                            club_config.get('meeting_reminder_channel_id', 0),
-                            self
-                        )
-                        
-                await asyncio.sleep(300)  # Wait 5 minutes
-                
-            except Exception as e:
-                print(f"Error in meeting reminder loop: {e}")
-                await asyncio.sleep(60)  # Wait 1 minute on error
+                for timer_type, fire_at in timer_types:
+                    timer_id = f"{task_id}_{timer_type}"
+                    timers[timer_id] = {
+                        'id': timer_id,
+                        'guild_id': task.get('guild_id', ''),
+                        'type': timer_type,
+                        'ref_type': 'task',
+                        'ref_id': task_id,
+                        'fire_at_utc': fire_at.isoformat(),
+                        'channel_id': task.get('channel_id', ''),
+                        'state': 'active'
+                    }
+            except ValueError:
+                pass
+        
+        return timers
+    
+    def _build_expected_meeting_timers(self, meeting: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """Build expected timers for a meeting"""
+        timers = {}
+        meeting_id = meeting['meeting_id']
+        start_at = meeting['start_at_utc']
+        
+        try:
+            start_time = datetime.fromisoformat(start_at)
+            
+            # Build timer types
+            timer_types = [
+                ('meeting_reminder_2h', start_time - timedelta(hours=2)),
+                ('meeting_start', start_time)
+            ]
+            
+            for timer_type, fire_at in timer_types:
+                timer_id = f"{meeting_id}_{timer_type}"
+                timers[timer_id] = {
+                    'id': timer_id,
+                    'guild_id': meeting.get('guild_id', ''),
+                    'type': timer_type,
+                    'ref_type': 'meeting',
+                    'ref_id': meeting_id,
+                    'fire_at_utc': fire_at.isoformat(),
+                    'channel_id': meeting.get('channel_id', ''),
+                    'state': 'active'
+                }
+        except ValueError:
+            pass
+        
+        return timers
+    
+    def _timer_needs_update(self, current_timer: Dict[str, Any], expected_timer: Dict[str, Any]) -> bool:
+        """Check if a timer needs updating"""
+        # Compare fire_at_utc times
+        current_fire_at = current_timer.get('fire_at_utc')
+        expected_fire_at = expected_timer.get('fire_at_utc')
+        
+        return current_fire_at != expected_fire_at
+    
+    async def _add_timer_to_system(self, timer_data: Dict[str, Any], config_spreadsheet_id: str):
+        """Add a new timer to the system"""
+        try:
+            success = self.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
+            if success:
+                print(f"✅ Added timer: {timer_data['id']}")
+            else:
+                print(f"❌ Failed to add timer: {timer_data['id']}")
+        except Exception as e:
+            print(f"❌ Error adding timer {timer_data['id']}: {e}")
+    
+    async def _update_timer_in_system(self, timer_data: Dict[str, Any], config_spreadsheet_id: str):
+        """Update an existing timer in the system"""
+        try:
+            # For now, we'll cancel the old timer and add a new one
+            # In a more sophisticated system, you'd update the existing row
+            await self._cancel_timer_in_system(timer_data['id'], config_spreadsheet_id)
+            await self._add_timer_to_system(timer_data, config_spreadsheet_id)
+            print(f"✅ Updated timer: {timer_data['id']}")
+        except Exception as e:
+            print(f"❌ Error updating timer {timer_data['id']}: {e}")
+    
+    async def _cancel_timer_in_system(self, timer_id: str, config_spreadsheet_id: str):
+        """Cancel a timer in the system"""
+        try:
+            success = self.sheets_manager.update_timer_state(config_spreadsheet_id, timer_id, 'cancelled')
+            if success:
+                print(f"✅ Cancelled timer: {timer_id}")
+            else:
+                print(f"❌ Failed to cancel timer: {timer_id}")
+        except Exception as e:
+            print(f"❌ Error cancelling timer {timer_id}: {e}")
+        
                 
     async def send_any_message(self, message: str, channel_id: int = None):
         """Send a message to a specific channel."""
