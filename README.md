@@ -173,34 +173,22 @@ AutoExec has proven its value in real student organization environments, deliver
 
 ### **Using AutoExec**
 
-#### **Meeting Management**
+#### **Meeting Management (Natural Language)**
 ```bash
-# Schedule a meeting
-/meeting set title:"Weekly Team Meeting" start:"2025-09-08 17:00" end:"2025-09-08 18:00"
-
-# View upcoming meetings
-/meeting upcoming
-
-# Create agenda template
-/meeting agenda title:"Project Review Meeting"
+# Just talk to the bot naturally!
+@AutoExec "Schedule a weekly team meeting for tomorrow at 5pm"
+@AutoExec "When is our next meeting?"
+@AutoExec "Create an agenda for our project review meeting"
+@AutoExec "Show me all upcoming meetings"
 ```
 
-#### **Task Management**
+#### **Task Management (Natural Language)**
 ```bash
-# Assign a task
-/assign @username "Prepare presentation slides" due:"2025-09-10 12:00"
-
-# View task summary
-/summary
-
-# Check individual status
-/status @username
-
-# Mark task complete
-/done task_id_here
-
-# Reschedule task
-/reschedule task_id_here "2025-09-12 15:00"
+# Just talk to the bot naturally!
+@AutoExec "Create a task for John to prepare presentation slides due tomorrow"
+@AutoExec "What tasks do I have?"
+@AutoExec "Mark my budget review task as done"
+@AutoExec "Reschedule my meeting prep to next Friday"
 ```
 
 #### **Natural Language Responses**

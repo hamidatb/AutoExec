@@ -370,7 +370,7 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
             response = "📋 **Meeting Minutes Request**\n\n"
             response += "I can help you with meeting minutes! Here are your options:\n\n"
             response += "• Use `/meeting_upcoming` to see scheduled meetings\n"
-            response += "• Use `/meeting linkminutes <url>` to link minutes documents\n"
+            response += "• Use natural language to create tasks from meeting minutes\n"
             response += "• I'll automatically parse action items from linked minutes\n\n"
             response += "Need help? Use `/help` to see all available commands!"
             
@@ -1551,46 +1551,44 @@ async def help_command(interaction: discord.Interaction, topic: str = "general")
     elif topic.lower() == "meetings":
         help_text = """**Meeting Management Help**
 
-**Commands:**
-• `/meeting set` - Schedule a new meeting
-• `/meeting_upcoming` - Show upcoming meetings
-• `/meeting linkminutes` - Link meeting minutes to a meeting
-
 **Natural Language Examples:**
 • @AutoExec "Schedule a meeting tomorrow at 3pm"
 • @AutoExec "When is our next meeting?"
 • @AutoExec "Show me upcoming meetings"
 • @AutoExec "Create meeting minutes for today's meeting"
+• @AutoExec "Create an agenda for our weekly team meeting"
 
-**Meeting Scheduling:**
-The bot will ask for:
-1. Meeting title
-2. Start time
-3. End time
-4. Location/meeting link
-5. Meeting minutes (optional)"""
+**How It Works:**
+Just mention @AutoExec and describe what you want to do with meetings. The bot understands natural language and will:
+• Schedule meetings with proper details
+• Show you upcoming meetings
+• Create meeting agendas and minutes
+• Help with meeting planning and coordination
+
+**No Slash Commands Needed!**
+Everything is done through natural conversation."""
         
     elif topic.lower() == "tasks":
         help_text = """**Task Management Help**
-
-**Commands:**
-• `/assign` - Assign a task to someone
-• `/tasks` - Show your assigned tasks
-• `/done` - Mark a task as complete
-• `/reschedule` - Reschedule a task
 
 **Natural Language Examples:**
 • @AutoExec "Create a task for John due tomorrow"
 • @AutoExec "Assign the budget review to Sarah due Friday"
 • @AutoExec "What tasks do I have?"
 • @AutoExec "Mark my presentation task as done"
+• @AutoExec "Show me all my upcoming tasks"
+• @AutoExec "Reschedule my meeting prep to next week"
 
-**Task Creation:**
-The bot will ask for:
-1. Task title
-2. Assignee name
-3. Due date
-4. Description (optional)"""
+**How It Works:**
+Just mention @AutoExec and describe what you want to do with tasks. The bot understands natural language and will:
+• Create tasks with proper assignments and deadlines
+• Show you your personal task list
+• Mark tasks as complete when you say "done"
+• Reschedule tasks to new dates
+• Provide task summaries and status updates
+
+**No Slash Commands Needed!**
+Everything is done through natural conversation."""
         
     elif topic.lower() == "setup":
         help_text = """**Setup Process Help**
@@ -1623,549 +1621,41 @@ The bot will ask for:
     else:  # general
         help_text = """**AutoExec Bot Help**
 
-**Main Commands:**
-• `/setup` - Start bot setup (DM only)
-• `/meeting set` - Schedule meetings
-• `/assign` - Create tasks
-• `/help <topic>` - Get detailed help
-
-**Help Topics:**
-• `/help serverconfig` - Server configuration commands
-• `/help meetings` - Meeting management
-• `/help tasks` - Task management
-• `/help setup` - Setup process guide
-
-**Natural Language:**
-• In server: @AutoExec "your question"
-• In free-speak channel: Just type your question
-• Examples: "When is our next meeting?", "Create a task for John"
-
 **Admin Commands:**
-• `/serverconfig view/update` - Manage settings (works in DMs with server_id)
+• `/setup` - Start bot setup (DM only)
+• `/help <topic>` - Get detailed help
+• `/serverconfig view/update` - Manage settings
 • `/reset` - Reset configuration
 • `/sync` - Sync slash commands
 
-**Need More Help?**
-Use `/help <topic>` for detailed information!"""
+**Natural Language (Main Feature):**
+• In server: @AutoExec "your question"
+• In free-speak channel: Just type your question
+• Examples: 
+  - "When is our next meeting?"
+  - "Create a task for John due tomorrow"
+  - "What tasks do I have?"
+  - "Mark my presentation task as done"
+  - "Schedule a meeting for tomorrow at 3pm"
+
+**Help Topics:**
+• `/help serverconfig` - Server configuration commands
+• `/help meetings` - Meeting management (natural language)
+• `/help tasks` - Task management (natural language)
+• `/help setup` - Setup process guide
+
+**The Magic:**
+AutoExec understands natural language! Just talk to it like you would a human assistant. No need to learn complex commands - just describe what you want to do!"""
     
     await interaction.response.send_message(help_text, ephemeral=True)
 
-@bot.tree.command(name="meeting", description="Manage meetings")
-@app_commands.describe(
-    action="Action to perform",
-    title="Meeting title",
-    start="Start time (YYYY-MM-DD HH:MM)",
-    location="Meeting location or link",
-    meeting_link="Meeting link (Zoom, Teams, etc.)"
-)
-async def meeting_command(
-    interaction: discord.Interaction,
-    action: str,
-    title: Optional[str] = None,
-    start: Optional[str] = None,
-    location: Optional[str] = None,
-    meeting_link: Optional[str] = None
-):
-    """Handle meeting-related commands."""
-    # Check setup gating first
-    if not await bot.check_setup_gate(interaction):
-        return
-    
-    # Check if user is admin
-    guild_id = str(interaction.guild.id)
-    
-    # Get club config from setup manager instead of bot.club_configs
-    all_guilds = bot.setup_manager.status_manager.get_all_guilds()
-    club_config = all_guilds.get(guild_id)
-    
-    if not club_config or not club_config.get('setup_complete', False):
-        await interaction.response.send_message(
-            "❌ No club configuration found for this server. Please run `/setup` first.",
-            ephemeral=True
-        )
-        return
-        
-    if str(interaction.user.id) != club_config.get('admin_user_id'):
-        await interaction.response.send_message(
-            "❌ Only the admin can manage meetings.",
-            ephemeral=True
-        )
-        return
-        
-    try:
-        if action.lower() == "set":
-            if not title or not start:
-                await interaction.response.send_message(
-                    "❌ Please provide both title and start time.",
-                    ephemeral=True
-                )
-                return
-                
-            # Parse start time
-            try:
-                start_time = datetime.strptime(start, "%Y-%m-%d %H:%M")
-                start_time = start_time.replace(tzinfo=timezone.utc)
-            except ValueError:
-                await interaction.response.send_message(
-                    "❌ Invalid start time format. Use YYYY-MM-DD HH:MM",
-                    ephemeral=True
-                )
-                return
-                    
-            # Create meeting data
-            meeting_data = {
-                'title': title,
-                'start_at_utc': start_time.isoformat(),
-                'end_at_utc': None,  # No end time needed
-                'start_at_local': start_time.strftime("%B %d, %Y at %I:%M %p"),
-                'end_at_local': None,
-                'location': location or '',
-                'meeting_link': meeting_link or '',
-                'channel_id': str(interaction.channel.id),
-                'created_by': str(interaction.user.id)
-            }
-            
-            # Get the meetings sheet ID from the monthly_sheets structure
-            meetings_sheet_id = None
-            if 'monthly_sheets' in club_config and 'meetings' in club_config['monthly_sheets']:
-                meetings_sheet_id = club_config['monthly_sheets']['meetings']
-            elif 'meetings_sheet_id' in club_config:
-                meetings_sheet_id = club_config['meetings_sheet_id']
-            
-            if not meetings_sheet_id:
-                await interaction.response.send_message(
-                    "❌ No meetings spreadsheet configured. Please run `/setup` first.",
-                    ephemeral=True
-                )
-                return
-            
-            # Schedule meeting
-            success = await bot.meeting_manager.schedule_meeting(
-                meeting_data, 
-                meetings_sheet_id
-            )
-            
-            if success:
-                message = f"✅ Meeting '{title}' scheduled successfully!\n"
-                message += f"Start: {meeting_data['start_at_local']}\n"
-                if location:
-                    message += f"Location: {location}\n"
-                if meeting_link:
-                    message += f"Link: {meeting_link}\n"
-                message += f"Channel: <#{interaction.channel.id}>"
-                await interaction.response.send_message(message)
-            else:
-                await interaction.response.send_message(
-                    "❌ Failed to schedule meeting. Please try again.",
-                    ephemeral=True
-                )
-                
-        elif action.lower() == "upcoming":
-            # Get upcoming meetings
-            upcoming = bot.meeting_manager.get_upcoming_meetings(
-                club_config['meetings_sheet_id']
-            )
-            
-            if not upcoming:
-                await interaction.response.send_message("📅 No upcoming meetings scheduled.")
-                return
-                
-            message = "📅 **Upcoming Meetings:**\n\n"
-            for meeting in upcoming[:5]:  # Show next 5 meetings
-                message += f"**{meeting['title']}**\n"
-                message += f"🕐 {meeting.get('start_at_local', meeting['start_at_utc'])}\n"
-                message += f"📍 <#{meeting.get('channel_id', '')}>\n\n"
-                
-            await interaction.response.send_message(message)
-            
-        elif action.lower() == "cancel":
-            # This would require a meeting ID or selection
-            await interaction.response.send_message(
-                "❌ Please specify which meeting to cancel. Use the meeting ID.",
-                ephemeral=True
-            )
-            
-        elif action.lower() == "end":
-            # For the end command, we need to get the minutes URL from the interaction
-            # This would need to be passed as a parameter or handled differently
-            await interaction.response.send_message(
-                "❌ Please use `/meeting end minutes:<url>` to end a meeting with minutes.",
-                ephemeral=True
-            )
-            
-        elif action.lower() == "agenda":
-            if not title:
-                await interaction.response.send_message(
-                    "❌ Please provide a meeting title for the agenda.",
-                    ephemeral=True
-                )
-                return
-                
-            agenda = bot.meeting_manager.create_agenda_template(title)
-            await interaction.response.send_message(agenda)
-            
-        else:
-            await interaction.response.send_message(
-                "❌ Unknown action. Use: set, upcoming, cancel, linkminutes, or agenda",
-                ephemeral=True
-            )
-            
-    except Exception as e:
-        print(f"Error in meeting command: {e}")
-        await interaction.response.send_message(
-            "❌ An error occurred. Please try again.",
-            ephemeral=True
-        )
 
-@bot.tree.command(name="meeting_upcoming", description="Show upcoming meetings")
-async def meeting_upcoming_command(interaction: discord.Interaction):
-    """Show upcoming meetings."""
-    # Check setup gating first
-    if not await bot.check_setup_gate(interaction):
-        return
-    
-    try:
-        guild_id = str(interaction.guild.id)
-        club_config = bot.club_configs.get(guild_id)
-        
-        if not club_config or 'config_spreadsheet_id' not in club_config:
-            await interaction.response.send_message(
-                "❌ No club configuration found.",
-                ephemeral=True
-            )
-            return
-            
-        # Get upcoming meetings from the meeting manager
-        meetings = bot.meeting_manager.get_upcoming_meetings(
-            club_config['config_spreadsheet_id']
-        )
-        
-        if not meetings:
-            await interaction.response.send_message(
-                "📅 **No upcoming meetings found.**\n\n"
-                "Use `/meeting set` to schedule a new meeting.",
-                ephemeral=True
-            )
-            return
-            
-        # Format meetings for display
-        response = "📅 **Upcoming Meetings:**\n\n"
-        for meeting in meetings[:5]:  # Show next 5 meetings
-            title = meeting.get('title', 'Untitled Meeting')
-            start_time = meeting.get('start_at_local', 'Time TBD')
-            location = meeting.get('location', 'Location TBD')
-            meeting_link = meeting.get('meeting_link', '')
-            
-            response += f"**{title}**\n"
-            response += f"🕐 {start_time}\n"
-            response += f"📍 {location}\n"
-            if meeting_link:
-                response += f"🔗 {meeting_link}\n"
-            response += "\n"
-            
-        await interaction.response.send_message(response, ephemeral=True)
-        
-    except Exception as e:
-        print(f"Error in meeting upcoming command: {e}")
-        await interaction.response.send_message(
-            "❌ An error occurred while fetching meetings. Please try again.",
-            ephemeral=True
-        )
 
-@bot.tree.command(name="assign", description="Assign a task to a user")
-@app_commands.describe(
-    user="User to assign the task to",
-    title="Task title",
-    due="Due date (YYYY-MM-DD HH:MM)"
-)
-async def assign_command(
-    interaction: discord.Interaction,
-    user: discord.Member,
-    title: str,
-    due: Optional[str] = None
-):
-    """Assign a task to a user."""
-    # Check setup gating first
-    if not await bot.check_setup_gate(interaction):
-        return
-    
-    # Check if user is admin
-    guild_id = str(interaction.guild.id)
-    club_config = bot.club_configs.get(guild_id)
-        
-    if str(interaction.user.id) != club_config.get('admin_discord_id'):
-        await interaction.response.send_message(
-            "❌ Only the admin can assign tasks.",
-            ephemeral=True
-        )
-        return
-        
-    try:
-        # Parse due date if provided
-        due_at = None
-        if due:
-            try:
-                due_at = datetime.strptime(due, "%Y-%m-%d %H:%M")
-                due_at = due_at.replace(tzinfo=timezone.utc).isoformat()
-            except ValueError:
-                await interaction.response.send_message(
-                    "❌ Invalid due date format. Use YYYY-MM-DD HH:MM",
-                    ephemeral=True
-                )
-                return
-                
-        # Create task data
-        task_data = {
-            'title': title,
-            'owner_discord_id': str(user.id),
-            'owner_name': user.display_name,
-            'due_at': due_at,
-            'status': 'open',
-            'priority': 'medium',
-            'source_doc': '',
-            'channel_id': str(interaction.channel.id),
-            'notes': f"Assigned by {interaction.user.display_name}"
-        }
-        
-        # Add task
-        success = await bot.task_manager.add_task(
-            task_data, 
-            club_config['tasks_sheet_id']
-        )
-        
-        if success:
-            await interaction.response.send_message(
-                f"✅ Task assigned to {user.mention}!\n"
-                f"**{title}**\n"
-                f"Due: {due if due else 'No deadline set'}"
-            )
-        else:
-            await interaction.response.send_message(
-                "❌ Failed to assign task. Please try again.",
-                ephemeral=True
-            )
-            
-    except Exception as e:
-        print(f"Error in assign command: {e}")
-        await interaction.response.send_message(
-            "❌ An error occurred. Please try again.",
-            ephemeral=True
-        )
 
-@bot.tree.command(name="summary", description="Show task summary")
-@app_commands.describe(month="Month to show (e.g., 'September 2025')")
-async def summary_command(interaction: discord.Interaction, month: Optional[str] = None):
-    """Show task summary for a month."""
-    # Check setup gating first
-    if not await bot.check_setup_gate(interaction):
-        return
-    
-    guild_id = str(interaction.guild.id)
-    club_config = bot.club_configs.get(guild_id)
-        
-    try:
-        # Get all tasks
-        all_tasks = bot.sheets_manager.get_all_tasks(club_config['tasks_sheet_id'])
-        
-        if not all_tasks:
-            await interaction.response.send_message("📋 No tasks found.")
-            return
-            
-        # Filter by month if specified
-        if month:
-            # Simple month filtering - could be improved
-            filtered_tasks = [task for task in all_tasks if month.lower() in task.get('created_at', '').lower()]
-            tasks = filtered_tasks
-        else:
-            tasks = all_tasks
-            
-        if not tasks:
-            await interaction.response.send_message(f"📋 No tasks found for {month}.")
-            return
-            
-        # Group tasks by status
-        open_tasks = [t for t in tasks if t.get('status') == 'open']
-        in_progress_tasks = [t for t in tasks if t.get('status') == 'in_progress']
-        done_tasks = [t for t in tasks if t.get('status') == 'done']
-        
-        message = f"📋 **Task Summary{f' - {month}' if month else ''}**\n\n"
-        
-        if open_tasks:
-            message += f"🟡 **Open Tasks ({len(open_tasks)})**\n"
-            for task in open_tasks[:5]:  # Show first 5
-                message += f"• {task.get('title', 'Unknown')} - <@{task.get('owner_discord_id', '')}>\n"
-            if len(open_tasks) > 5:
-                message += f"... and {len(open_tasks) - 5} more\n"
-            message += "\n"
-            
-        if in_progress_tasks:
-            message += f"🟠 **In Progress ({len(in_progress_tasks)})**\n"
-            for task in in_progress_tasks[:3]:  # Show first 3
-                message += f"• {task.get('title', 'Unknown')} - <@{task.get('owner_discord_id', '')}>\n"
-            message += "\n"
-            
-        if done_tasks:
-            message += f"🟢 **Completed ({len(done_tasks)})**\n"
-            message += f"• {len(done_tasks)} tasks completed\n\n"
-            
-        await interaction.response.send_message(message)
-        
-    except Exception as e:
-        print(f"Error in summary command: {e}")
-        await interaction.response.send_message(
-            "❌ An error occurred. Please try again.",
-            ephemeral=True
-        )
 
-@bot.tree.command(name="status", description="Show tasks for a specific user")
-@app_commands.describe(user="User to show tasks for")
-async def status_command(interaction: discord.Interaction, user: discord.Member):
-    """Show tasks for a specific user."""
-    # Check setup gating first
-    if not await bot.check_setup_gate(interaction):
-        return
-    
-    guild_id = str(interaction.guild.id)
-    club_config = bot.club_configs.get(guild_id)
-        
-    try:
-        # Get user tasks
-        user_tasks = bot.task_manager.get_user_tasks(
-            str(user.id), 
-            club_config['tasks_sheet_id']
-        )
-        
-        if not user_tasks:
-            await interaction.response.send_message(f"📋 {user.mention} has no tasks assigned.")
-            return
-            
-        # Group by status
-        open_tasks = [t for t in user_tasks if t.get('status') == 'open']
-        in_progress_tasks = [t for t in user_tasks if t.get('status') == 'in_progress']
-        done_tasks = [t for t in user_tasks if t.get('status') == 'done']
-        
-        message = f"📋 **Tasks for {user.display_name}**\n\n"
-        
-        if open_tasks:
-            message += f"🟡 **Open Tasks ({len(open_tasks)})**\n"
-            for task in open_tasks:
-                due_info = f" - Due: {task.get('due_at', 'No deadline')}"
-                message += f"• {task.get('title', 'Unknown')}{due_info}\n"
-            message += "\n"
-            
-        if in_progress_tasks:
-            message += f"🟠 **In Progress ({len(in_progress_tasks)})**\n"
-            for task in in_progress_tasks:
-                due_info = f" - Due: {task.get('due_at', 'No deadline')}"
-                message += f"• {task.get('title', 'Unknown')}{due_info}\n"
-            message += "\n"
-            
-        if done_tasks:
-            message += f"🟢 **Completed ({len(done_tasks)})**\n"
-            message += f"• {len(done_tasks)} tasks completed\n\n"
-            
-        await interaction.response.send_message(message)
-        
-    except Exception as e:
-        print(f"Error in status command: {e}")
-        await interaction.response.send_message(
-            "❌ An error occurred. Please try again.",
-            ephemeral=True
-        )
 
-@bot.tree.command(name="done", description="Mark a task as complete")
-@app_commands.describe(task_id="ID of the task to mark as done")
-async def done_command(interaction: discord.Interaction, task_id: str):
-    """Mark a task as complete."""
-    # Check setup gating first
-    if not await bot.check_setup_gate(interaction):
-        return
-    
-    guild_id = str(interaction.guild.id)
-    club_config = bot.club_configs.get(guild_id)
-        
-    try:
-        # Update task status
-        success = await bot.task_manager.update_task_status(
-            task_id, 
-            'done', 
-            club_config['tasks_sheet_id']
-        )
-        
-        if success:
-            await interaction.response.send_message(f"✅ Task {task_id} marked as complete!")
-        else:
-            await interaction.response.send_message(
-                "❌ Failed to update task. Please check the task ID.",
-                ephemeral=True
-            )
-            
-    except Exception as e:
-        print(f"Error in done command: {e}")
-        await interaction.response.send_message(
-            "❌ An error occurred. Please try again.",
-            ephemeral=True
-        )
 
-@bot.tree.command(name="reschedule", description="Reschedule a task")
-@app_commands.describe(
-    task_id="ID of the task to reschedule",
-    new_date="New deadline (YYYY-MM-DD HH:MM)"
-)
-async def reschedule_command(interaction: discord.Interaction, task_id: str, new_date: str):
-    """Reschedule a task to a new deadline."""
-    # Check setup gating first
-    if not await bot.check_setup_gate(interaction):
-        return
-    
-    guild_id = str(interaction.guild.id)
-    club_config = bot.club_configs.get(guild_id)
-        
-    try:
-        # Parse new date
-        try:
-            new_deadline = datetime.strptime(new_date, "%Y-%m-%d %H:%M")
-            new_deadline = new_deadline.replace(tzinfo=timezone.utc).isoformat()
-        except ValueError:
-            await interaction.response.send_message(
-                "❌ Invalid date format. Use YYYY-MM-DD HH:MM",
-                ephemeral=True
-            )
-            return
-            
-        # Reschedule task
-        success = await bot.task_manager.reschedule_task(
-            task_id, 
-            new_deadline, 
-            club_config['tasks_sheet_id']
-        )
-        
-        if success:
-            await interaction.response.send_message(
-                f"✅ Task {task_id} rescheduled to {new_date}!"
-            )
-        else:
-            await interaction.response.send_message(
-                "❌ Failed to reschedule task. Please check the task ID.",
-                ephemeral=True
-            )
-            
-    except Exception as e:
-        print(f"Error in reschedule command: {e}")
-        await interaction.response.send_message(
-            "❌ An error occurred. Please try again.",
-            ephemeral=True
-        )
 
-@bot.tree.command(name="subscribe", description="Subscribe to private task reminders")
-async def subscribe_command(interaction: discord.Interaction):
-    """Subscribe to private task reminders."""
-    # This would store user preference for private DMs
-    await interaction.response.send_message(
-        "✅ You're now subscribed to private task reminders! "
-        "You'll receive DMs for upcoming deadlines and overdue tasks.",
-        ephemeral=True
-    )
 
 def run_bot():
     """Run the Club Exec Task Manager Bot."""
