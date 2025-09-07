@@ -144,13 +144,13 @@ class TimerScheduler:
                     message += f"{mention} - Please check your task status!"
             
             elif timer_type == 'task_overdue':
-                message = f"🚨 **OVERDUE TASK** 🚨\n"
+                message = f"🚨 **Overdue Task**\n"
                 message += f"**{title}** is now overdue\n"
                 if mention:
                     message += f"{mention} - Please complete this task immediately!"
             
             elif timer_type == 'task_escalate':
-                message = f"📢 **TASK ESCALATION** 📢\n"
+                message = f"📢 **Task Escalation**\n"
                 message += f"**{title}** has been overdue for 48 hours\n"
                 message += f"@everyone - This task needs immediate attention!"
             

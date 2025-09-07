@@ -146,6 +146,7 @@ IMPORTANT GUIDELINES:
 - For questions like "when is our next meeting", "what meetings do we have", "show me upcoming meetings" → Use send_meeting_schedule with appropriate number
 - For meeting reminder information (like "what reminders are set up") → Use get_meeting_reminder_info
 - For task creation, use create_task_with_timer to automatically set up reminders
+- For sending reminders to specific people, use send_reminder_to_person (not send_announcement)
 - For meeting scheduling, use start_meeting_scheduling to begin interactive conversation
 - When scheduling meetings, have a back-and-forth conversation to gather all details:
   1. Start with start_meeting_scheduling when user wants to schedule a meeting
@@ -188,6 +189,7 @@ EXAMPLES OF WHEN TO USE TOOLS:
 - "Show me upcoming meetings" → Use send_meeting_schedule with amount_of_meetings_to_return=3
 - "What's our meeting schedule?" → Use send_meeting_schedule with amount_of_meetings_to_return=5
 - "Create a task for John due tomorrow" → Use create_task_with_timer
+- "Send a reminder to Hamidat that she hasn't done her task" → Use send_reminder_to_person
 - "Schedule a meeting called Team Sync" → Use start_meeting_scheduling to begin interactive flow
 - "Oh I meant hamidat" (after trying to create task for John) → Use create_task_with_timer with corrected name
 - "What timers are active?" → Use list_active_timers
@@ -213,6 +215,7 @@ MEETING SCHEDULING CONVERSATION EXAMPLES:
             get_club_setup_info,
             check_guild_setup_status,
             schedule_meeting,
+            send_reminder_to_person,
             send_announcement,
             get_setup_info,
             get_meeting_sheet_info,
@@ -852,6 +855,90 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
         return f"❌ Error scheduling meeting: {str(e)}"
 
 @tool
+def send_reminder_to_person(person_name: str, reminder_message: str) -> str:
+    """
+    Send a reminder message to a specific person in the Discord server.
+    This tool finds the person by name and sends them a direct reminder.
+    
+    **USE THIS TOOL FOR:**
+    - Sending reminders to specific individuals
+    - Personal notifications that don't need @everyone
+    - Individual task reminders or follow-ups
+    
+    **DO NOT USE THIS FOR:**
+    - General announcements to everyone
+    - Meeting reminders (use meeting tools instead)
+    - Creating new tasks (use create_task_with_timer instead)
+    
+    Args:
+        person_name (str): Name of the person to send the reminder to (can be Discord username or real name)
+        reminder_message (str): The reminder message to send
+        
+    Returns:
+        str: Confirmation that the reminder was sent
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get the Discord context from the current message
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        channel_id = context.get('channel_id')
+        user_id = context.get('user_id')
+        
+        if not guild_id:
+            return "❌ No Discord context found. Please use this command in a Discord server."
+        
+        # Get the guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Clean the person name (remove @ symbol if present)
+        clean_person_name = person_name.lstrip('@').strip()
+        
+        # Find the person by name
+        print(f"🔍 [DEBUG] Looking for person: '{clean_person_name}' in guild {guild_id}")
+        person_discord_id = find_user_by_name(clean_person_name, guild_config)
+        print(f"🔍 [DEBUG] Found person_discord_id: {person_discord_id}")
+        
+        if not person_discord_id:
+            return f"❌ Could not find user '{clean_person_name}'. Please use a Discord username or mention."
+        
+        # Check if we need to ask for a Discord mention
+        if person_discord_id.startswith("NEED_MENTION_FOR_"):
+            print(f"🔍 [DEBUG] Need mention for: {clean_person_name}")
+            return ask_for_discord_mention(clean_person_name)
+        
+        # Get the task reminders channel
+        task_reminders_channel_id = guild_config.get('task_reminders_channel_id')
+        if not task_reminders_channel_id:
+            return "❌ No task reminders channel configured. Please run `/setup` first."
+        
+        # Create the reminder message (no @everyone, just mention the person)
+        formatted_message = f"📝 **Reminder**\n\nHey {person_discord_id}, {reminder_message}"
+        
+        # Store the message to be sent
+        global _pending_announcements
+        announcement_data = {
+            'message': formatted_message,
+            'channel_id': int(task_reminders_channel_id),
+            'channel_name': 'task reminders'
+        }
+        _pending_announcements.append(announcement_data)
+        print(f"🔍 [send_reminder_to_person] Added reminder to global queue. Total pending: {len(_pending_announcements)}")
+        
+        return f"✅ Reminder sent to {clean_person_name} in the task reminders channel."
+        
+    except Exception as e:
+        return f"❌ Error sending reminder: {str(e)}"
+
+@tool
 def send_announcement(announcement_message: str, announcement_type: str = "general") -> str:
     """
     Send an announcement message to Discord to the appropriate channel based on the type.
@@ -907,8 +994,11 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
                 if not channel_id:
                     return f"❌ No {channel_name} channel configured. Please run `/setup` first."
                 
-                # Send the announcement to the specific channel with @everyone tag
-                formatted_message = f"@everyone 📢 **{announcement_type.upper()} ANNOUNCEMENT**\n\n{announcement_message}"
+                # Send the announcement to the specific channel (no @everyone unless it's an escalation)
+                if announcement_type.lower() == "escalation":
+                    formatted_message = f"@everyone 📢 **{announcement_type.title()}**\n\n{announcement_message}"
+                else:
+                    formatted_message = f"📢 **{announcement_type.title()}**\n\n{announcement_message}"
                 
                 # Since we're running in a thread pool, we can't directly send Discord messages
                 # Instead, we'll use a thread-safe approach by storing the message to be sent
@@ -2411,6 +2501,16 @@ def run_agent_text_only(query: str, guild_id: str = None, user_id: str = None):
     Returns:
         str: The text response from the agent.
     """
+    # If we have a guild_id, set the Discord context for tools to use
+    if guild_id:
+        # Set a minimal Discord context for tools that need it
+        set_discord_context(
+            guild_id=guild_id,
+            channel_id="",  # We don't have a specific channel in DM context
+            user_id=user_id or ""
+        )
+        print(f"🔍 [run_agent_text_only] Set Discord context for guild_id: {guild_id}")
+    
     # Handle DM context with multiple servers
     if user_id and not guild_id:
         # Check if this is a general DM question that doesn't require server context
