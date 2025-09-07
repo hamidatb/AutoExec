@@ -988,18 +988,35 @@ async def cancel_setup_command(interaction: discord.Interaction):
     await interaction.response.send_message(response)
 
 @bot.tree.command(name="reset", description="Reset the club configuration (admin only)")
-async def reset_config_command(interaction: discord.Interaction):
+@app_commands.describe(
+    server_id="Server ID (required when using in DMs)"
+)
+async def reset_config_command(interaction: discord.Interaction, server_id: Optional[str] = None):
     """Reset the club configuration. Only the admin can perform this action."""
-    # Check if this is a server (guild) interaction
-    if not interaction.guild:
-        await interaction.response.send_message(
-            "❌ This command can only be used in a server, not in DMs.",
-            ephemeral=True
-        )
-        return
-        
-    guild_id = str(interaction.guild.id)
     user_id = str(interaction.user.id)
+    
+    # Determine guild_id based on context
+    if interaction.guild:
+        # In server context
+        guild_id = str(interaction.guild.id)
+    else:
+        # In DM context - require server_id parameter
+        if not server_id:
+            await interaction.response.send_message(
+                "❌ **Server ID Required**\n\nWhen using `/reset` in DMs, you must provide the server ID.\n\n**Usage:** `/reset server_id:123456789012345678`\n\n**How to get Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'\n3. Use that ID in the command",
+                ephemeral=True
+            )
+            return
+        
+        # Validate server_id format
+        if not server_id.isdigit():
+            await interaction.response.send_message(
+                "❌ **Invalid Server ID**\n\nPlease provide a valid Discord server ID (numbers only).\n\n**How to get Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'",
+                ephemeral=True
+            )
+            return
+            
+        guild_id = server_id
     
     # Get club config from setup manager (persistent storage)
     all_guilds = bot.setup_manager.status_manager.get_all_guilds()
@@ -1076,7 +1093,19 @@ async def config_command(
             # Show current configuration
             config_text = f"**Current Configuration for {club_config.get('club_name', 'Unknown Club')}**\n\n"
             config_text += f"**Club Name:** {club_config.get('club_name', 'Not set')}\n"
-            config_text += f"**Admin:** <@{club_config.get('admin_user_id', 'Unknown')}>\n\n"
+            config_text += f"**Admin:** <@{club_config.get('admin_user_id', 'Unknown')}>\n"
+            config_text += f"**Timezone:** {club_config.get('timezone', 'Not set')}\n\n"
+            
+            # Executive Members
+            exec_members = club_config.get('exec_members', [])
+            if exec_members:
+                config_text += f"**Executive Team ({len(exec_members)} members):**\n"
+                for member in exec_members:
+                    config_text += f"• {member.get('name', 'Unknown')} - {member.get('role', 'General Team Member')} (<@{member.get('discord_id', 'Unknown')}>)\n"
+                config_text += "\n"
+            else:
+                config_text += "**Executive Team:** No members configured\n\n"
+            
             config_text += f"**Google Drive Folders:**\n"
             config_text += f"• Config Folder: `{club_config.get('config_folder_id', 'Not set')}`\n"
             config_text += f"• Monthly Folder: `{club_config.get('monthly_folder_id', 'Not set')}`\n"
@@ -1099,7 +1128,7 @@ async def config_command(
         elif action.lower() == "update":
             if not setting or not value:
                 await interaction.response.send_message(
-                    "❌ **Invalid Parameters**\n\nUsage: `/config update <setting> <value>`\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations",
+                    "❌ **Invalid Parameters**\n\nUsage: `/config update <setting> <value>`\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
                     ephemeral=True
                 )
                 return
@@ -1188,9 +1217,60 @@ async def config_command(
                     return
                 updates['escalation_channel_id'] = value
                 
+            elif setting.lower() == "timezone":
+                # Validate timezone
+                valid_timezones = [
+                    'America/Edmonton', 'America/New_York', 'America/Los_Angeles', 
+                    'America/Chicago', 'America/Denver', 'Europe/London', 'Europe/Paris',
+                    'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney', 'UTC'
+                ]
+                
+                if value not in valid_timezones:
+                    await interaction.response.send_message(
+                        f"❌ **Invalid Timezone**\n\nPlease choose from the available timezones:\n" + 
+                        "\n".join([f"• {tz}" for tz in valid_timezones]),
+                        ephemeral=True
+                    )
+                    return
+                
+                updates['timezone'] = value
+                
+            elif setting.lower() == "exec_members":
+                # Parse JSON for exec members
+                try:
+                    import json
+                    exec_members = json.loads(value)
+                    
+                    # Validate structure
+                    if not isinstance(exec_members, list):
+                        raise ValueError("exec_members must be a list")
+                    
+                    for member in exec_members:
+                        if not isinstance(member, dict):
+                            raise ValueError("Each member must be a dictionary")
+                        if not all(key in member for key in ['name', 'discord_id', 'role']):
+                            raise ValueError("Each member must have 'name', 'discord_id', and 'role' fields")
+                    
+                    updates['exec_members'] = exec_members
+                    
+                except json.JSONDecodeError:
+                    example_json = '[{"name": "John Smith", "discord_id": "123456789", "role": "President"}]'
+                    await interaction.response.send_message(
+                        f"❌ **Invalid JSON Format**\n\nPlease provide valid JSON for executive members.\n\n**Example:**\n```json\n{example_json}\n```",
+                        ephemeral=True
+                    )
+                    return
+                except ValueError as e:
+                    example_json = '[{"name": "John Smith", "discord_id": "123456789", "role": "President"}]'
+                    await interaction.response.send_message(
+                        f"❌ **Invalid Executive Members Format**\n\n{str(e)}\n\n**Example:**\n```json\n{example_json}\n```",
+                        ephemeral=True
+                    )
+                    return
+                
             else:
                 await interaction.response.send_message(
-                    "❌ **Unknown Setting**\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations",
+                    "❌ **Unknown Setting**\n\n**Available settings:**\n• `config_folder` - Google Drive config folder link\n• `monthly_folder` - Google Drive monthly folder link\n• `meeting_minutes_folder` - Google Drive meeting minutes folder link\n• `task_reminders_channel` - Discord channel ID for task reminders\n• `meeting_reminders_channel` - Discord channel ID for meeting reminders\n• `escalation_channel` - Discord channel ID for escalations\n• `timezone` - Club timezone (e.g., America/New_York)\n• `exec_members` - Executive team members (JSON format)",
                     ephemeral=True
                 )
                 return
@@ -1322,6 +1402,8 @@ async def help_command(interaction: discord.Interaction):
 • `/serverconfig update task_reminders_channel <channel_id>` - Update task reminders channel
 • `/serverconfig update meeting_reminders_channel <channel_id>` - Update meeting reminders channel
 • `/serverconfig update escalation_channel <channel_id>` - Update escalation channel
+• `/serverconfig update timezone <timezone>` - Update club timezone
+• `/serverconfig update exec_members <json>` - Update executive team members
 
 **Setup Process:**
 1. Send me a DM and use `/setup`
