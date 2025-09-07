@@ -105,19 +105,9 @@ class MinutesParser:
             
             html = fh.getvalue().decode("utf-8")
             
-            # 2) Convert HTML → Markdown locally
-            try:
-                # Try to use markdownify if available
-                import markdownify
-                markdown_content = markdownify.markdownify(html, heading_style="ATX")
-                print(f"✅ [DEBUG] HTML to Markdown conversion successful with markdownify")
-            except ImportError:
-                # Fallback: if markdownify isn't available, use a simple HTML to markdown conversion
-                print("⚠️ [WARN] markdownify not available; using simple HTML to markdown conversion.")
-                markdown_content = self._simple_html_to_markdown(html)
-            except Exception as e:
-                print(f"⚠️ [WARN] markdownify conversion failed: {e}; using simple HTML to markdown conversion.")
-                markdown_content = self._simple_html_to_markdown(html)
+            # 2) Convert HTML → Markdown locally using simple conversion
+            print("🔍 [DEBUG] Using simple HTML to markdown conversion.")
+            markdown_content = self._simple_html_to_markdown(html)
             
             print(f"✅ [DEBUG] Conversion successful, length: {len(markdown_content)}")
             return markdown_content
