@@ -1167,25 +1167,32 @@ async def reset_config_command(interaction: discord.Interaction, server_id: Opti
 @app_commands.describe(
     action="Action to perform (view or update)",
     setting="Configuration setting to update",
-    value="New value for the setting"
+    value="New value for the setting",
+    server_id="Server ID (required when using in DMs)"
 )
 async def config_command(
     interaction: discord.Interaction,
     action: str = "view",
     setting: Optional[str] = None,
-    value: Optional[str] = None
+    value: Optional[str] = None,
+    server_id: Optional[str] = None
 ):
     """Handle configuration update commands."""
-    # Check if this is a server (guild) interaction
-    if not interaction.guild:
-        await interaction.response.send_message(
-            "❌ This command can only be used in a server, not in DMs.",
-            ephemeral=True
-        )
-        return
-        
-    guild_id = str(interaction.guild.id)
     user_id = str(interaction.user.id)
+    
+    # Determine guild_id based on context
+    if interaction.guild:
+        # Used in a server
+        guild_id = str(interaction.guild.id)
+    else:
+        # Used in DM - require server_id parameter
+        if not server_id:
+            await interaction.response.send_message(
+                "❌ **Server ID Required**\n\nWhen using `/serverconfig` in DMs, you must specify the server ID:\n\n`/serverconfig view server_id:123456789012345678`\n\n**How to get Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'\n3. Use that ID in the command",
+                ephemeral=True
+            )
+            return
+        guild_id = server_id
     
     # Get club config from setup manager
     all_guilds = bot.setup_manager.status_manager.get_all_guilds()
@@ -1524,7 +1531,8 @@ async def help_command(interaction: discord.Interaction, topic: str = "general")
         help_text = """**Server Configuration Help**
 
 **View Configuration:**
-• `/serverconfig view` - See all current settings
+• `/serverconfig view` - See all current settings (in server)
+• `/serverconfig view server_id:123456789` - See settings (in DM)
 
 **Update Settings:**
 • `/serverconfig update config_folder <link>` - Update Google Drive config folder
@@ -1538,6 +1546,7 @@ async def help_command(interaction: discord.Interaction, topic: str = "general")
 • `/serverconfig update timezone <timezone>` - Update club timezone
 • `/serverconfig update exec_members <json>` - Update executive team members
 
+**DM Usage:** Add `server_id:123456789` parameter when using in DMs
 **Admin Only:** Only the server admin can use these commands."""
         
     elif topic.lower() == "meetings":
@@ -1633,7 +1642,7 @@ The bot will ask for:
 • Examples: "When is our next meeting?", "Create a task for John"
 
 **Admin Commands:**
-• `/serverconfig view/update` - Manage settings
+• `/serverconfig view/update` - Manage settings (works in DMs with server_id)
 • `/reset` - Reset configuration
 • `/sync` - Sync slash commands
 
