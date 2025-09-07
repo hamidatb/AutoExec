@@ -138,6 +138,7 @@ IMPORTANT GUIDELINES:
 - Pay attention to conversation history - if a user says "I meant [name]" or "actually [name]", they're correcting a previous request
 - When users make corrections, use the corrected information to complete the original task/meeting creation
 - Look at the chat_history to understand what the user was trying to do originally
+- IMPORTANT: If a user corrects an assignee name (e.g., "Oh I meant hamidat"), call create_task_with_timer again with the corrected name, NOT ask_for_discord_mention
 - If a user asks "what did I ask you last" or similar questions, refer to the conversation history
 - Always consider the full conversation context when responding to any message
 - IMPORTANT: When asked about previous messages, ONLY refer to messages that are actually in the chat_history. Do not make up or hallucinate previous messages.
@@ -151,6 +152,7 @@ EXAMPLES OF DIRECT RESPONSES (no tools needed):
 EXAMPLES OF WHEN TO USE TOOLS:
 - "What meetings do I have?" → Use send_meeting_schedule
 - "Create a task for John due tomorrow" → Use create_task_with_timer
+- "Oh I meant hamidat" (after trying to create task for John) → Use create_task_with_timer with corrected name
 - "What timers are active?" → Use list_active_timers
 - "Is she an exec?" → Use get_exec_info
 - "Who are the execs?" → Use get_exec_info"""),
