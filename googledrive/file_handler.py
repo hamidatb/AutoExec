@@ -325,3 +325,63 @@ def create_meeting_mins_for_today():
 
     return meetingMinsForTodayLink
 
+
+def get_document_content_from_url(doc_url: str) -> str:
+    """
+    Extracts the content of a Google Docs document from its URL.
+    
+    Args:
+        doc_url: Google Docs URL
+        
+    Returns:
+        Document content as string, or error message if failed
+    """
+    try:
+        # Extract document ID from URL
+        doc_id = _extract_doc_id_from_url(doc_url)
+        if not doc_id:
+            return "❌ Could not extract document ID from URL"
+        
+        # Create drive helper instance
+        drive_helper = GoogleDriveHelper()
+        
+        # Download the document content
+        file_metadata = {"id": doc_id, "mimeType": "application/vnd.google-apps.document"}
+        content = drive_helper.download_file(file_metadata)
+        
+        if not content:
+            return "❌ Could not download document content"
+        
+        return content
+        
+    except Exception as e:
+        print(f"Error getting document content: {e}")
+        return f"❌ Error accessing document: {str(e)}"
+
+
+def _extract_doc_id_from_url(doc_url: str) -> str:
+    """
+    Extracts the document ID from a Google Docs URL.
+    
+    Args:
+        doc_url: Google Docs URL
+        
+    Returns:
+        Document ID or empty string if not found
+    """
+    import re
+    
+    # Pattern for Google Docs URLs
+    patterns = [
+        r'/document/d/([a-zA-Z0-9-_]+)',
+        r'/document/d/([a-zA-Z0-9-_]+)/edit',
+        r'/document/d/([a-zA-Z0-9-_]+)/view'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, doc_url)
+        if match:
+            return match.group(1)
+    
+    return ""
+

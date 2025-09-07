@@ -268,7 +268,8 @@ MEETING SCHEDULING CONVERSATION EXAMPLES:
             create_tasks_from_meeting_minutes,
             send_tasks_by_person,
             search_tasks_by_title,
-            complete_task
+            complete_task,
+            summarize_last_meeting
         ]
         
         # Create agent with memory
@@ -3236,6 +3237,119 @@ Which server would you like me to help you with?"""
         
     except Exception as e:
         return f"❌ **Error creating tasks from meeting minutes:** {str(e)}\n\nPlease ensure the document URL is correct and accessible."
+
+@tool
+def summarize_last_meeting(summary_type: str = "full") -> str:
+    """
+    Summarizes the most recent meeting that has minutes linked.
+    Can provide either a full meeting summary or just the action items.
+    
+    Args:
+        summary_type (str): Type of summary - "full" for complete summary, "action_items" for just action items (default: "full")
+        
+    Returns:
+        str: Summary of the last meeting or error message if no meeting with minutes found
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    from googledrive.file_handler import get_document_content_from_url
+    from langchain_openai import ChatOpenAI
+    from langchain_core.prompts import ChatPromptTemplate
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get the Discord context from the current message
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        user_id = context.get('user_id')
+        
+        # Handle DM context - check if user is admin of any servers
+        if not guild_id:
+            if not user_id:
+                return "❌ No Discord context found. Please use this command in a Discord server or DM."
+            
+            # Check if user is admin of any servers
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                # User is admin of only one server, use that context
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                # User is admin of multiple servers, ask for clarification
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**
+
+You are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:
+
+{guild_list}
+
+**How to specify:**
+• Mention the club name: "For [Club Name], summarize the last meeting"
+• Mention the server name: "In [Server Name], what were the action items from the last meeting"
+
+**Example:** "For Computer Science Club, summarize the last meeting"
+
+Which server would you like me to help you with?"""
+        
+        # Get the guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Get the most recent meeting across current and previous months
+        recent_meeting = BOT_INSTANCE.sheets_manager.get_most_recent_meeting_across_months(guild_config)
+        
+        if not recent_meeting:
+            return "❌ **No Meetings Found**\n\nSorry, there are no meetings in your meetings spreadsheet."
+        
+        meeting_title = recent_meeting.get('title', 'Unknown Meeting')
+        minutes_link = recent_meeting.get('minutes_link', '')
+        
+        if not minutes_link or minutes_link.strip() == '':
+            return f"❌ **No Meeting Minutes Attached**\n\nSorry, there are no meeting minutes attached to the last meeting, but the title was: **{meeting_title}**"
+        
+        # Get the document content
+        doc_content = get_document_content_from_url(minutes_link)
+        
+        if doc_content.startswith("❌"):
+            return f"❌ **Cannot Access Minutes**\n\nSorry, I can't access the minutes document for the last meeting (title: **{meeting_title}**). The document may not be accessible or the link may be invalid.\n\n**Minutes Link:** {minutes_link}"
+        
+        # Initialize LLM for summarization
+        llm = ChatOpenAI(
+            model="gpt-3.5-turbo",
+            temperature=0,
+            max_tokens=1000
+        )
+        
+        # Create appropriate prompt based on summary type
+        if summary_type.lower() == "action_items":
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are a helpful assistant that extracts action items from meeting minutes. Focus only on action items, tasks, and deliverables mentioned in the meeting."),
+                ("user", "Please extract and summarize the action items from this meeting minutes document:\n\n{doc_content}")
+            ])
+        else:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are a helpful assistant that summarizes meeting minutes. Provide a clear, concise summary of the key points, decisions, and action items from the meeting."),
+                ("user", "Please summarize this meeting minutes document:\n\n{doc_content}")
+            ])
+        
+        # Generate summary
+        chain = prompt | llm
+        summary = chain.invoke({"doc_content": doc_content})
+        
+        # Format the response
+        response = f"📋 **Meeting Summary: {meeting_title}**\n\n"
+        response += f"🔗 **Full Minutes:** {minutes_link}\n\n"
+        response += f"📝 **Summary:**\n{summary.content if hasattr(summary, 'content') else str(summary)}"
+        
+        return response
+        
+    except Exception as e:
+        return f"❌ **Error summarizing meeting:** {str(e)}\n\nPlease try again or check if the meeting minutes are accessible."
 
 # Helper functions for the new tools
 def parse_due_date(date_str: str) -> datetime:

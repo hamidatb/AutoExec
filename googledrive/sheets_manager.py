@@ -515,6 +515,137 @@ class ClubSheetsManager:
             print(f"Error getting all meetings: {error}")
             return []
     
+    def get_most_recent_meeting(self, spreadsheet_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Gets the most recent meeting by start time (closest to current time in the past).
+        
+        Args:
+            spreadsheet_id: ID of the meetings spreadsheet
+            
+        Returns:
+            Most recent meeting or None if no meetings found
+        """
+        try:
+            all_meetings = self.get_all_meetings(spreadsheet_id)
+            
+            if not all_meetings:
+                return None
+            
+            # Filter out meetings without start_at_utc and sort by start_at_utc (most recent first)
+            valid_meetings = []
+            for meeting in all_meetings:
+                start_time = meeting.get('start_at_utc', '').strip()
+                if start_time and start_time != '':
+                    valid_meetings.append(meeting)
+            
+            if not valid_meetings:
+                return None
+            
+            # Sort by start_at_utc (most recent first)
+            valid_meetings.sort(
+                key=lambda x: x.get('start_at_utc', ''), 
+                reverse=True
+            )
+            
+            return valid_meetings[0]
+            
+        except Exception as e:
+            print(f"Error getting most recent meeting: {e}")
+            return None
+    
+    def get_most_recent_meeting_across_months(self, guild_config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Gets the most recent meeting across current and previous months.
+        
+        Args:
+            guild_config: Guild configuration containing monthly sheets and other info
+            
+        Returns:
+            Most recent meeting or None if no meetings found
+        """
+        try:
+            from datetime import datetime, timedelta, timezone
+            
+            # Get current month and previous month
+            now = datetime.now()
+            current_month = now.strftime("%B %Y")
+            
+            # Calculate previous month
+            if now.month == 1:
+                previous_month = f"December {now.year - 1}"
+            else:
+                previous_month = (now.replace(month=now.month - 1)).strftime("%B %Y")
+            
+            all_meetings = []
+            
+            # Check current month's sheets
+            monthly_sheets = guild_config.get('monthly_sheets', {})
+            current_meetings_sheet_id = monthly_sheets.get('meetings')
+            
+            if current_meetings_sheet_id:
+                current_meetings = self.get_all_meetings(current_meetings_sheet_id)
+                for meeting in current_meetings:
+                    meeting['source_month'] = current_month
+                    all_meetings.append(meeting)
+            
+            # Try to get previous month's sheets
+            club_name = guild_config.get('club_name', '')
+            monthly_folder_id = guild_config.get('monthly_folder_id')
+            
+            if club_name and monthly_folder_id:
+                try:
+                    # Try to get or create previous month's sheets
+                    previous_monthly_sheets = self.get_or_create_monthly_sheets(
+                        club_name, previous_month, monthly_folder_id
+                    )
+                    
+                    if previous_monthly_sheets and 'meetings' in previous_monthly_sheets:
+                        previous_meetings_sheet_id = previous_monthly_sheets['meetings']
+                        previous_meetings = self.get_all_meetings(previous_meetings_sheet_id)
+                        for meeting in previous_meetings:
+                            meeting['source_month'] = previous_month
+                            all_meetings.append(meeting)
+                except Exception as e:
+                    print(f"Could not access previous month's sheets: {e}")
+            
+            if not all_meetings:
+                return None
+            
+            # Filter out meetings without start_at_utc and meetings in the future
+            now = datetime.now(timezone.utc)
+            valid_meetings = []
+            for meeting in all_meetings:
+                start_time_str = meeting.get('start_at_utc', '').strip()
+                if start_time_str and start_time_str != '':
+                    try:
+                        # Parse the start time
+                        start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                        if start_time.tzinfo is None:
+                            start_time = start_time.replace(tzinfo=timezone.utc)
+                        
+                        # Only include meetings that have already passed
+                        if start_time < now:
+                            valid_meetings.append(meeting)
+                    except ValueError:
+                        continue
+                else:
+                    continue
+            
+            if not valid_meetings:
+                return None
+            
+            # Sort by start_at_utc (most recent first)
+            valid_meetings.sort(
+                key=lambda x: x.get('start_at_utc', ''), 
+                reverse=True
+            )
+            
+            return valid_meetings[0]
+            
+        except Exception as e:
+            print(f"Error getting most recent meeting across months: {e}")
+            return None
+    
     def update_task_status(self, spreadsheet_id: str, task_id: str, new_status: str) -> bool:
         """
         Updates the status of a task.
