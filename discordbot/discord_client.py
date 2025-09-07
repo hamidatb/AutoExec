@@ -385,40 +385,28 @@ Just ask me anything about meetings, tasks, or how I can help! 🚀"""
         try:
             print(f"🔍 [CONFIG COMMAND] User {message.author.id} tried to use /config as regular message")
             
-            # Check if this is in a DM
-            if isinstance(message.channel, discord.DMChannel):
-                response = """❌ **Configuration commands can't be used in DMs**
+            # All slash commands are now DM-only
+            response = """❌ **Use slash commands, not regular messages**
 
-The `/serverconfig` command is a **slash command** that must be used in your **server channels**, not in DMs.
+The `/serverconfig` command is a **slash command** that must be used in DMs.
 
 **How to use configuration commands:**
 
-1. **Go to your Discord server** (not DMs)
-2. **Type `/serverconfig`** in any channel where the bot has access
+1. **Send me a DM** (not in server channels)
+2. **Type `/serverconfig server_id:123456789`** and Discord will show you the available options
 3. **Choose your action:**
-   - `/serverconfig view` - See current server settings
-   - `/serverconfig update <setting> <value>` - Update a setting
+   - `/serverconfig server_id:123456789 view` - See current server settings
+   - `/serverconfig server_id:123456789 update <setting> <value>` - Update a setting
 
 **Examples:**
-- `/serverconfig view`
-- `/serverconfig update task_reminders_channel 123456789012345678`
-- `/serverconfig update config_folder https://drive.google.com/drive/folders/...`
+- `/serverconfig server_id:123456789 view`
+- `/serverconfig server_id:123456789 update task_reminders_channel 123456789012345678`
+- `/serverconfig server_id:123456789 update config_folder https://drive.google.com/drive/folders/...`
 
-**Note:** Only the server admin can use these commands."""
-            else:
-                response = """❌ **Use slash commands, not regular messages**
-
-The `/serverconfig` command is a **slash command**. Please use the Discord slash command interface:
-
-1. **Type `/serverconfig`** and Discord will show you the available options
-2. **Select the action** (view or update)
-3. **Fill in the parameters** as prompted
-
-**Available slash commands:**
-- `/serverconfig view` - See current server settings  
-- `/serverconfig update` - Update server configuration
-
-**Note:** Only the server admin can use these commands."""
+**Note:** 
+• All slash commands are DM-only and admin-only
+• Always include the server_id parameter
+• Only the server admin can use these commands"""
             
             await message.channel.send(response)
             
@@ -840,6 +828,46 @@ I am **NOT** set up for any student groups yet.
             return False
         return True
     
+    async def verify_dm_admin_access(self, interaction: discord.Interaction, server_id: str) -> bool:
+        """
+        Verify that a user in DM has admin access to the specified server.
+        
+        Args:
+            interaction: Discord interaction to respond to
+            server_id: Server ID to check admin access for
+            
+        Returns:
+            True if user is admin of the server, False otherwise
+        """
+        user_id = str(interaction.user.id)
+        
+        # Get club config from setup manager
+        all_guilds = self.setup_manager.status_manager.get_all_guilds()
+        club_config = all_guilds.get(server_id)
+        
+        if not club_config or not club_config.get('setup_complete', False):
+            await interaction.response.send_message(
+                "❌ **Server Not Configured**\n\n"
+                f"No configuration found for server ID {server_id}.\n\n"
+                "**To get started:**\n• Run `/setup` in DMs to configure the bot for this server",
+                ephemeral=True
+            )
+            return False
+        
+        # Check if the user is the admin
+        if user_id != club_config.get('admin_user_id'):
+            admin_id = club_config.get('admin_user_id', 'Unknown')
+            await interaction.response.send_message(
+                f"❌ **Access Denied**\n\n"
+                f"Only the admin can use this command.\n\n"
+                f"**Current Admin:** <@{admin_id}>\n\n"
+                f"**Need help?** Contact the admin or run `/setup` in DMs to reconfigure.",
+                ephemeral=True
+            )
+            return False
+        
+        return True
+    
     
     async def reconciliation_loop(self):
         """Reconciliation job that runs every 15 minutes to ensure timers match current data."""
@@ -1107,111 +1135,84 @@ async def cancel_setup_command(interaction: discord.Interaction):
     response = bot.setup_manager.cancel_setup(str(interaction.user.id))
     await interaction.response.send_message(response)
 
-@bot.tree.command(name="reset", description="Reset the club configuration (admin only)")
+@bot.tree.command(name="reset", description="Reset the club configuration (DM only, admin only)")
 @app_commands.describe(
-    server_id="Server ID (required when using in DMs)"
+    server_id="Server ID (required)"
 )
-async def reset_config_command(interaction: discord.Interaction, server_id: Optional[str] = None):
+async def reset_config_command(interaction: discord.Interaction, server_id: str):
     """Reset the club configuration. Only the admin can perform this action."""
-    user_id = str(interaction.user.id)
+    # Check if this is a DM
+    if not isinstance(interaction.channel, discord.DMChannel):
+        await interaction.response.send_message(
+            "❌ This command can only be used in DMs. Please send me a private message and use `/reset` there.",
+            ephemeral=True
+        )
+        return
     
-    # Determine guild_id based on context
-    if interaction.guild:
-        # In server context
-        guild_id = str(interaction.guild.id)
-    else:
-        # In DM context - require server_id parameter
-        if not server_id:
-            await interaction.response.send_message(
-                "❌ **Server ID Required**\n\nWhen using `/reset` in DMs, you must provide the server ID.\n\n**Usage:** `/reset server_id:123456789012345678`\n\n**How to get Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'\n3. Use that ID in the command",
-                ephemeral=True
-            )
-            return
-        
-        # Validate server_id format
-        if not server_id.isdigit():
-            await interaction.response.send_message(
-                "❌ **Invalid Server ID**\n\nPlease provide a valid Discord server ID (numbers only).\n\n**How to get Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'",
-                ephemeral=True
-            )
-            return
-            
-        guild_id = server_id
+    # Validate server_id format
+    if not server_id.isdigit():
+        await interaction.response.send_message(
+            "❌ **Invalid Server ID**\n\nPlease provide a valid Discord server ID (numbers only).\n\n**How to get Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'",
+            ephemeral=True
+        )
+        return
+    
+    # Verify admin access
+    if not await bot.verify_dm_admin_access(interaction, server_id):
+        return
+    
+    user_id = str(interaction.user.id)
+    guild_id = server_id
     
     # Get club config from setup manager (persistent storage)
     all_guilds = bot.setup_manager.status_manager.get_all_guilds()
     club_config = all_guilds.get(guild_id)
     
-    if not club_config or not club_config.get('setup_complete', False):
-        await interaction.response.send_message(
-            "❌ **Reset Failed**\n\nNo configuration found for this server.\n\n**To get started:**\n• Run `/setup` in DMs to configure the bot",
-            ephemeral=True
-        )
-        return
-    
-    # Check if the user is the admin
-    if str(interaction.user.id) != club_config.get('admin_user_id'):
-        admin_id = club_config.get('admin_user_id', 'Unknown')
-        await interaction.response.send_message(
-            f"❌ **Reset Failed**\n\nOnly the admin can reset the club configuration.\n\n**Current Admin:** <@{admin_id}>\n\n**Need help?** Contact the admin or run `/setup` in DMs to reconfigure.",
-            ephemeral=True
-        )
-        return
-    
     # Confirm the reset action
     response = bot.setup_manager.reset_club_configuration(guild_id, user_id, all_guilds)
     await interaction.response.send_message(response, ephemeral=True)
 
-@bot.tree.command(name="serverconfig", description="Update server configuration (admin only)")
+@bot.tree.command(name="serverconfig", description="Update server configuration (DM only, admin only)")
 @app_commands.describe(
     action="Action to perform (view or update)",
     setting="Configuration setting to update",
     value="New value for the setting",
-    server_id="Server ID (required when using in DMs)"
+    server_id="Server ID (required)"
 )
 async def config_command(
     interaction: discord.Interaction,
+    server_id: str,
     action: str = "view",
     setting: Optional[str] = None,
-    value: Optional[str] = None,
-    server_id: Optional[str] = None
+    value: Optional[str] = None
 ):
     """Handle configuration update commands."""
-    user_id = str(interaction.user.id)
+    # Check if this is a DM
+    if not isinstance(interaction.channel, discord.DMChannel):
+        await interaction.response.send_message(
+            "❌ This command can only be used in DMs. Please send me a private message and use `/serverconfig` there.",
+            ephemeral=True
+        )
+        return
     
-    # Determine guild_id based on context
-    if interaction.guild:
-        # Used in a server
-        guild_id = str(interaction.guild.id)
-    else:
-        # Used in DM - require server_id parameter
-        if not server_id:
-            await interaction.response.send_message(
-                "❌ **Server ID Required**\n\nWhen using `/serverconfig` in DMs, you must specify the server ID:\n\n`/serverconfig view server_id:123456789012345678`\n\n**How to get Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'\n3. Use that ID in the command",
-                ephemeral=True
-            )
-            return
-        guild_id = server_id
+    # Validate server_id format
+    if not server_id.isdigit():
+        await interaction.response.send_message(
+            "❌ **Invalid Server ID**\n\nPlease provide a valid Discord server ID (numbers only).\n\n**How to get Server ID:**\n1. Right-click on your server name in Discord\n2. Select 'Copy Server ID'",
+            ephemeral=True
+        )
+        return
+    
+    # Verify admin access
+    if not await bot.verify_dm_admin_access(interaction, server_id):
+        return
+    
+    user_id = str(interaction.user.id)
+    guild_id = server_id
     
     # Get club config from setup manager
     all_guilds = bot.setup_manager.status_manager.get_all_guilds()
     club_config = all_guilds.get(guild_id)
-    
-    if not club_config or not club_config.get('setup_complete', False):
-        await interaction.response.send_message(
-            "❌ No club configuration found for this server. Please run `/setup` first.",
-            ephemeral=True
-        )
-        return
-    
-    # Check if the user is the admin
-    if str(interaction.user.id) != club_config.get('admin_user_id'):
-        admin_id = club_config.get('admin_user_id', 'Unknown')
-        await interaction.response.send_message(
-            f"❌ Only the admin can update server configuration.\n\n**Current Admin:** <@{admin_id}>",
-            ephemeral=True
-        )
-        return
     
     try:
         print(f"🔍 [SERVERCONFIG] Command called with action='{action}', setting='{setting}', value='{value}'")
@@ -1472,36 +1473,13 @@ async def config_command(
             ephemeral=True
         )
 
-@bot.tree.command(name="sync", description="Sync slash commands (admin only)")
+@bot.tree.command(name="sync", description="Sync slash commands (DM only)")
 async def sync_command(interaction: discord.Interaction):
     """Sync slash commands with Discord."""
-    # Check if this is a server (guild) interaction
-    if not interaction.guild:
+    # Check if this is a DM
+    if not isinstance(interaction.channel, discord.DMChannel):
         await interaction.response.send_message(
-            "❌ This command can only be used in a server, not in DMs.",
-            ephemeral=True
-        )
-        return
-        
-    guild_id = str(interaction.guild.id)
-    user_id = str(interaction.user.id)
-    
-    # Get club config from setup manager
-    all_guilds = bot.setup_manager.status_manager.get_all_guilds()
-    club_config = all_guilds.get(guild_id)
-    
-    if not club_config or not club_config.get('setup_complete', False):
-        await interaction.response.send_message(
-            "❌ No club configuration found for this server. Please run `/setup` first.",
-            ephemeral=True
-        )
-        return
-    
-    # Check if the user is the admin
-    if str(interaction.user.id) != club_config.get('admin_user_id'):
-        admin_id = club_config.get('admin_user_id', 'Unknown')
-        await interaction.response.send_message(
-            f"❌ Only the admin can sync commands.\n\n**Current Admin:** <@{admin_id}>",
+            "❌ This command can only be used in DMs. Please send me a private message and use `/sync` there.",
             ephemeral=True
         )
         return
@@ -1521,32 +1499,41 @@ async def sync_command(interaction: discord.Interaction):
             ephemeral=True
         )
 
-@bot.tree.command(name="help", description="Show help information and available commands")
-@app_commands.describe(topic="Help topic (serverconfig, meetings, tasks, setup, or general)")
+@bot.tree.command(name="help", description="Show help information and available commands (DM only)")
+@app_commands.describe(
+    topic="Help topic (serverconfig, meetings, tasks, setup, or general)"
+)
 async def help_command(interaction: discord.Interaction, topic: str = "general"):
     """Show help information and available commands."""
+    # Check if this is a DM
+    if not isinstance(interaction.channel, discord.DMChannel):
+        await interaction.response.send_message(
+            "❌ This command can only be used in DMs. Please send me a private message and use `/help` there.",
+            ephemeral=True
+        )
+        return
     
     if topic.lower() == "serverconfig":
         help_text = """**Server Configuration Help**
 
 **View Configuration:**
-• `/serverconfig view` - See all current settings (in server)
-• `/serverconfig view server_id:123456789` - See settings (in DM)
+• `/serverconfig server_id:123456789 view` - See all current settings
 
 **Update Settings:**
-• `/serverconfig update config_folder <link>` - Update Google Drive config folder
-• `/serverconfig update monthly_folder <link>` - Update Google Drive monthly folder
-• `/serverconfig update meeting_minutes_folder <link>` - Update meeting minutes folder
-• `/serverconfig update task_reminders_channel <channel_id>` - Update task reminders channel
-• `/serverconfig update meeting_reminders_channel <channel_id>` - Update meeting reminders channel
-• `/serverconfig update escalation_channel <channel_id>` - Update escalation channel
-• `/serverconfig update general_announcements_channel <channel_id>` - Update general announcements channel
-• `/serverconfig update free_speak_channel <channel_id>` - Update free-speak channel (or 'none' to remove)
-• `/serverconfig update timezone <timezone>` - Update club timezone
-• `/serverconfig update exec_members <json>` - Update executive team members
+• `/serverconfig server_id:123456789 update config_folder <link>` - Update Google Drive config folder
+• `/serverconfig server_id:123456789 update monthly_folder <link>` - Update Google Drive monthly folder
+• `/serverconfig server_id:123456789 update meeting_minutes_folder <link>` - Update meeting minutes folder
+• `/serverconfig server_id:123456789 update task_reminders_channel <channel_id>` - Update task reminders channel
+• `/serverconfig server_id:123456789 update meeting_reminders_channel <channel_id>` - Update meeting reminders channel
+• `/serverconfig server_id:123456789 update escalation_channel <channel_id>` - Update escalation channel
+• `/serverconfig server_id:123456789 update general_announcements_channel <channel_id>` - Update general announcements channel
+• `/serverconfig server_id:123456789 update free_speak_channel <channel_id>` - Update free-speak channel (or 'none' to remove)
+• `/serverconfig server_id:123456789 update timezone <timezone>` - Update club timezone
+• `/serverconfig server_id:123456789 update exec_members <json>` - Update executive team members
 
-**DM Usage:** Add `server_id:123456789` parameter when using in DMs
-**Admin Only:** Only the server admin can use these commands."""
+**DM Only:** All serverconfig commands must be used in DMs
+**Admin Only:** Only the server admin can use these commands
+**Server ID Required:** Always include the server ID parameter"""
         
     elif topic.lower() == "meetings":
         help_text = """**Meeting Management Help**
@@ -1616,16 +1603,16 @@ Everything is done through natural conversation."""
 
 **Need to Restart?**
 • Use `/cancel` during setup
-• Use `/reset` (admin only) to reset completed setup"""
+• Use `/reset server_id:123456789` (admin only, DM only) to reset completed setup"""
         
     else:  # general
         help_text = """**AutoExec Bot Help**
 
-**Admin Commands:**
-• `/setup` - Start bot setup (DM only)
+**Admin Commands (DM Only):**
+• `/setup` - Start bot setup
 • `/help <topic>` - Get detailed help
-• `/serverconfig view/update` - Manage settings
-• `/reset` - Reset configuration
+• `/serverconfig server_id:123456789 view/update` - Manage settings
+• `/reset server_id:123456789` - Reset configuration
 • `/sync` - Sync slash commands
 
 **Natural Language (Main Feature):**
@@ -1644,8 +1631,12 @@ Everything is done through natural conversation."""
 • `/help tasks` - Task management (natural language)
 • `/help setup` - Setup process guide
 
-**The Magic:**
-AutoExec understands natural language! Just talk to it like you would a human assistant. No need to learn complex commands - just describe what you want to do!"""
+**Important Notes:**
+• All slash commands are DM-only
+• Server-specific commands (`/serverconfig`, `/reset`) require server_id parameter and are admin-only
+• General commands (`/help`, `/sync`) are DM-only but don't require server_id
+• Natural language works in servers and free-speak channels
+• The Magic: AutoExec understands natural language! Just talk to it like you would a human assistant."""
     
     await interaction.response.send_message(help_text, ephemeral=True)
 
