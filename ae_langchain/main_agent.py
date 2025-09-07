@@ -309,16 +309,20 @@ def get_user_admin_servers(user_id: str):
 def handle_dm_server_selection(user_id: str, query: str):
     """Handle DM queries when user is admin of multiple servers."""
     user_guilds = get_user_admin_servers(user_id)
+    print(f"🔍 [handle_dm_server_selection] User {user_id} has {len(user_guilds)} admin servers")
+    print(f"🔍 [handle_dm_server_selection] User guilds: {user_guilds}")
     
     if len(user_guilds) == 0:
         return "❌ You are not an admin of any configured servers. Please run `/setup` first."
     elif len(user_guilds) == 1:
         # User is admin of only one server, use that context
         guild_id = user_guilds[0]['guild_id']
+        print(f"🔍 [handle_dm_server_selection] Using single server context: {guild_id}")
         return run_agent_text_only(query, guild_id=guild_id, user_id=None)
     else:
         # User is admin of multiple servers, ask for clarification
         guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+        print(f"🔍 [handle_dm_server_selection] Asking user to choose from {len(user_guilds)} servers")
         
         return f"""❓ **Multiple Servers Detected**
 
