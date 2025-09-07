@@ -154,6 +154,10 @@ class TimerScheduler:
                 message += f"**{title}** has been overdue for 48 hours\n"
                 message += f"@everyone - This task needs immediate attention!"
             
+            elif timer_type == 'scheduled_reminder':
+                # For scheduled reminders, the mention field contains the full message
+                message = mention  # The full formatted message is stored in the mention field
+            
             if message:
                 await self.bot.send_any_message(message, channel_id)
                 print(f"✅ Sent {timer_type} message for task {title}")

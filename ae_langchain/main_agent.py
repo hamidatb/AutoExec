@@ -148,6 +148,7 @@ IMPORTANT GUIDELINES:
 - For task creation, use create_task_with_timer to automatically set up reminders
 - For sending reminders to specific people, use send_reminder_to_person (not send_announcement)
 - If the person isn't found in exec members, offer alternatives like @everyone or general announcements
+- When users say "in X minutes", use delay_minutes parameter to schedule the reminder, don't send immediately
 - For general announcements to everyone, use send_announcement with natural headers like "🎉 **Team Recognition**" or "📢 **Club Information**"
 - For meeting scheduling, use start_meeting_scheduling to begin interactive conversation
 - When scheduling meetings, have a back-and-forth conversation to gather all details:
@@ -192,6 +193,7 @@ EXAMPLES OF WHEN TO USE TOOLS:
 - "What's our meeting schedule?" → Use send_meeting_schedule with amount_of_meetings_to_return=5
 - "Create a task for John due tomorrow" → Use create_task_with_timer
 - "Send a reminder to Hamidat that she hasn't done her task" → Use send_reminder_to_person
+- "Send a reminder in 5 minutes to Hamidat about her task" → Use send_reminder_to_person with delay_minutes=5
 - "Send a reminder to Sanika about her task" (if Sanika not in exec list) → Show available execs and offer alternatives
 - "Send out an announcement about Victoria's Instagram milestone" → Use send_announcement with "🎉 **Team Recognition**\n\nCongratulations to Victoria for reaching 403 followers on our Instagram! 🎉 Let's keep the momentum going! 🚀"
 - "Schedule a meeting called Team Sync" → Use start_meeting_scheduling to begin interactive flow
@@ -859,7 +861,7 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
         return f"❌ Error scheduling meeting: {str(e)}"
 
 @tool
-def send_reminder_to_person(person_name: str, reminder_message: str) -> str:
+def send_reminder_to_person(person_name: str, reminder_message: str, delay_minutes: int = 0) -> str:
     """
     Send a reminder message to a specific person in the Discord server.
     This tool finds the person by name and sends them a direct reminder.
@@ -868,6 +870,7 @@ def send_reminder_to_person(person_name: str, reminder_message: str) -> str:
     - Sending reminders to specific individuals (e.g., "remind John about his task")
     - Personal notifications that don't need @everyone
     - Individual task reminders or follow-ups
+    - Scheduling reminders for later (e.g., "remind me in 5 minutes")
     
     **DO NOT USE THIS FOR:**
     - General announcements to everyone (use send_announcement instead)
@@ -877,9 +880,10 @@ def send_reminder_to_person(person_name: str, reminder_message: str) -> str:
     Args:
         person_name (str): Name of the person to send the reminder to (can be Discord username or real name)
         reminder_message (str): The reminder message to send
+        delay_minutes (int): How many minutes to wait before sending (0 = send immediately)
         
     Returns:
-        str: Confirmation that the reminder was sent
+        str: Confirmation that the reminder was sent or scheduled
     """
     from discordbot.discord_client import BOT_INSTANCE
     
@@ -944,17 +948,51 @@ Please clarify who you'd like to send the reminder to."""
         # Create the reminder message (no @everyone, just mention the person)
         formatted_message = f"📝 **Reminder**\n\nHey {person_discord_id}, {reminder_message}"
         
-        # Store the message to be sent
-        global _pending_announcements
-        announcement_data = {
-            'message': formatted_message,
-            'channel_id': int(task_reminders_channel_id),
-            'channel_name': 'task reminders'
-        }
-        _pending_announcements.append(announcement_data)
-        print(f"🔍 [send_reminder_to_person] Added reminder to global queue. Total pending: {len(_pending_announcements)}")
-        
-        return f"✅ Reminder sent to {clean_person_name} in the task reminders channel."
+        if delay_minutes > 0:
+            # Schedule the reminder for later using a timer
+            from datetime import datetime, timezone, timedelta
+            
+            fire_at = datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)
+            timer_id = f"reminder_{clean_person_name}_{int(datetime.now().timestamp())}"
+            
+            timer_data = {
+                'id': timer_id,
+                'guild_id': guild_id,
+                'type': 'scheduled_reminder',
+                'ref_type': 'reminder',
+                'ref_id': timer_id,
+                'fire_at_utc': fire_at.isoformat(),
+                'channel_id': task_reminders_channel_id,
+                'state': 'active',
+                'title': f"Reminder for {clean_person_name}",
+                'mention': person_discord_id
+            }
+            
+            # Store the message content in a way that the timer can access it
+            # We'll use the mention field to store the full message
+            timer_data['mention'] = formatted_message
+            
+            config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+            if config_spreadsheet_id:
+                success = BOT_INSTANCE.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
+                if success:
+                    return f"✅ Reminder scheduled for {clean_person_name} in {delay_minutes} minutes."
+                else:
+                    return f"❌ Failed to schedule reminder. Please try again."
+            else:
+                return f"❌ No config spreadsheet found. Please run `/setup` first."
+        else:
+            # Send immediately
+            global _pending_announcements
+            announcement_data = {
+                'message': formatted_message,
+                'channel_id': int(task_reminders_channel_id),
+                'channel_name': 'task reminders'
+            }
+            _pending_announcements.append(announcement_data)
+            print(f"🔍 [send_reminder_to_person] Added reminder to global queue. Total pending: {len(_pending_announcements)}")
+            
+            return f"✅ Reminder sent to {clean_person_name} in the task reminders channel."
         
     except Exception as e:
         return f"❌ Error sending reminder: {str(e)}"
