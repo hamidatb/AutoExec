@@ -35,7 +35,7 @@ class GuildSetupStatusManager:
             with open(self.status_file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, FileNotFoundError) as e:
-            print(f"❌ [GUILD SETUP STATUS] Error reading status file: {e}")
+            # print(f"❌ [GUILD SETUP STATUS] Error reading status file: {e}")
             # Return default structure if file is corrupted
             return {"guilds": {}, "last_updated": datetime.now().isoformat()}
     
@@ -45,9 +45,9 @@ class GuildSetupStatusManager:
             data["last_updated"] = datetime.now().isoformat()
             with open(self.status_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            print(f"🔍 [GUILD SETUP STATUS] Status file updated successfully")
+            # print(f"🔍 [GUILD SETUP STATUS] Status file updated successfully")
         except Exception as e:
-            print(f"❌ [GUILD SETUP STATUS] Error writing status file: {e}")
+            # print(f"❌ [GUILD SETUP STATUS] Error writing status file: {e}")
             raise
     
     def is_setup_complete(self, guild_id: str) -> bool:
@@ -60,23 +60,23 @@ class GuildSetupStatusManager:
         Returns:
             True if setup is complete, False otherwise
         """
-        print(f"🔍 [GUILD SETUP STATUS] Checking setup status for guild: {guild_id}")
+        # print(f"🔍 [GUILD SETUP STATUS] Checking setup status for guild: {guild_id}")
         
         status_data = self._read_status_file()
-        print(f"🔍 [GUILD SETUP STATUS] Status file contents: {status_data}")
+        # print(f"🔍 [GUILD SETUP STATUS] Status file contents: {status_data}")
         
         guilds = status_data.get("guilds", {})
-        print(f"🔍 [GUILD SETUP STATUS] All guilds in file: {list(guilds.keys())}")
+        # print(f"🔍 [GUILD SETUP STATUS] All guilds in file: {list(guilds.keys())}")
         
         guild_data = guilds.get(guild_id)
-        print(f"🔍 [GUILD SETUP STATUS] Guild data for guild {guild_id}: {guild_data}")
+        # print(f"🔍 [GUILD SETUP STATUS] Guild data for guild {guild_id}: {guild_data}")
         
         if not guild_data:
-            print(f"❌ [GUILD SETUP STATUS] No setup data found for guild {guild_id}")
+            # print(f"❌ [GUILD SETUP STATUS] No setup data found for guild {guild_id}")
             return False
         
         is_complete = guild_data.get("setup_complete", False)
-        print(f"🔍 [GUILD SETUP STATUS] Setup status for guild {guild_id}: {is_complete}")
+        # print(f"🔍 [GUILD SETUP STATUS] Setup status for guild {guild_id}: {is_complete}")
         return is_complete
     
     def get_guild_config(self, guild_id: str) -> Optional[Dict[str, Any]]:
@@ -93,10 +93,10 @@ class GuildSetupStatusManager:
         guild_data = status_data.get("guilds", {}).get(guild_id)
         
         if not guild_data:
-            print(f"🔍 [GUILD SETUP STATUS] No guild config found for guild {guild_id}")
+            # print(f"🔍 [GUILD SETUP STATUS] No guild config found for guild {guild_id}")
             return None
         
-        print(f"🔍 [GUILD SETUP STATUS] Retrieved guild config for guild {guild_id}")
+        # print(f"🔍 [GUILD SETUP STATUS] Retrieved guild config for guild {guild_id}")
         return guild_data
     
     def mark_setup_complete(self, guild_id: str, guild_config: Dict[str, Any]):
@@ -117,7 +117,7 @@ class GuildSetupStatusManager:
         status_data["guilds"][guild_id] = guild_config
         
         self._write_status_file(status_data)
-        print(f"🔍 [GUILD SETUP STATUS] Setup marked complete for guild {guild_id}, club: {guild_config.get('club_name', 'Unknown')}")
+        # print(f"🔍 [GUILD SETUP STATUS] Setup marked complete for guild {guild_id}, club: {guild_config.get('club_name', 'Unknown')}")
     
     def is_admin(self, user_id: str, guild_id: str) -> bool:
         """
@@ -136,7 +136,7 @@ class GuildSetupStatusManager:
         
         admin_id = guild_data.get("admin_user_id")
         is_admin = user_id == admin_id
-        print(f"🔍 [GUILD SETUP STATUS] Admin check: user {user_id} is admin of guild {guild_id}: {is_admin}")
+        # print(f"🔍 [GUILD SETUP STATUS] Admin check: user {user_id} is admin of guild {guild_id}: {is_admin}")
         return is_admin
     
     def can_modify_config(self, user_id: str, guild_id: str) -> bool:
@@ -153,10 +153,10 @@ class GuildSetupStatusManager:
         """
         can_modify = self.is_admin(user_id, guild_id)
         
-        if not can_modify:
-            print(f"❌ [GUILD SETUP STATUS] Access denied: user {user_id} is not admin of guild {guild_id}")
-        else:
-            print(f"✅ [GUILD SETUP STATUS] Access granted: user {user_id} can modify guild {guild_id}")
+        # if not can_modify:
+        #     print(f"❌ [GUILD SETUP STATUS] Access denied: user {user_id} is not admin of guild {guild_id}")
+        # else:
+        #     print(f"✅ [GUILD SETUP STATUS] Access granted: user {user_id} can modify guild {guild_id}")
         
         return can_modify
     
@@ -179,7 +179,7 @@ class GuildSetupStatusManager:
         guild_data = status_data.get("guilds", {}).get(guild_id)
         
         if not guild_data:
-            print(f"❌ [GUILD SETUP STATUS] No guild found for guild {guild_id}")
+            # print(f"❌ [GUILD SETUP STATUS] No guild found for guild {guild_id}")
             return False
         
         # Update the configuration
@@ -190,7 +190,7 @@ class GuildSetupStatusManager:
         status_data["guilds"][guild_id] = guild_data
         self._write_status_file(status_data)
         
-        print(f"✅ [GUILD SETUP STATUS] Guild config updated for guild {guild_id}")
+        # print(f"✅ [GUILD SETUP STATUS] Guild config updated for guild {guild_id}")
         return True
     
     def get_all_guilds(self) -> Dict[str, Dict[str, Any]]:
@@ -222,10 +222,10 @@ class GuildSetupStatusManager:
         if guild_id in status_data.get("guilds", {}):
             del status_data["guilds"][guild_id]
             self._write_status_file(status_data)
-            print(f"✅ [GUILD SETUP STATUS] Guild removed for guild {guild_id}")
+            # print(f"✅ [GUILD SETUP STATUS] Guild removed for guild {guild_id}")
             return True
         
-        print(f"❌ [GUILD SETUP STATUS] No guild found to remove for guild {guild_id}")
+        # print(f"❌ [GUILD SETUP STATUS] No guild found to remove for guild {guild_id}")
         return False
     
     def get_setup_stats(self) -> Dict[str, Any]:
