@@ -1,57 +1,92 @@
 #!/bin/bash
+set -euo pipefail
 
-# AutoExec Bot Launch Script
-# This script ensures the bot runs with the correct environment variables
+# AutoExec Bot Launch Script (local dev)
+# Goal: run the bot with the right venv + env vars, keep secrets quiet, and save readable logs.
 
-echo "🤖 Launching AutoExec Bot..."
+echo "🤖 Launching AutoExec Bot (local)..."
 
-# Check if virtual environment exists
-if [ ! -d "venv" ]; then
-    echo "❌ Virtual environment not found. Running setup first..."
-    source ./setup_env.sh
-fi
+# --- tiny helpers ---
+log_dir="logs"
+log_file="${log_dir}/local_run.log"
+venv_dir="venv"
 
-# Activate virtual environment
-source venv/bin/activate
+mkdir -p "$log_dir"
 
-# Load environment variables using the improved setup script
-if [ -f ".env" ]; then
-    echo "🔑 Loading environment variables..."
-    
-    # Read .env file and export variables properly
-    while IFS= read -r line; do
-        # Skip empty lines and comments
-        if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
-            # Remove quotes and handle spaces around equals sign
-            if [[ "$line" =~ ^[[:space:]]*([^[:space:]]+)[[:space:]]*=[[:space:]]*\"?([^\"]*)\"?[[:space:]]*$ ]]; then
-                var_name="${BASH_REMATCH[1]}"
-                var_value="${BASH_REMATCH[2]}"
-                export "$var_name"="$var_value"
-            fi
-        fi
-    done < .env
+# Make sure we clean up nicely on exit (even if Ctrl+C)
+deactivate_if_needed() {
+  # shellcheck disable=SC1090
+  command -v deactivate >/dev/null 2>&1 && deactivate || true
+}
+trap deactivate_if_needed EXIT
+
+# 1) Virtual environment: create if needed, then activate
+if [[ ! -d "$venv_dir" ]]; then
+  echo "🧪 No virtual environment found. Creating one..."
+  python3 -m venv "$venv_dir"
+  # shellcheck disable=SC1090
+  source "${venv_dir}/bin/activate"
+  pip install --upgrade pip
+  pip install -r requirements.txt
 else
-    echo "❌ .env file not found!"
-    exit 1
+  # shellcheck disable=SC1090
+  source "${venv_dir}/bin/activate"
 fi
 
-# Verify OpenAI API key is loaded correctly
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo "❌ OPENAI_API_KEY not found in environment!"
-    exit 1
+# 2) Load environment variables from .env — without ever printing values
+if [[ ! -f ".env" ]]; then
+  echo "❌ .env file not found. Create one first (see README)!"
+  exit 1
 fi
 
-# Check if it's the correct key (should start with sk-proj-)
-if [[ ! "$OPENAI_API_KEY" =~ ^sk-proj- ]]; then
-    echo "❌ Wrong OpenAI API key format detected!"
-    echo "Expected: sk-proj-... (your project key)"
-    echo "Found: ${OPENAI_API_KEY:0:20}..."
-    exit 1
+echo "🔑 Loading environment variables from .env (keeping secrets quiet)..."
+# Minimal .env parser: KEY=VALUE lines, ignore comments/empties; strips surrounding quotes.
+while IFS= read -r line; do
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+  if [[ "$line" =~ ^[[:space:]]*([^[:space:]=]+)[[:space:]]*=[[:space:]]*\"?([^\"]*)\"?[[:space:]]*$ ]]; then
+    var_name="${BASH_REMATCH[1]}"
+    var_value="${BASH_REMATCH[2]}"
+    export "${var_name}=${var_value}"
+  fi
+done < .env
+
+# 3) Sanity checks for required env vars (do NOT print values)
+required_vars=( "DISCORD_BOT_TOKEN" )
+missing=0
+for v in "${required_vars[@]}"; do
+  if [[ -z "${!v:-}" ]]; then
+    echo "❌ Required env var ${v} is missing."
+    missing=1
+  fi
+done
+if [[ $missing -eq 1 ]]; then
+  echo "Fix your .env and try again."
+  exit 1
 fi
 
-echo "✅ Environment verified!"
-echo "🔑 Using OpenAI API key: ${OPENAI_API_KEY:0:20}..."
-echo "🚀 Starting bot..."
+# Optional: OpenAI key check if your local run needs it
+if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+  # Just pattern check; don't print the key.
+  if [[ ! "$OPENAI_API_KEY" =~ ^sk-[a-z]+- ]]; then
+    echo "⚠️  OPENAI_API_KEY is set but format looks unusual. Continuing anyway."
+  fi
+fi
 
-# Run the bot
-python -m discordbot.discord_client
+# 4) Basic permission warnings (no secrets printed)
+if [[ -f ".env" ]]; then
+  perms=$(stat -c "%a" .env 2>/dev/null || stat -f "%OLp" .env 2>/dev/null || echo "")
+  if [[ -n "$perms" ]]; then
+    # If .env is group/other-readable, gently warn
+    if [[ "$perms" =~ ^[0-9]([6-7])[0-9]$ || "$perms" =~ ^[0-9][0-9]([6-7])$ ]]; then
+      echo "⚠️  .env permissions look a bit open (${perms}). Consider: chmod 600 .env"
+    fi
+  fi
+fi
+
+echo "✅ Environment ready. Starting bot and tee-ing logs to ${log_file}"
+echo "📝 Tip: Ctrl+C to stop. Logs persist in ${log_file}"
+
+# 5) Run the bot: show output live AND write to log with timestamps
+#   - `stdbuf -oL` to line-buffer Python output for nicer tee behavior
+#   - prepend timestamps in the log file only (terminal stays clean)
+python start_bot.py 2>&1 | tee >(awk '{ cmd="date +\"%Y-%m-%d %H:%M:%S\""; cmd | getline d; close(cmd); print d, $0 }' >> "${log_file}")
