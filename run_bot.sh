@@ -87,6 +87,9 @@ echo "✅ Environment ready. Starting bot and tee-ing logs to ${log_file}"
 echo "📝 Tip: Ctrl+C to stop. Logs persist in ${log_file}"
 
 # 5) Run the bot: show output live AND write to log with timestamps
-#   - `stdbuf -oL` to line-buffer Python output for nicer tee behavior
-#   - prepend timestamps in the log file only (terminal stays clean)
-python start_bot.py 2>&1 | tee >(awk '{ cmd="date +\"%Y-%m-%d %H:%M:%S\""; cmd | getline d; close(cmd); print d, $0 }' >> "${log_file}")
+#   - Use Python's -u flag for unbuffered output
+#   - Capture all output and add timestamps to log file
+python -u start_bot.py 2>&1 | while IFS= read -r line; do
+  echo "$line"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') $line" >> "${log_file}"
+done

@@ -10,7 +10,7 @@ from pathlib import Path
 
 def check_environment():
     """Check if the environment is properly configured."""
-    print("🔍 Checking environment setup...")
+    print("🔍 Checking environment setup...", flush=True)
     
     # Check if .env file exists
     env_file = Path(".env")
@@ -42,7 +42,7 @@ def check_environment():
 
 def check_dependencies():
     """Check if all required dependencies are installed."""
-    print("📦 Checking dependencies...")
+    print("📦 Checking dependencies...", flush=True)
     
     try:
         import discord
@@ -72,7 +72,7 @@ def check_dependencies():
 
 def start_bot():
     """Start the bot."""
-    print("🚀 Starting Club Exec Task Manager Bot...")
+    print("🚀 Starting Club Exec Task Manager Bot...", flush=True)
     
     try:
         # Import and start the bot
@@ -93,8 +93,8 @@ def start_bot():
 
 def main():
     """Main startup function."""
-    print("🤖 Club Exec Task Manager Bot")
-    print("=" * 40)
+    print("🤖 Club Exec Task Manager Bot", flush=True)
+    print("=" * 40, flush=True)
     
     # Check environment
     if not check_environment():
@@ -106,8 +106,8 @@ def main():
         print("❌ Dependency check failed. Please install missing packages.")
         return 1
     
-    print("✅ Environment check passed!")
-    print()
+    print("✅ Environment check passed!", flush=True)
+    print("", flush=True)
     
     # Start the bot
     return start_bot()
