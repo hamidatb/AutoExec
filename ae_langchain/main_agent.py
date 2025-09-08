@@ -218,7 +218,7 @@ def run_agent_text_only(query: str, guild_id: str = None, user_id: str = None):
 async def run_tasks():
     """Start the Discord bot by running the agent with the start command."""
     query = "Start the discord bot"
-    result = await run_agent(query)
+    result = run_agent_text_only(query)
     print(result)
 
 
@@ -226,7 +226,7 @@ async def send_hourly_message():
     """Send a message to Discord every hour."""
     while True:
         query = "Send a message saying 'hi'"
-        result = await run_agent(query)
+        result = run_agent_text_only(query)
         print(result)
         await asyncio.sleep(3600)  # Wait for 1 hour (3600 seconds)
 
