@@ -904,7 +904,7 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
         
         # Validate that end time is after start time
         if end_datetime <= start_datetime:
-            return f"❌ End time must be after start time. Start: {start_datetime.strftime('%B %d, %Y at %I:%M %p')}, End: {end_datetime.strftime('%B %d, %Y at %I:%M %p')}"
+            return f"❌ End time must be after start time. Start: {start_datetime_local.strftime('%B %d, %Y at %I:%M %p')}, End: {end_datetime_local.strftime('%B %d, %Y at %I:%M %p')}"
         
         # Create meeting data
         meeting_data = {
@@ -942,8 +942,8 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
             response = f"""✅ **Meeting Scheduled Successfully!**
 
 **Meeting:** {meeting_title}
-**Start:** {start_datetime.strftime('%B %d, %Y at %I:%M %p')}
-**End:** {end_datetime.strftime('%B %d, %Y at %I:%M %p')}
+**Start:** {start_datetime_local.strftime('%B %d, %Y at %I:%M %p')}
+**End:** {end_datetime_local.strftime('%B %d, %Y at %I:%M %p')}
 **Location:** {location if location else 'TBD'}
 **Link:** {meeting_link if meeting_link else 'TBD'}
 **Timers Created:** {timer_count} automatic reminders
