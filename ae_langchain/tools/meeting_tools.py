@@ -386,7 +386,7 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
                     'title': meeting_title,
                     'start_at_utc': start_datetime.isoformat(),
                     'end_at_utc': None,
-                    'start_at_local': start_datetime.strftime("%B %d, %Y at %I:%M %p"),
+                    'start_at_local': start_datetime_local.strftime("%B %d, %Y at %I:%M %p"),
                     'end_at_local': None,
                     'location': location or '',
                     'meeting_link': meeting_link or '',
@@ -730,7 +730,7 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
                 print(f"🔍 [UPDATE DEBUG]   Local time: {start_datetime_local}")
                 print(f"🔍 [UPDATE DEBUG]   UTC time: {start_datetime}")
                 update_data['start_at_utc'] = start_datetime.isoformat()
-                update_data['start_at_local'] = start_datetime.strftime("%B %d, %Y at %I:%M %p")
+                update_data['start_at_local'] = start_datetime_local.strftime("%B %d, %Y at %I:%M %p")
             except ValueError:
                 return "❌ Invalid new_start_time format. Please use YYYY-MM-DD HH:MM format."
         
@@ -911,8 +911,8 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
             'title': meeting_title,
             'start_at_utc': start_datetime.isoformat(),
             'end_at_utc': end_datetime.isoformat(),
-            'start_at_local': start_datetime.strftime("%B %d, %Y at %I:%M %p"),
-            'end_at_local': end_datetime.strftime("%B %d, %Y at %I:%M %p"),
+            'start_at_local': start_datetime_local.strftime("%B %d, %Y at %I:%M %p"),
+            'end_at_local': end_datetime_local.strftime("%B %d, %Y at %I:%M %p"),
             'location': location,
             'meeting_link': meeting_link,
             'minutes_link': minutes_link,
