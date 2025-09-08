@@ -246,10 +246,13 @@ def send_announcement(announcement_message: str, announcement_type: str = "gener
     **DO NOT USE THIS FOR TASK CREATION** - Use create_task_with_timer instead!
     **DO NOT USE THIS FOR MEETING SCHEDULING** - Use create_meeting_with_timer instead!
     
-    **IMPORTANT:** You can add natural headers to your announcement_message like:
+    **IMPORTANT:** You can (but do not always have to) add natural headers to your announcement_message like:
     - "🎉 **Team Recognition**\n\nCongratulations to Victoria for reaching 403 followers..."
     - "📢 **Club Information**\n\nOur next meeting has been rescheduled..."
+    - "📅 **Meeting Update**\n\nOur weekly meeting has been moved to Friday at 3pm..."
     - "🚨 **Urgent Update**\n\nPlease note the following changes..."
+    - "📋 **Task Reminder**\n\nDon't forget to complete your assigned tasks..."
+    - "🎊 **Club Event**\n\nJoin us for our upcoming social event..."
     
     Args:
         announcement_message (str): The announcement message to send (REQUIRED) - you can include natural headers like "🎉 **Team Recognition**\n\n[message]"
