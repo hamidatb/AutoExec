@@ -573,6 +573,47 @@ def ask_for_discord_mention(person_name: str) -> str:
     Returns:
         str: Message asking for the Discord mention
     """
+    from discordbot.discord_client import BOT_INSTANCE
+    from ae_langchain.tools.context_manager import get_discord_context, get_user_admin_servers
+    
+    try:
+        # Try to get guild context to show available execs
+        context = get_discord_context()
+        user_id = context.get('user_id')
+        guild_id = context.get('guild_id')
+        
+        # Handle DM context
+        if not guild_id and user_id:
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 1:
+                guild_id = user_guilds[0]['guild_id']
+        
+        if guild_id and BOT_INSTANCE:
+            # Get the guild configuration
+            all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+            guild_config = all_guilds.get(guild_id)
+            
+            if guild_config:
+                exec_members = guild_config.get('exec_members', [])
+                exec_list = "\n".join([f"• {member['name']} ({member['role']})" for member in exec_members])
+                
+                return f"""❓ **Discord Mention Needed**
+
+I couldn't find a matching executive for **{person_name}**.
+
+**Available executives:**
+{exec_list if exec_list else "No executives configured"}
+
+**Options:**
+• Use one of the executives listed above
+• Provide the Discord mention: `{person_name}'s Discord is @username`
+
+You can reply with: `{person_name}'s Discord is @username`"""
+    
+    except Exception as e:
+        print(f"🔍 [DEBUG] Error in ask_for_discord_mention: {e}")
+    
+    # Fallback to simple message if we can't get guild context
     return f"❓ **Discord Mention Needed**\n\nI couldn't find a matching executive for **{person_name}**. Please provide their Discord mention (e.g., @username or <@123456789>) so I can create the task reminder properly.\n\nYou can reply with: `{person_name}'s Discord is @username`"
 
 

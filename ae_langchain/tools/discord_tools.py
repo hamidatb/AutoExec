@@ -97,7 +97,7 @@ def send_output_to_discord(messageToSend: str) -> str:
 
 
 @tool
-def send_reminder_to_person(person_name: str, reminder_message: str, delay_minutes: int = 0) -> str:
+def send_reminder_to_person(person_name: str, reminder_message: str, delay_minutes: int = 0, send_at_time: str = "") -> str:
     """
     Send a reminder message to a specific person in the Discord server.
     This tool finds the person by name and sends them a direct reminder.
@@ -107,6 +107,7 @@ def send_reminder_to_person(person_name: str, reminder_message: str, delay_minut
     - Personal notifications that don't need @everyone
     - Individual task reminders or follow-ups
     - Scheduling reminders for later (e.g., "remind me in 5 minutes")
+    - Scheduling reminders for specific times (e.g., "remind me at 2pm")
     
     **DO NOT USE THIS FOR:**
     - General announcements to everyone (use send_announcement instead)
@@ -117,6 +118,7 @@ def send_reminder_to_person(person_name: str, reminder_message: str, delay_minut
         person_name (str): Name of the person to send the reminder to (can be Discord username or real name)
         reminder_message (str): The reminder message to send
         delay_minutes (int): How many minutes to wait before sending (0 = send immediately)
+        send_at_time (str): Specific time to send the reminder (e.g., "2pm", "14:00", "2:00 PM")
         
     Returns:
         str: Confirmation that the reminder was sent or scheduled
@@ -134,8 +136,32 @@ def send_reminder_to_person(person_name: str, reminder_message: str, delay_minut
         channel_id = context.get('channel_id')
         user_id = context.get('user_id')
         
+        if not user_id:
+            return "❌ No Discord context found. Please use this command in a Discord server or DM."
+        
+        # Handle DM context - check if user is admin of any configured servers
         if not guild_id:
-            return "❌ No Discord context found. Please use this command in a Discord server."
+            from ae_langchain.tools.context_manager import get_user_admin_servers
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**
+
+You are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:
+
+{guild_list}
+
+**How to specify:**
+• Mention the club name: "For [Club Name], send reminder to [person]"
+• Mention the server name: "In [Server Name], remind [person] about [message]"
+
+**Example:** "For Computer Science Club, send reminder to Sanika about her task"
+
+Which server would you like me to help you with?"""
         
         # Get the guild configuration
         all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
@@ -185,9 +211,71 @@ Please clarify who you'd like to send the reminder to."""
         # Create the reminder message (no @everyone, just mention the person)
         formatted_message = f"📝 **Reminder**\n\nHey {person_discord_id}, {reminder_message}"
         
-        if delay_minutes > 0:
+        if delay_minutes > 0 or send_at_time:
             # Schedule the reminder for later using a timer
-            fire_at = datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)
+            import pytz
+            guild_timezone = guild_config.get('timezone', 'America/Edmonton')
+            local_tz = pytz.timezone(guild_timezone)
+            
+            # Get current time in guild timezone
+            now_utc = datetime.now(timezone.utc)
+            now_local = now_utc.astimezone(local_tz)
+            
+            if send_at_time:
+                # Parse absolute time (e.g., "2pm", "14:00", "2:00 PM")
+                try:
+                    # Parse the time string
+                    time_str = send_at_time.strip().lower()
+                    
+                    # Handle different time formats
+                    if 'pm' in time_str or 'am' in time_str:
+                        # 12-hour format
+                        fire_at_local = datetime.strptime(time_str, "%I:%M %p").time()
+                    elif ':' in time_str:
+                        # 24-hour format
+                        fire_at_local = datetime.strptime(time_str, "%H:%M").time()
+                    else:
+                        # Just hour (e.g., "2pm", "14")
+                        if 'pm' in time_str:
+                            hour = int(time_str.replace('pm', '').strip())
+                            if hour != 12:
+                                hour += 12
+                        elif 'am' in time_str:
+                            hour = int(time_str.replace('am', '').strip())
+                            if hour == 12:
+                                hour = 0
+                        else:
+                            hour = int(time_str)
+                        fire_at_local = datetime.strptime(f"{hour:02d}:00", "%H:%M").time()
+                    
+                    # Create datetime for today with the specified time
+                    fire_at_local = now_local.replace(
+                        hour=fire_at_local.hour,
+                        minute=fire_at_local.minute,
+                        second=0,
+                        microsecond=0
+                    )
+                    
+                    # If the time has already passed today, schedule for tomorrow
+                    if fire_at_local <= now_local:
+                        fire_at_local += timedelta(days=1)
+                        
+                except ValueError as e:
+                    return f"❌ Could not parse time '{send_at_time}'. Please use formats like '2pm', '14:00', or '2:00 PM'"
+            else:
+                # Use relative delay
+                fire_at_local = now_local + timedelta(minutes=delay_minutes)
+            
+            # Convert to UTC for storage
+            fire_at = fire_at_local.astimezone(timezone.utc)
+            
+            # Debug logging
+            print(f"🔍 [REMINDER DEBUG] Person: {clean_person_name}")
+            print(f"🔍 [REMINDER DEBUG]   Guild timezone: {guild_timezone}")
+            print(f"🔍 [REMINDER DEBUG]   Current local time: {now_local}")
+            print(f"🔍 [REMINDER DEBUG]   Fire local time: {fire_at_local}")
+            print(f"🔍 [REMINDER DEBUG]   Fire UTC time: {fire_at}")
+            
             timer_id = f"reminder_{clean_person_name}_{int(datetime.now().timestamp())}"
             
             timer_data = {
@@ -211,7 +299,12 @@ Please clarify who you'd like to send the reminder to."""
             if config_spreadsheet_id:
                 success = BOT_INSTANCE.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
                 if success:
-                    return f"✅ Reminder scheduled for {clean_person_name} in {delay_minutes} minutes."
+                    if send_at_time:
+                        # Format the local time for display
+                        fire_time_str = fire_at_local.strftime("%I:%M %p")
+                        return f"✅ Reminder scheduled for {clean_person_name} at {fire_time_str}."
+                    else:
+                        return f"✅ Reminder scheduled for {clean_person_name} in {delay_minutes} minutes."
                 else:
                     return f"❌ Failed to schedule reminder. Please try again."
             else:

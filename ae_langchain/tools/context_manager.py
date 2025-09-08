@@ -214,6 +214,8 @@ IMPORTANT GUIDELINES:
 - For sending reminders to specific people, use send_reminder_to_person (not send_announcement)
 - If the person isn't found in exec members, offer alternatives like @everyone or general announcements
 - When users say "in X minutes", use delay_minutes parameter to schedule the reminder, don't send immediately
+- When users say "at X time" (e.g., "at 2pm", "at 14:00"), use send_at_time parameter instead of delay_minutes
+- CRITICAL: If user says "send at 2pm" or "remind at 2pm", use send_at_time="2pm", NOT delay_minutes
 - For general announcements to everyone, use send_announcement with natural headers like "🎉 **Team Recognition**" or "📢 **Club Information**"
 - For meeting scheduling, use start_meeting_scheduling to begin interactive conversation
 - When scheduling meetings, have a back-and-forth conversation to gather all details:
@@ -260,6 +262,9 @@ EXAMPLES OF WHEN TO USE TOOLS:
 - "Create a task for John due tomorrow" → Use create_task_with_timer
 - "Send a reminder to Hamidat that she hasn't done her task" → Use send_reminder_to_person
 - "Send a reminder in 5 minutes to Hamidat about her task" → Use send_reminder_to_person with delay_minutes=5
+- "Send a reminder to Sanika at 2pm about her task" → Use send_reminder_to_person with send_at_time="2pm"
+- "Remind Hamidat at 2pm about her task" → Use send_reminder_to_person with send_at_time="2pm"
+- "Send reminder at 2pm to Sanika" → Use send_reminder_to_person with send_at_time="2pm"
 - "Send a reminder to Sanika about her task" (if Sanika not in exec list) → Show available execs and offer alternatives
 - "Send out an announcement about Victoria's Instagram milestone" → Use send_announcement with "🎉 **Team Recognition**\n\nCongratulations to Victoria for reaching 403 followers on our Instagram! 🎉 Let's keep the momentum going! 🚀"
 - "Schedule a meeting called Team Sync" → Use start_meeting_scheduling to begin interactive flow
