@@ -56,6 +56,30 @@ class MessageHandlers:
             
             response = await loop.run_in_executor(None, run_agent_sync, message.content)
             
+            # Check for and send any pending announcements
+            from ae_langchain.globals import _pending_announcements
+            if _pending_announcements:
+                print(f"🔍 [handle_langchain_query] Found {len(_pending_announcements)} pending announcements")
+                for i, announcement in enumerate(_pending_announcements):
+                    try:
+                        # If no specific channel_id, use the current channel
+                        channel_id = announcement['channel_id'] or message.channel.id
+                        print(f"🔍 [handle_langchain_query] Sending announcement {i+1} to channel {channel_id}")
+                        await self.bot.utils.send_any_message(
+                            announcement['message'], 
+                            channel_id
+                        )
+                        print(f"✅ [handle_langchain_query] Sent pending announcement to channel {channel_id}")
+                    except Exception as e:
+                        print(f"❌ [handle_langchain_query] Failed to send pending announcement: {e}")
+                        import traceback
+                        traceback.print_exc()
+                
+                # Clear the pending announcements
+                _pending_announcements.clear()
+            else:
+                print(f"🔍 [handle_langchain_query] No pending announcements found")
+            
             if response and response.strip():
                 # Send response back to the channel
                 await message.channel.send(response)
@@ -221,6 +245,31 @@ class MessageHandlers:
                     return f"I'm sorry, I encountered an error: {str(e)}"
             
             response = await loop.run_in_executor(None, run_agent_sync, message.content)
+            
+            # Check for and send any pending announcements
+            from ae_langchain.globals import _pending_announcements
+            if _pending_announcements:
+                print(f"🔍 [DM] Found {len(_pending_announcements)} pending announcements")
+                for i, announcement in enumerate(_pending_announcements):
+                    try:
+                        # If no specific channel_id, use the current channel
+                        channel_id = announcement['channel_id'] or message.channel.id
+                        print(f"🔍 [DM] Sending announcement {i+1} to channel {channel_id}")
+                        print(f"🔍 [DM] Message: {announcement['message'][:100]}...")
+                        await self.bot.utils.send_any_message(
+                            announcement['message'], 
+                            channel_id
+                        )
+                        print(f"✅ [DM] Sent pending announcement to channel {channel_id}")
+                    except Exception as e:
+                        print(f"❌ [DM] Failed to send pending announcement: {e}")
+                        import traceback
+                        traceback.print_exc()
+                
+                # Clear the pending announcements
+                _pending_announcements.clear()
+            else:
+                print(f"🔍 [DM] No pending announcements found")
             
             if response and response.strip():
                 await message.channel.send(response)
