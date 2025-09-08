@@ -371,6 +371,9 @@ def parse_meeting_minutes_action_items(minutes_doc_url: str) -> str:
                 # Format Discord ID for proper mention format (like original)
                 formatted_discord_id = f"<@{discord_id}>" if discord_id else ""
                 
+                # Use task reminders channel from guild config (fallback to context channel)
+                task_channel_id = guild_config.get('task_reminders_channel_id') or context.get('channel_id', '')
+                
                 # Create task data (like original)
                 task_data = {
                     'title': task,
@@ -380,7 +383,7 @@ def parse_meeting_minutes_action_items(minutes_doc_url: str) -> str:
                     'status': 'open',
                     'priority': 'medium',
                     'source_doc': minutes_doc_url,
-                    'channel_id': context.get('channel_id', ''),
+                    'channel_id': task_channel_id,
                     'notes': f"Role: {role} | From meeting minutes",
                     'created_by': context.get('user_id', ''),
                     'guild_id': guild_id
