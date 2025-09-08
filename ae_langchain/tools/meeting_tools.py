@@ -356,9 +356,18 @@ def get_all_upcoming_reminders(limit: int = 10):
             if title:
                 response += f"   **{title}**\n"
             
-            # Add mention info if available
+            # Add mention info if available (only in DMs to avoid pinging people in public channels)
             if mention:
-                response += f"   👤 Mentions: {mention}\n"
+                # Check if we're in a DM context
+                from ae_langchain.tools.context_manager import get_discord_context
+                context = get_discord_context()
+                is_dm = context and not context.get('guild_id')  # No guild_id means it's a DM
+                
+                if is_dm:
+                    response += f"   👤 Mentions: {mention}\n"
+                else:
+                    # In public channels, just show that mentions are configured without showing them
+                    response += f"   👤 Mentions: configured\n"
             
             # Add timer type and timing info
             response += f"   🕐 Type: {reminder['timer_type']}\n"
