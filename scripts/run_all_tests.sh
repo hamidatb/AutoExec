@@ -32,7 +32,7 @@ echo "📁 Project root: $PROJECT_ROOT"
 echo ""
 
 # Run tests with verbose output
-python3 scripts/run_tests.py -v
+python3 tests/run_tests.py -v
 
 # Capture exit code
 EXIT_CODE=$?

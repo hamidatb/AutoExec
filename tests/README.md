@@ -34,19 +34,19 @@ tests/
 
 ```bash
 # Run all tests
-python run_tests.py
+python tests/run_tests.py
 
 # Run with verbose output
-python run_tests.py -v
+python tests/run_tests.py -v
 
 # Run with coverage reporting
-python run_tests.py -c
+python tests/run_tests.py -c
 
 # Run specific test category
-python run_tests.py -k "setup"
+python tests/run_tests.py -k "setup"
 
 # Run tests matching a pattern
-python run_tests.py -k "validation"
+python tests/run_tests.py -k "validation"
 ```
 
 ### Using pytest directly
@@ -218,7 +218,7 @@ When adding new tests:
 Run tests with verbose output for debugging:
 
 ```bash
-python run_tests.py -v
+python tests/run_tests.py -v
 ```
 
 ### Test Specific Features
@@ -227,14 +227,14 @@ Run tests for specific features:
 
 ```bash
 # Test setup functionality
-python run_tests.py -k "setup"
+python tests/run_tests.py -k "setup"
 
 # Test validation
-python run_tests.py -k "validation"
+python tests/run_tests.py -k "validation"
 
 # Test sheets creation
-python run_tests.py -k "sheets"
+python tests/run_tests.py -k "sheets"
 
 # Test reconciliation
-python run_tests.py -k "reconciliation"
+python tests/run_tests.py -k "reconciliation"
 ```

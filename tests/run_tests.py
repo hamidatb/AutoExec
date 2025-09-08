@@ -18,7 +18,7 @@ class TestRunner:
     
     def __init__(self):
         """Initialize the test runner."""
-        # Since this script is now in scripts/, go up one level to get project root
+        # Since this script is in tests/, go up one level to get project root
         self.project_root = Path(__file__).parent.parent
         self.test_root = self.project_root / "tests"
         self.results = {}
