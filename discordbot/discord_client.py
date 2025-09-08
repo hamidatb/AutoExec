@@ -109,13 +109,40 @@ class ClubExecBot(discord.Client):
             # Always handle setup-related commands and questions first
             handled = await self.message_handlers.handle_dm_setup(message)
             
-            # Only process natural language if setup manager didn't handle it AND dm_setup didn't handle it
+            # Only process natural language if setup manager didn't handle it AND user is not in setup
             if not handled and not self.setup_manager.is_in_setup(str(message.author.id)):
-                await self.message_handlers.handle_dm_general_query(message)
+                # Check if the user is fully set up before allowing LangChain responses
+                if not self.setup_manager_bot.is_fully_setup(user_id=str(message.author.id)):
+                    await message.channel.send(
+                        "❌ **Setup Required**\n\n"
+                        "I need to be set up before I can respond to your messages.\n\n"
+                        "**To get started:**\n"
+                        "1. Use `/setup` to begin the setup process\n"
+                        "2. Follow the guided setup steps\n"
+                        "3. Once complete, I'll be able to help you with meetings, tasks, and more!\n\n"
+                        "**Need help?** Use `/help` for detailed instructions."
+                    )
+                else:
+                    await self.message_handlers.handle_dm_general_query(message)
             return
             
         # For public channels, respond when the bot is mentioned OR in free-speak channel
         if self.user in message.mentions or self._is_free_speak_channel(message.channel):
+            # Check if the guild is set up before allowing LangChain responses
+            guild_id = str(message.guild.id) if message.guild else None
+            if guild_id and not self.setup_manager_bot.is_fully_setup(guild_id=guild_id):
+                await message.channel.send(
+                    "❌ **Setup Required**\n\n"
+                    "This server needs to be set up before I can respond to messages.\n\n"
+                    "**To get started:**\n"
+                    "1. An admin should send me a private message\n"
+                    "2. Use `/setup` to begin the setup process\n"
+                    "3. Follow the guided setup steps\n"
+                    "4. Once complete, I'll be able to help with meetings, tasks, and more!\n\n"
+                    "**Need help?** Use `/help` for detailed instructions."
+                )
+                return
+            
             # Handle different types of commands
             if message.content.startswith('$AEmm'):
                 await self.message_handlers.handle_meeting_minutes_request(message)
