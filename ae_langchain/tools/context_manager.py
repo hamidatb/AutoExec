@@ -276,7 +276,7 @@ MEETING SCHEDULING CONVERSATION EXAMPLES:
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
-
+    
     # give the llm access to the tool functions 
     agent = create_openai_functions_agent(llm, safe_tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=safe_tools, verbose=True, memory=memory, handle_parsing_errors=True, max_iterations=3)
