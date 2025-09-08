@@ -107,9 +107,11 @@ def create_agent_executor_with_tools(memory=None):
         start_meeting_scheduling, create_meeting_with_timer
     )
     from .task_tools import (
-        create_task_with_timer, list_active_timers, clear_all_timers,
         parse_meeting_minutes_action_items, send_tasks_by_person, search_tasks_by_title,
         complete_task, create_tasks_from_meeting_minutes, summarize_last_meeting
+    )
+    from .timer_tools import (
+        create_task_with_timer, list_active_timers, clear_all_timers
     )
     from .setup_tools import (
         get_setup_info, get_meeting_sheet_info, get_task_sheet_info, get_channel_info,
