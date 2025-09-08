@@ -208,7 +208,12 @@ def list_active_timers() -> str:
                 time_until = fire_local - now_local
                 
                 # Debug logging with UTC indicators
-                print(f"🔍 [TIMER] {timer.get('id', 'unknown')}: Fire {fire_local.strftime('%H:%M')} local ({fire_datetime.strftime('%H:%M')} UTC), Now {now_local.strftime('%H:%M')} local ({now_utc.strftime('%H:%M')} UTC), Until: {time_until}")
+                print(f"🔍 [TIMER DEBUG] Timer {timer.get('id', 'unknown')}:")
+                print(f"🔍 [TIMER DEBUG]   Fire time (UTC): {fire_datetime}")
+                print(f"🔍 [TIMER DEBUG]   Fire time (Local): {fire_local}")
+                print(f"🔍 [TIMER DEBUG]   Current time (UTC): {now_utc}")
+                print(f"🔍 [TIMER DEBUG]   Current time (Local): {now_local}")
+                print(f"🔍 [TIMER DEBUG]   Time until: {time_until}")
                 
                 if time_until.total_seconds() > 0:
                     hours_until = time_until.total_seconds() / 3600
@@ -239,7 +244,16 @@ def list_active_timers() -> str:
             response += f"• Fire at: {fire_str}\n"
             response += f"• Time until: {time_until_str}\n"
             if mention:
-                response += f"• Mention: {mention}\n"
+                # Check if we're in a DM context to avoid pinging people in public channels
+                from ae_langchain.tools.context_manager import get_discord_context
+                context = get_discord_context()
+                is_dm = context and not context.get('guild_id')  # No guild_id means it's a DM
+                
+                if is_dm:
+                    response += f"• Mention: {mention}\n"
+                else:
+                    # In public channels, just show that mentions are configured without showing them
+                    response += f"• Mention: configured\n"
             response += "\n"
         
         if len(all_timers) > 10:
