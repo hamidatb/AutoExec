@@ -263,16 +263,16 @@ def clear_all_timers() -> str:
         if not active_timers:
             return "📅 **No Active Timers**\n\nThere are no active timers to clear."
         
-        # Clear all active timers
+        # Clear all active timers by setting their state to 'cancelled'
         cleared_count = 0
         for timer in active_timers:
-            timer_id = timer.get('timer_id')
+            timer_id = timer.get('id')
             if timer_id:
-                success = BOT_INSTANCE.sheets_manager.clear_timer(config_spreadsheet_id, timer_id)
+                success = BOT_INSTANCE.sheets_manager.update_timer_state(config_spreadsheet_id, timer_id, 'cancelled')
                 if success:
                     cleared_count += 1
         
-        return f"🧹 **Timers Cleared Successfully!**\n\nCleared {cleared_count} active timers from the system."
+        return f"✅ **Timers Cleared Successfully!**\n\n**Cleared:** {cleared_count} active timers\n\nAll timers have been cancelled and will no longer fire."
         
     except Exception as e:
         return f"❌ Error clearing timers: {str(e)}"
