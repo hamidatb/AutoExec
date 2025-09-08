@@ -208,12 +208,7 @@ def list_active_timers() -> str:
                 time_until = fire_local - now_local
                 
                 # Debug logging with UTC indicators
-                print(f"🔍 [TIMER DEBUG] Timer {timer.get('id', 'unknown')}:")
-                print(f"🔍 [TIMER DEBUG]   Fire time (UTC): {fire_datetime}")
-                print(f"🔍 [TIMER DEBUG]   Fire time (Local): {fire_local}")
-                print(f"🔍 [TIMER DEBUG]   Current time (UTC): {now_utc}")
-                print(f"🔍 [TIMER DEBUG]   Current time (Local): {now_local}")
-                print(f"🔍 [TIMER DEBUG]   Time until: {time_until}")
+                print(f"🔍 [TIMER] {timer.get('id', 'unknown')}: Fire {fire_local.strftime('%H:%M')} local ({fire_datetime.strftime('%H:%M')} UTC), Now {now_local.strftime('%H:%M')} local ({now_utc.strftime('%H:%M')} UTC), Until: {time_until}")
                 
                 if time_until.total_seconds() > 0:
                     hours_until = time_until.total_seconds() / 3600

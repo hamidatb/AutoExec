@@ -74,11 +74,8 @@ class TimerScheduler:
             now = datetime.now(timezone.utc)
             
             # Debug logging with UTC indicators
-            print(f"🔍 [TIMER FIRE DEBUG] Timer {timer.get('id', 'unknown')}:")
-            print(f"🔍 [TIMER FIRE DEBUG]   Fire time (UTC): {fire_at}")
-            print(f"🔍 [TIMER FIRE DEBUG]   Current time (UTC): {now}")
-            print(f"🔍 [TIMER FIRE DEBUG]   Tolerance: {self.tolerance_minutes} minutes")
-            print(f"🔍 [TIMER FIRE DEBUG]   Should fire: {fire_at <= now + timedelta(minutes=self.tolerance_minutes)}")
+            should_fire = fire_at <= now + timedelta(minutes=self.tolerance_minutes)
+            print(f"🔍 [TIMER FIRE] {timer.get('id', 'unknown')}: Fire {fire_at.strftime('%H:%M')} UTC, Now {now.strftime('%H:%M')} UTC, Should fire: {should_fire}")
             
             # Fire if the time has passed (with tolerance)
             return fire_at <= now + timedelta(minutes=self.tolerance_minutes)

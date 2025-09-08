@@ -373,11 +373,7 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
                     start_datetime = start_datetime_local.astimezone(timezone.utc)
                     
                     # Debug logging with UTC indicators
-                    print(f"🔍 [MEETING DEBUG] Meeting: {meeting_title}")
-                    print(f"🔍 [MEETING DEBUG]   Input time: {start_time}")
-                    print(f"🔍 [MEETING DEBUG]   Guild timezone: {guild_timezone}")
-                    print(f"🔍 [MEETING DEBUG]   Local time: {start_datetime_local}")
-                    print(f"🔍 [MEETING DEBUG]   UTC time: {start_datetime}")
+                    print(f"🔍 [MEETING] {meeting_title}: {start_time} → {start_datetime_local.strftime('%H:%M')} local ({start_datetime.strftime('%H:%M')} UTC)")
                 except ValueError:
                     return "❌ Invalid start time format. Please use YYYY-MM-DD HH:MM format."
                 
@@ -724,11 +720,7 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
                 start_datetime = start_datetime_local.astimezone(timezone.utc)
                 
                 # Debug logging with UTC indicators
-                print(f"🔍 [UPDATE DEBUG] Meeting update:")
-                print(f"🔍 [UPDATE DEBUG]   Input time: {new_start_time}")
-                print(f"🔍 [UPDATE DEBUG]   Guild timezone: {guild_timezone}")
-                print(f"🔍 [UPDATE DEBUG]   Local time: {start_datetime_local}")
-                print(f"🔍 [UPDATE DEBUG]   UTC time: {start_datetime}")
+                print(f"🔍 [UPDATE] {new_start_time} → {start_datetime_local.strftime('%H:%M')} local ({start_datetime.strftime('%H:%M')} UTC)")
                 update_data['start_at_utc'] = start_datetime.isoformat()
                 update_data['start_at_local'] = start_datetime_local.strftime("%B %d, %Y at %I:%M %p")
             except ValueError:
@@ -880,11 +872,7 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
             start_datetime = start_datetime_local.astimezone(timezone.utc)
             
             # Debug logging with UTC indicators
-            print(f"🔍 [MEETING DEBUG] Meeting: {meeting_title}")
-            print(f"🔍 [MEETING DEBUG]   Input start time: {start_time}")
-            print(f"🔍 [MEETING DEBUG]   Guild timezone: {guild_timezone}")
-            print(f"🔍 [MEETING DEBUG]   Start local time: {start_datetime_local}")
-            print(f"🔍 [MEETING DEBUG]   Start UTC time: {start_datetime}")
+            print(f"🔍 [MEETING] {meeting_title}: Start {start_time} → {start_datetime_local.strftime('%H:%M')} local ({start_datetime.strftime('%H:%M')} UTC)")
         except ValueError:
             return f"❌ Could not parse start time: '{start_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         
@@ -896,9 +884,7 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
             end_datetime = end_datetime_local.astimezone(timezone.utc)
             
             # Debug logging with UTC indicators
-            print(f"🔍 [MEETING DEBUG]   Input end time: {end_time}")
-            print(f"🔍 [MEETING DEBUG]   End local time: {end_datetime_local}")
-            print(f"🔍 [MEETING DEBUG]   End UTC time: {end_datetime}")
+            print(f"🔍 [MEETING] {meeting_title}: End {end_time} → {end_datetime_local.strftime('%H:%M')} local ({end_datetime.strftime('%H:%M')} UTC)")
         except ValueError:
             return f"❌ Could not parse end time: '{end_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         
