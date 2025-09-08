@@ -241,7 +241,8 @@ IMPORTANT GUIDELINES:
   2. In subsequent messages, continue the conversation by asking for missing information:
      - If you see a start time mentioned, ask "What time should the meeting end?"
      - If you see both start and end times, ask "Where will the meeting be held? (location, online link, or Discord channel)"
-     - If you see location info, ask "Do you need meeting minutes? (provide existing link, create new, or not needed)"
+     - If you see location info, ask "Who should be mentioned in reminders? (@everyone, specific exec names, or no mentions)"
+     - If you see mention info, ask "Do you need meeting minutes? (provide existing link, create new, or not needed)"
      - If all info is collected, use create_meeting_with_timer with the details
   3. Always check the conversation history to see what information has already been provided
   4. Don't just echo back what the user said - continue the conversation flow
@@ -275,7 +276,8 @@ MEETING SCHEDULING CONVERSATION EXAMPLES:
 - User: "Schedule a meeting tomorrow at 3pm" → Use start_meeting_scheduling, then ask "What time should it end?"
 - User: "Tomorrow at 5pm" (after being asked for start time) → Ask "What time should the meeting end?"
 - User: "6pm" (after being asked for end time) → Ask "Where will the meeting be held?"
-- User: "Discord voice channel" (after being asked for location) → Ask "Do you need meeting minutes?"
+- User: "Discord voice channel" (after being asked for location) → Ask "Who should be mentioned in reminders?"
+- User: "@everyone" (after being asked about mentions) → Ask "Do you need meeting minutes?"
 - User: "Create new minutes" (after being asked about minutes) → Use create_meeting_with_timer with all details"""),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),

@@ -958,13 +958,14 @@ To complete the scheduling, I'll need a few more details:
 1. **What time should the meeting start?** (e.g., "tomorrow at 2pm" or "2025-09-08 14:00")
 2. **What time should it end?** (e.g., "3pm" or "15:00")
 3. **Where will it be held?** (location, online link, or Discord channel)
-4. **Do you need meeting minutes?** (provide existing link, create new, or not needed)
+4. **Who should be mentioned in reminders?** (@everyone, specific exec names, or no mentions)
+5. **Do you need meeting minutes?** (provide existing link, create new, or not needed)
 
 Just provide the details and I'll create the meeting with automatic reminders! 📅"""
 
 
 @tool
-def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str, location: str = "", meeting_link: str = "", minutes_link: str = "", create_minutes: bool = False) -> str:
+def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str, location: str = "", meeting_link: str = "", minutes_link: str = "", create_minutes: bool = False, mention: str = "@everyone") -> str:
     """
     Create a meeting with automatic timer setup for reminders.
     This combines meeting scheduling with timer management.
@@ -977,6 +978,7 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
         meeting_link (str): The meeting link (Zoom, Teams, etc.) (optional)
         minutes_link (str): The minutes link (optional)
         create_minutes (bool): Whether to create meeting minutes document (optional)
+        mention (str): Who to mention in reminders - "@everyone" or specific exec names (optional, defaults to "@everyone")
         
     Returns:
         str: Confirmation message about the meeting creation and timer setup
@@ -1086,7 +1088,7 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
             # Update meeting_data with the generated meeting_id
             meeting_data['meeting_id'] = meeting_id
             # Create timers for the meeting
-            timer_count = create_meeting_timers(meeting_data, guild_config)
+            timer_count = create_meeting_timers(meeting_data, guild_config, mention)
             
             response = f"""✅ **Meeting Scheduled Successfully!**
 
@@ -1095,11 +1097,12 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
 **End:** {end_datetime_local.strftime('%B %d, %Y at %I:%M %p')}
 **Location:** {location if location else 'TBD'}
 **Link:** {meeting_link if meeting_link else 'TBD'}
+**Mentions:** {mention}
 **Timers Created:** {timer_count} automatic reminders
 
 **What happens next:**
-• 2-hour reminder will be sent
-• Meeting start notification
+• 2-hour reminder will be sent to {mention}
+• Meeting start notification to {mention}
 
 The meeting and all timers have been added to your Google Sheets!"""
             

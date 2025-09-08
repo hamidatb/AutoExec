@@ -253,7 +253,7 @@ def create_task_timers(task_data: dict, guild_config: dict) -> int:
         return 0
 
 
-def create_meeting_timers(meeting_data: dict, guild_config: dict) -> int:
+def create_meeting_timers(meeting_data: dict, guild_config: dict, mention: str = '@everyone') -> int:
     """Create timers for a meeting and return the count."""
     from discordbot.discord_client import BOT_INSTANCE
     
@@ -285,7 +285,7 @@ def create_meeting_timers(meeting_data: dict, guild_config: dict) -> int:
                 'channel_id': meeting_data.get('channel_id', ''),
                 'state': 'active',
                 'title': meeting_data.get('title', 'Unknown Meeting'),
-                'mention': '@everyone'  # Meeting reminders go to everyone
+                'mention': mention  # Use the provided mention parameter
             }
             
             success = BOT_INSTANCE.sheets_manager.add_timer(config_spreadsheet_id, timer_data)
