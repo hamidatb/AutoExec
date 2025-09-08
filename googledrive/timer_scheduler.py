@@ -74,8 +74,11 @@ class TimerScheduler:
             now = datetime.now(timezone.utc)
             
             # Debug logging with UTC indicators
-            should_fire = fire_at <= now + timedelta(minutes=self.tolerance_minutes)
-            print(f"🔍 [TIMER FIRE] {timer.get('id', 'unknown')}: Fire {fire_at.strftime('%H:%M')} UTC, Now {now.strftime('%H:%M')} UTC, Should fire: {should_fire}")
+            print(f"🔍 [TIMER FIRE DEBUG] Timer {timer.get('id', 'unknown')}:")
+            print(f"🔍 [TIMER FIRE DEBUG]   Fire time (UTC): {fire_at}")
+            print(f"🔍 [TIMER FIRE DEBUG]   Current time (UTC): {now}")
+            print(f"🔍 [TIMER FIRE DEBUG]   Tolerance: {self.tolerance_minutes} minutes")
+            print(f"🔍 [TIMER FIRE DEBUG]   Should fire: {fire_at <= now + timedelta(minutes=self.tolerance_minutes)}")
             
             # Fire if the time has passed (with tolerance)
             return fire_at <= now + timedelta(minutes=self.tolerance_minutes)
@@ -174,19 +177,25 @@ class TimerScheduler:
         try:
             timer_type = timer_data['type']
             title = timer_data.get('title', 'Unknown Meeting')
-            mention = timer_data.get('mention', '@everyone')
+            mention = timer_data.get('mention', '')
             
             message = ""
             
             if timer_type == 'meeting_reminder_2h':
                 message = f"📅 **Meeting Reminder - 2 Hours**\n"
                 message += f"**{title}** starts in 2 hours\n"
-                message += f"{mention} - Please prepare for the meeting!"
+                if mention:
+                    message += f"{mention} - Please prepare for the meeting!"
+                else:
+                    message += "Please prepare for the meeting!"
             
             elif timer_type == 'meeting_start':
                 message = f"🚀 **Meeting Starting Now** 🚀\n"
                 message += f"**{title}**\n"
-                message += f"{mention} - The meeting is starting now!"
+                if mention:
+                    message += f"{mention} - The meeting is starting now!"
+                else:
+                    message += "The meeting is starting now!"
             
             if message:
                 await self.bot.send_any_message(message, channel_id)

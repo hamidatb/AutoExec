@@ -289,7 +289,7 @@ def create_task_timers(task_data: dict, guild_config: dict) -> int:
         return 0
 
 
-def create_meeting_timers(meeting_data: dict, guild_config: dict, mention: str = '@everyone') -> int:
+def create_meeting_timers(meeting_data: dict, guild_config: dict, mention: str = '') -> int:
     """Create timers for a meeting and return the count."""
     from discordbot.discord_client import BOT_INSTANCE
     
