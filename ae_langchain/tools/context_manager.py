@@ -102,7 +102,7 @@ def create_agent_executor_with_tools(memory=None):
     
     # Import safe tools only (no Discord sending)
     from .meeting_tools import (
-        create_meeting_mins, send_meeting_schedule, get_meeting_reminder_info,
+        create_meeting_mins, send_meeting_schedule, get_meeting_reminder_info, get_all_upcoming_reminders,
         schedule_meeting, search_meetings_by_title, cancel_meeting, update_meeting,
         start_meeting_scheduling, create_meeting_with_timer
     )
@@ -135,6 +135,7 @@ def create_agent_executor_with_tools(memory=None):
         create_meeting_mins,
         send_meeting_schedule,
         get_meeting_reminder_info,
+        get_all_upcoming_reminders,
         get_club_setup_info,
         check_guild_setup_status,
         schedule_meeting,
@@ -208,6 +209,7 @@ IMPORTANT GUIDELINES:
 - **ALWAYS use tools for meeting queries** - Don't say "I don't have access" when you have meeting tools available
 - For questions like "when is our next meeting", "what meetings do we have", "show me upcoming meetings" → Use send_meeting_schedule with appropriate number
 - For meeting reminder information (like "what reminders are set up") → Use get_meeting_reminder_info
+- For questions like "what are all the reminders we have upcoming", "show me all scheduled reminders", "what timers are active" → Use get_all_upcoming_reminders
 - For task creation, use create_task_with_timer to automatically set up reminders
 - For sending reminders to specific people, use send_reminder_to_person (not send_announcement)
 - If the person isn't found in exec members, offer alternatives like @everyone or general announcements
@@ -262,6 +264,7 @@ EXAMPLES OF WHEN TO USE TOOLS:
 - "Schedule a meeting called Team Sync" → Use start_meeting_scheduling to begin interactive flow
 - "Oh I meant hamidat" (after trying to create task for John) → Use create_task_with_timer with corrected name
 - "What timers are active?" → Use list_active_timers
+- "What are all the reminders we have upcoming?" → Use get_all_upcoming_reminders
 - "Is she an exec?" → Use get_exec_info
 - "Who are the execs?" → Use get_exec_info
 - "What are my upcoming tasks?" → Use send_tasks_by_person

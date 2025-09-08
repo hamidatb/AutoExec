@@ -231,6 +231,155 @@ def cleanup_past_meetings():
 
 
 @tool
+def get_all_upcoming_reminders(limit: int = 10):
+    """
+    Get ALL upcoming reminders and timers sorted by when they will be sent.
+    This includes both meeting reminders and timer-based reminders.
+    
+    Args:
+        limit (int): Maximum number of reminders to return (default: 10)
+    
+    Returns:
+        str: Formatted list of all upcoming reminders sorted by fire time
+    """
+    from discordbot.discord_client import BOT_INSTANCE
+    from datetime import datetime, timezone, timedelta
+    import pytz
+    
+    if BOT_INSTANCE is None:
+        return "❌ ERROR: The bot instance is not running."
+    
+    try:
+        # Get all configured guilds
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        configured_guilds = {gid: config for gid, config in all_guilds.items() if config.get('setup_complete', False)}
+        
+        if not configured_guilds:
+            return "❌ No configured guilds found. Please run `/setup` first."
+        
+        all_reminders = []
+        now_utc = datetime.now(timezone.utc)
+        
+        # Get timer-based reminders
+        for guild_id, guild_config in configured_guilds.items():
+            config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+            if config_spreadsheet_id:
+                timers = BOT_INSTANCE.sheets_manager.get_timers(config_spreadsheet_id)
+                active_timers = [t for t in timers if t.get('state') == 'active']
+                
+                for timer in active_timers:
+                    fire_at = timer.get('fire_at_utc', '')
+                    if fire_at:
+                        try:
+                            fire_datetime = datetime.fromisoformat(fire_at.replace('Z', '+00:00'))
+                            if fire_datetime > now_utc:  # Only future timers
+                                time_until = fire_datetime - now_utc
+                                
+                                # Get guild timezone for local time display
+                                guild_timezone = guild_config.get('timezone', 'America/Edmonton')
+                                local_tz = pytz.timezone(guild_timezone)
+                                fire_local = fire_datetime.astimezone(local_tz)
+                                
+                                reminder_info = {
+                                    'fire_time_utc': fire_datetime,
+                                    'fire_time_local': fire_local,
+                                    'time_until': time_until,
+                                    'type': 'timer',
+                                    'timer_type': timer.get('type', 'unknown'),
+                                    'ref_type': timer.get('ref_type', 'unknown'),
+                                    'ref_id': timer.get('ref_id', 'unknown'),
+                                    'title': timer.get('title', ''),
+                                    'mention': timer.get('mention', ''),
+                                    'guild_id': guild_id,
+                                    'guild_config': guild_config
+                                }
+                                all_reminders.append(reminder_info)
+                        except Exception as e:
+                            continue
+        
+        # Note: Meeting reminders are already handled by the timer system above
+        # The timer-based reminders include meeting_reminder_2h and meeting_start types
+        
+        # Sort all reminders by fire time
+        all_reminders.sort(key=lambda x: x['fire_time_utc'])
+        
+        if not all_reminders:
+            return "📅 **No Upcoming Reminders**\n\nThere are currently no scheduled reminders or timers."
+        
+        # Format response
+        response = f"⏰ **All Upcoming Reminders ({len(all_reminders)})**\n\n"
+        
+        for i, reminder in enumerate(all_reminders[:limit], 1):
+            fire_local = reminder['fire_time_local']
+            time_until = reminder['time_until']
+            
+            # Format time until
+            if time_until.total_seconds() < 3600:  # Less than 1 hour
+                time_str = f"{int(time_until.total_seconds() / 60)} minutes"
+            elif time_until.total_seconds() < 86400:  # Less than 1 day
+                hours = int(time_until.total_seconds() / 3600)
+                minutes = int((time_until.total_seconds() % 3600) / 60)
+                if minutes > 0:
+                    time_str = f"{hours}h {minutes}m"
+                else:
+                    time_str = f"{hours} hours"
+            else:  # More than 1 day
+                days = int(time_until.total_seconds() / 86400)
+                hours = int((time_until.total_seconds() % 86400) / 3600)
+                if hours > 0:
+                    time_str = f"{days}d {hours}h"
+                else:
+                    time_str = f"{days} days"
+            
+            # Format fire time
+            fire_time_str = fire_local.strftime("%B %d, %Y at %I:%M %p")
+            
+            # Get title and mention info
+            title = reminder.get('title', '')
+            mention = reminder.get('mention', '')
+            
+            # Determine the appropriate emoji and type based on timer type
+            if reminder['timer_type'] in ['meeting_reminder_2h', 'meeting_start']:
+                emoji = "📅"
+                reminder_type = "Meeting Reminder"
+            elif reminder['timer_type'] in ['task_reminder_24h', 'task_reminder_2h', 'task_overdue']:
+                emoji = "📋"
+                reminder_type = "Task Reminder"
+            else:
+                emoji = "⏰"
+                reminder_type = "Timer Reminder"
+            
+            # Start building the response
+            response += f"{i}. {emoji} **{reminder_type}**\n"
+            
+            # Add title if available
+            if title:
+                response += f"   **{title}**\n"
+            
+            # Add mention info if available
+            if mention:
+                response += f"   👤 Mentions: {mention}\n"
+            
+            # Add timer type and timing info
+            response += f"   🕐 Type: {reminder['timer_type']}\n"
+            response += f"   ⏰ Sends in {time_str} ({fire_time_str})\n"
+            
+            # Add reference info for context
+            if reminder.get('ref_type') and reminder.get('ref_id'):
+                response += f"   🔗 Reference: {reminder['ref_type']} ({reminder['ref_id']})\n"
+            
+            response += "\n"
+        
+        if len(all_reminders) > limit:
+            response += f"... and {len(all_reminders) - limit} more reminders"
+        
+        return response
+        
+    except Exception as e:
+        return f"❌ Error retrieving upcoming reminders: {str(e)}"
+
+
+@tool
 def get_meeting_reminder_info():
     """
     Get information about the next meeting for reminder purposes.
@@ -373,7 +522,11 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
                     start_datetime = start_datetime_local.astimezone(timezone.utc)
                     
                     # Debug logging with UTC indicators
-                    print(f"🔍 [MEETING] {meeting_title}: {start_time} → {start_datetime_local.strftime('%H:%M')} local ({start_datetime.strftime('%H:%M')} UTC)")
+                    print(f"🔍 [MEETING DEBUG] Meeting: {meeting_title}")
+                    print(f"🔍 [MEETING DEBUG]   Input time: {start_time}")
+                    print(f"🔍 [MEETING DEBUG]   Guild timezone: {guild_timezone}")
+                    print(f"🔍 [MEETING DEBUG]   Local time: {start_datetime_local}")
+                    print(f"🔍 [MEETING DEBUG]   UTC time: {start_datetime}")
                 except ValueError:
                     return "❌ Invalid start time format. Please use YYYY-MM-DD HH:MM format."
                 
@@ -720,7 +873,11 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
                 start_datetime = start_datetime_local.astimezone(timezone.utc)
                 
                 # Debug logging with UTC indicators
-                print(f"🔍 [UPDATE] {new_start_time} → {start_datetime_local.strftime('%H:%M')} local ({start_datetime.strftime('%H:%M')} UTC)")
+                print(f"🔍 [UPDATE DEBUG] Meeting update:")
+                print(f"🔍 [UPDATE DEBUG]   Input time: {new_start_time}")
+                print(f"🔍 [UPDATE DEBUG]   Guild timezone: {guild_timezone}")
+                print(f"🔍 [UPDATE DEBUG]   Local time: {start_datetime_local}")
+                print(f"🔍 [UPDATE DEBUG]   UTC time: {start_datetime}")
                 update_data['start_at_utc'] = start_datetime.isoformat()
                 update_data['start_at_local'] = start_datetime_local.strftime("%B %d, %Y at %I:%M %p")
             except ValueError:
@@ -872,7 +1029,11 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
             start_datetime = start_datetime_local.astimezone(timezone.utc)
             
             # Debug logging with UTC indicators
-            print(f"🔍 [MEETING] {meeting_title}: Start {start_time} → {start_datetime_local.strftime('%H:%M')} local ({start_datetime.strftime('%H:%M')} UTC)")
+            print(f"🔍 [MEETING DEBUG] Meeting: {meeting_title}")
+            print(f"🔍 [MEETING DEBUG]   Input start time: {start_time}")
+            print(f"🔍 [MEETING DEBUG]   Guild timezone: {guild_timezone}")
+            print(f"🔍 [MEETING DEBUG]   Start local time: {start_datetime_local}")
+            print(f"🔍 [MEETING DEBUG]   Start UTC time: {start_datetime}")
         except ValueError:
             return f"❌ Could not parse start time: '{start_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         
@@ -884,7 +1045,9 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
             end_datetime = end_datetime_local.astimezone(timezone.utc)
             
             # Debug logging with UTC indicators
-            print(f"🔍 [MEETING] {meeting_title}: End {end_time} → {end_datetime_local.strftime('%H:%M')} local ({end_datetime.strftime('%H:%M')} UTC)")
+            print(f"🔍 [MEETING DEBUG]   Input end time: {end_time}")
+            print(f"🔍 [MEETING DEBUG]   End local time: {end_datetime_local}")
+            print(f"🔍 [MEETING DEBUG]   End UTC time: {end_datetime}")
         except ValueError:
             return f"❌ Could not parse end time: '{end_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         
