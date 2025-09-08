@@ -361,6 +361,7 @@ def get_club_setup_info() -> str:
     try:
         # Import the Discord client to check actual setup status
         from discordbot.discord_client import BOT_INSTANCE
+        from ae_langchain.tools.context_manager import get_discord_context
         
         if BOT_INSTANCE is None:
             return "❌ **Setup Status: ERROR**\n\nI cannot check my setup status because the Discord bot is not running."
@@ -369,11 +370,21 @@ def get_club_setup_info() -> str:
         if not hasattr(BOT_INSTANCE, 'setup_manager') or not BOT_INSTANCE.setup_manager:
             return """❌ **Setup Status: ERROR**\n\nI cannot check my setup status because the setup manager is not available."""
         
+        # Get the current user's context
+        context = get_discord_context()
+        user_id = context.get('user_id')
+        
+        if not user_id:
+            return "❌ **Setup Status: ERROR**\n\nI cannot determine your user context. Please use this command in a Discord server or DM."
+        
         # Get all guild configurations
         try:
             all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
-            # Filter for configured guilds and keep the guild_id as key
-            configured_guilds = {guild_id: guild for guild_id, guild in all_guilds.items() if guild.get('setup_complete', False)}
+            # Filter for configured guilds where the current user is an admin
+            configured_guilds = {
+                guild_id: guild for guild_id, guild in all_guilds.items() 
+                if guild.get('setup_complete', False) and guild.get('admin_user_id') == user_id
+            }
         except Exception as e:
             return f"""❌ **Setup Status: ERROR**\n\nI encountered an error accessing guild configurations: {str(e)}
 
@@ -385,25 +396,24 @@ def get_club_setup_info() -> str:
 **Current Status:** Unable to determine setup status."""
         
         if not configured_guilds:
-            return """❌ **Setup Status: NOT CONFIGURED**\n\nI am **NOT** set up for any student groups yet.
+            return f"""❌ **Setup Status: NOT CONFIGURED**\n\nI am **NOT** set up for any student groups where you are an admin.
 
 **What this means:**
-• No clubs or student groups have been configured
-• No Google Sheets are linked
-• No admin users are set up
-• I cannot manage meetings or tasks
+• You are not an admin of any configured clubs
+• No Google Sheets are linked to your account
+• You cannot manage meetings or tasks for any clubs
 
 **To get started:**
-• An admin needs to run `/setup` to configure me for your group
+• Run `/setup` to configure me for your group
 • This will set up Google Sheets integration
 • Configure admin permissions and channels
 • Link your group's meeting and task systems
 
-**Current Status:** Waiting for initial setup by an administrator."""
+**Current Status:** Waiting for you to run `/setup` to configure your club."""
         
         # Show actual configured guilds
         num_guilds = len(configured_guilds)
-        setup_info = f"""✅ **Setup Status: CONFIGURED**\n\nI am set up for **{num_guilds}** student group(s)!\n\n"""
+        setup_info = f"""✅ **Setup Status: CONFIGURED**\n\nI am set up for **{num_guilds}** student group(s) where you are an admin!\n\n"""
         
         for guild_id, config in configured_guilds.items():
             guild_name = config.get('guild_name', 'Unknown Server')
