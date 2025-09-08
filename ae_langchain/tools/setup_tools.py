@@ -372,7 +372,8 @@ def get_club_setup_info() -> str:
         # Get all guild configurations
         try:
             all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
-            configured_guilds = [guild for guild in all_guilds.values() if guild.get('setup_complete', False)]
+            # Filter for configured guilds and keep the guild_id as key
+            configured_guilds = {guild_id: guild for guild_id, guild in all_guilds.items() if guild.get('setup_complete', False)}
         except Exception as e:
             return f"""❌ **Setup Status: ERROR**\n\nI encountered an error accessing guild configurations: {str(e)}
 
