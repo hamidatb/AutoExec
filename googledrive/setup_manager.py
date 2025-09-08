@@ -596,13 +596,16 @@ class SetupManager:
             
             # Check results and proceed accordingly
             if not config_access:
-                return f"❌ **Config Folder Access Failed**\n\nI cannot access the config folder `{config_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
+                # Keep user in folder_selection step so they can retry
+                return f"❌ **Config Folder Access Failed**\n\nI cannot access the config folder `{config_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`\n\n**What would you like to do?**\n• **Retry**: Share the folder with the service account and send the folder links again\n• **Cancel**: Type `/cancel` to stop the setup process"
             
             if not monthly_access:
-                return f"❌ **Monthly Folder Access Failed**\n\nI cannot access the monthly folder `{monthly_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
+                # Keep user in folder_selection step so they can retry
+                return f"❌ **Monthly Folder Access Failed**\n\nI cannot access the monthly folder `{monthly_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`\n\n**What would you like to do?**\n• **Retry**: Share the folder with the service account and send the folder links again\n• **Cancel**: Type `/cancel` to stop the setup process"
             
             if not meeting_minutes_access:
-                return f"❌ **Meeting Minutes Folder Access Failed**\n\nI cannot access the meeting minutes folder `{meeting_minutes_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`"
+                # Keep user in folder_selection step so they can retry
+                return f"❌ **Meeting Minutes Folder Access Failed**\n\nI cannot access the meeting minutes folder `{meeting_minutes_folder_id}`.\n\n**Please check:**\n• The folder exists and is shared with the service account\n• The service account has 'Editor' permissions\n• The folder ID is correct\n\n**Service Account:** `autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com`\n\n**What would you like to do?**\n• **Retry**: Share the folder with the service account and send the folder links again\n• **Cancel**: Type `/cancel` to stop the setup process"
             
             # Both folders accessible, proceed directly to sheets initialization
             print(f"🔍 [SETUP] Both folders verified, proceeding to sheets initialization")
