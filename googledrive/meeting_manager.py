@@ -341,7 +341,46 @@ class MeetingManager:
         """
         try:
             print(f"Canceling reminders for meeting: {meeting_id}")
-            # Cancel scheduled reminders
+            
+            # Get Discord context to know which guild
+            from ae_langchain.tools.context_manager import get_discord_context
+            context = get_discord_context()
+            guild_id = context.get('guild_id')
+            
+            if not guild_id:
+                print("No Discord context found for canceling meeting reminders")
+                return
+            
+            # Get guild configuration
+            from discordbot.discord_client import BOT_INSTANCE
+            all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+            guild_config = all_guilds.get(guild_id)
+            
+            if not guild_config:
+                print(f"No guild config found for guild {guild_id}")
+                return
+            
+            config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+            if not config_spreadsheet_id:
+                print("No config spreadsheet ID found")
+                return
+            
+            # Get all timers for this meeting
+            timers = BOT_INSTANCE.sheets_manager.get_timers(config_spreadsheet_id)
+            meeting_timers = [t for t in timers if t.get('ref_id') == meeting_id and t.get('ref_type') == 'meeting']
+            
+            # Cancel all active timers for this meeting
+            cancelled_count = 0
+            for timer in meeting_timers:
+                if timer.get('state') == 'active':
+                    timer_id = timer.get('id')
+                    if timer_id:
+                        success = BOT_INSTANCE.sheets_manager.update_timer_state(config_spreadsheet_id, timer_id, 'cancelled')
+                        if success:
+                            cancelled_count += 1
+                            print(f"Cancelled timer {timer_id} for meeting {meeting_id}")
+            
+            print(f"Cancelled {cancelled_count} reminders for meeting {meeting_id}")
             
         except Exception as e:
             print(f"Error canceling meeting reminders: {e}")
