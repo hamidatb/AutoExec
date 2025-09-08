@@ -760,19 +760,23 @@ def start_meeting_scheduling(meeting_title: str) -> str:
     Returns:
         str: Confirmation message about the meeting scheduling process
     """
-    from .task_tools import create_meeting_with_timer
+    # This function starts the meeting scheduling conversation
+    # The actual meeting creation will be handled by create_meeting_with_timer
+    # when the user provides all the required details
     
-    # This function is a wrapper around create_meeting_with_timer
-    # It provides a simpler interface for basic meeting scheduling
-    return create_meeting_with_timer(
-        meeting_title=meeting_title,
-        start_time="",  # Will need to be provided by user
-        end_time="",    # Will need to be provided by user
-        location="",
-        meeting_link="",
-        minutes_link="",
-        create_minutes=False
-    )
+    return f"""🎯 **Meeting Scheduling Started**
+
+I'm ready to help you schedule **"{meeting_title}"**!
+
+To complete the scheduling, I'll need a few more details:
+
+**Next steps:**
+1. **What time should the meeting start?** (e.g., "tomorrow at 2pm" or "2025-09-08 14:00")
+2. **What time should it end?** (e.g., "3pm" or "15:00")
+3. **Where will it be held?** (location, online link, or Discord channel)
+4. **Do you need meeting minutes?** (provide existing link, create new, or not needed)
+
+Just provide the details and I'll create the meeting with automatic reminders! 📅"""
 
 
 @tool
@@ -795,57 +799,110 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
     """
     from discordbot.discord_client import BOT_INSTANCE
     from datetime import datetime, timezone, timedelta
+    from .utility_tools import create_meeting_timers
     
     if BOT_INSTANCE is None:
         return "❌ ERROR: The bot instance is not running."
     
     try:
-        # First, schedule the meeting using the existing function
-        meeting_result = schedule_meeting(meeting_title, start_time, location, meeting_link)
+        # Get the Discord context from the current message
+        from ae_langchain.tools.context_manager import get_discord_context
+        context = get_discord_context()
+        guild_id = context.get('guild_id')
+        channel_id = context.get('channel_id')
+        user_id = context.get('user_id')
         
-        if not meeting_result.startswith("✅"):
-            return meeting_result  # Return the error from scheduling
+        if not user_id:
+            return "❌ No Discord context found. Please use this command in a Discord server or DM."
         
-        # Parse the start time for timer calculations
+        # Handle DM context - check if user is admin of any configured servers
+        if not guild_id:
+            from ae_langchain.tools.context_manager import get_user_admin_servers
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**\n\nYou are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:\n\n{guild_list}\n\n**How to specify:**\n• Mention the club name: "For [Club Name], schedule meeting [title]"\n• Mention the server name: "In [Server Name], create meeting [title]"\n\n**Example:** "For Computer Science Club, schedule meeting budget review"\n\nWhich server would you like me to help you with?"""
+        
+        # Get the guild configuration
+        all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
+        guild_config = all_guilds.get(guild_id)
+        
+        if not guild_config or not guild_config.get('setup_complete', False):
+            return f"❌ Guild {guild_id} is not set up. Please run `/setup` first."
+        
+        # Parse the start time
         try:
             start_datetime = datetime.strptime(start_time, "%Y-%m-%d %H:%M")
             start_datetime = start_datetime.replace(tzinfo=timezone.utc)
         except ValueError:
-            return "❌ Invalid start time format for timer setup. Please use YYYY-MM-DD HH:MM format."
+            return f"❌ Could not parse start time: '{start_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         
-        # Set up timers for the meeting
-        timer_results = []
+        # Parse the end time
+        try:
+            end_datetime = datetime.strptime(end_time, "%Y-%m-%d %H:%M")
+            end_datetime = end_datetime.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return f"❌ Could not parse end time: '{end_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         
-        # 24-hour reminder
-        reminder_24h_time = start_datetime - timedelta(hours=24)
-        if reminder_24h_time > datetime.now(timezone.utc):
-            timer_results.append(f"⏰ 24-hour reminder scheduled for {reminder_24h_time.strftime('%B %d, %Y at %I:%M %p')}")
+        # Validate that end time is after start time
+        if end_datetime <= start_datetime:
+            return f"❌ End time must be after start time. Start: {start_datetime.strftime('%B %d, %Y at %I:%M %p')}, End: {end_datetime.strftime('%B %d, %Y at %I:%M %p')}"
         
-        # 2-hour reminder
-        reminder_2h_time = start_datetime - timedelta(hours=2)
-        if reminder_2h_time > datetime.now(timezone.utc):
-            timer_results.append(f"⏰ 2-hour reminder scheduled for {reminder_2h_time.strftime('%B %d, %Y at %I:%M %p')}")
+        # Create meeting data
+        meeting_data = {
+            'title': meeting_title,
+            'start_at_utc': start_datetime.isoformat(),
+            'end_at_utc': end_datetime.isoformat(),
+            'start_at_local': start_datetime.strftime("%B %d, %Y at %I:%M %p"),
+            'end_at_local': end_datetime.strftime("%B %d, %Y at %I:%M %p"),
+            'location': location,
+            'meeting_link': meeting_link,
+            'minutes_link': minutes_link,
+            'create_minutes': create_minutes,
+            'channel_id': guild_config.get('meeting_reminders_channel_id', ''),
+            'created_by': user_id,
+            'guild_id': guild_id,
+            'status': 'scheduled'
+        }
         
-        # Meeting start reminder
-        timer_results.append(f"⏰ Meeting start reminder scheduled for {start_datetime.strftime('%B %d, %Y at %I:%M %p')}")
+        # Get the meetings sheet ID
+        monthly_sheets = guild_config.get('monthly_sheets', {})
+        meetings_sheet_id = monthly_sheets.get('meetings')
         
-        # Create minutes if requested
-        minutes_result = ""
-        if create_minutes:
-            minutes_link = create_meeting_mins()
-            if minutes_link and not minutes_link.startswith("There was an error"):
-                minutes_result = f"\n📄 Meeting minutes document created: {minutes_link}"
-                # Update the meeting with the minutes link
-                # This would require getting the meeting ID from the scheduling result
-                # For now, we'll just note that minutes were created
+        if not meetings_sheet_id:
+            return "❌ No meetings spreadsheet configured. Please run `/setup` first."
         
-        # Combine results
-        result = meeting_result
-        result += f"\n\n⏰ **Timer Setup Complete:**\n" + "\n".join(timer_results)
-        if minutes_result:
-            result += minutes_result
+        # Add the meeting and get the generated meeting_id
+        success, meeting_id = BOT_INSTANCE.sheets_manager.add_meeting(meetings_sheet_id, meeting_data)
         
-        return result
+        if success:
+            # Update meeting_data with the generated meeting_id
+            meeting_data['meeting_id'] = meeting_id
+            # Create timers for the meeting
+            timer_count = create_meeting_timers(meeting_data, guild_config)
+            
+            response = f"""✅ **Meeting Scheduled Successfully!**
+
+**Meeting:** {meeting_title}
+**Start:** {start_datetime.strftime('%B %d, %Y at %I:%M %p')}
+**End:** {end_datetime.strftime('%B %d, %Y at %I:%M %p')}
+**Location:** {location if location else 'TBD'}
+**Link:** {meeting_link if meeting_link else 'TBD'}
+**Timers Created:** {timer_count} automatic reminders
+
+**What happens next:**
+• 2-hour reminder will be sent
+• Meeting start notification
+
+The meeting and all timers have been added to your Google Sheets!"""
+            
+            return response
+        else:
+            return "❌ Failed to schedule meeting. Please try again."
         
     except Exception as e:
         print(f"Error creating meeting with timer: {e}")
