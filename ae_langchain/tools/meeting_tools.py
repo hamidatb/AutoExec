@@ -369,7 +369,15 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
                     import pytz
                     guild_timezone = guild_config.get('timezone', 'America/Edmonton')
                     local_tz = pytz.timezone(guild_timezone)
-                    start_datetime = local_tz.localize(start_datetime).astimezone(timezone.utc)
+                    start_datetime_local = local_tz.localize(start_datetime)
+                    start_datetime = start_datetime_local.astimezone(timezone.utc)
+                    
+                    # Debug logging with UTC indicators
+                    print(f"🔍 [MEETING DEBUG] Meeting: {meeting_title}")
+                    print(f"🔍 [MEETING DEBUG]   Input time: {start_time}")
+                    print(f"🔍 [MEETING DEBUG]   Guild timezone: {guild_timezone}")
+                    print(f"🔍 [MEETING DEBUG]   Local time: {start_datetime_local}")
+                    print(f"🔍 [MEETING DEBUG]   UTC time: {start_datetime}")
                 except ValueError:
                     return "❌ Invalid start time format. Please use YYYY-MM-DD HH:MM format."
                 
@@ -712,7 +720,15 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
                 import pytz
                 guild_timezone = guild_config.get('timezone', 'America/Edmonton')
                 local_tz = pytz.timezone(guild_timezone)
-                start_datetime = local_tz.localize(start_datetime).astimezone(timezone.utc)
+                start_datetime_local = local_tz.localize(start_datetime)
+                start_datetime = start_datetime_local.astimezone(timezone.utc)
+                
+                # Debug logging with UTC indicators
+                print(f"🔍 [UPDATE DEBUG] Meeting update:")
+                print(f"🔍 [UPDATE DEBUG]   Input time: {new_start_time}")
+                print(f"🔍 [UPDATE DEBUG]   Guild timezone: {guild_timezone}")
+                print(f"🔍 [UPDATE DEBUG]   Local time: {start_datetime_local}")
+                print(f"🔍 [UPDATE DEBUG]   UTC time: {start_datetime}")
                 update_data['start_at_utc'] = start_datetime.isoformat()
                 update_data['start_at_local'] = start_datetime.strftime("%B %d, %Y at %I:%M %p")
             except ValueError:
@@ -860,7 +876,15 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
             import pytz
             guild_timezone = guild_config.get('timezone', 'America/Edmonton')
             local_tz = pytz.timezone(guild_timezone)
-            start_datetime = local_tz.localize(start_datetime).astimezone(timezone.utc)
+            start_datetime_local = local_tz.localize(start_datetime)
+            start_datetime = start_datetime_local.astimezone(timezone.utc)
+            
+            # Debug logging with UTC indicators
+            print(f"🔍 [MEETING DEBUG] Meeting: {meeting_title}")
+            print(f"🔍 [MEETING DEBUG]   Input start time: {start_time}")
+            print(f"🔍 [MEETING DEBUG]   Guild timezone: {guild_timezone}")
+            print(f"🔍 [MEETING DEBUG]   Start local time: {start_datetime_local}")
+            print(f"🔍 [MEETING DEBUG]   Start UTC time: {start_datetime}")
         except ValueError:
             return f"❌ Could not parse start time: '{start_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         
@@ -868,7 +892,13 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
         try:
             end_datetime = datetime.strptime(end_time, "%Y-%m-%d %H:%M")
             # Convert local time to UTC using guild timezone
-            end_datetime = local_tz.localize(end_datetime).astimezone(timezone.utc)
+            end_datetime_local = local_tz.localize(end_datetime)
+            end_datetime = end_datetime_local.astimezone(timezone.utc)
+            
+            # Debug logging with UTC indicators
+            print(f"🔍 [MEETING DEBUG]   Input end time: {end_time}")
+            print(f"🔍 [MEETING DEBUG]   End local time: {end_datetime_local}")
+            print(f"🔍 [MEETING DEBUG]   End UTC time: {end_datetime}")
         except ValueError:
             return f"❌ Could not parse end time: '{end_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         

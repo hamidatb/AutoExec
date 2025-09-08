@@ -32,36 +32,21 @@ class ReconciliationManager:
         try:
             print("🔄 Starting timer reconciliation...")
             
-            # Get all guild configurations
-            all_guilds = self.bot.setup_manager.status_manager.get_all_guilds()
-            
-            for guild_id, guild_config in all_guilds.items():
+            for guild_id, config in self.bot.club_configs.items():
                 try:
-                    if not guild_config.get('setup_complete', False):
-                        continue
-                    
-                    config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+                    config_spreadsheet_id = config.get('config_spreadsheet_id')
                     if not config_spreadsheet_id:
                         continue
                     
-                    # Get current timers from Google Sheets (like original implementation)
-                    current_timers = self.sheets_manager.get_timers(config_spreadsheet_id)
+                    # Get current timers from the system
+                    current_timers = self.timer_scheduler.get_active_timers(guild_id)
                     
-                    # Get current tasks and meetings from monthly sheets
-                    tasks = []
-                    meetings = []
-                    monthly_sheets = guild_config.get('monthly_sheets', {})
-                    
-                    if 'tasks' in monthly_sheets:
-                        tasks = self.sheets_manager.get_all_tasks(monthly_sheets['tasks'])
-                    if 'meetings' in monthly_sheets:
-                        meetings = self.sheets_manager.get_all_meetings(monthly_sheets['meetings'])
+                    # Get current tasks and meetings from sheets
+                    tasks = self.task_manager.get_tasks(config_spreadsheet_id)
+                    meetings = self.meeting_manager.get_meetings(config_spreadsheet_id)
                     
                     # Update timers based on current data
                     await self._update_timers_from_data(current_timers, tasks, meetings, config_spreadsheet_id)
-                    
-                    # Clean up old timers (run once per reconciliation cycle)
-                    self.sheets_manager.cleanup_old_timers(config_spreadsheet_id)
                     
                 except Exception as e:
                     print(f"❌ Error reconciling timers for guild {guild_id}: {e}")
@@ -81,46 +66,38 @@ class ReconciliationManager:
             # Build expected timers from current data
             expected_timers = {}
             
-            # Process tasks
+            # Add task timers
             for task in tasks:
-                if task.get('status') in ['open', 'in_progress'] and task.get('due_at'):
+                if task.get('status') == 'Open' and task.get('deadline'):
                     task_timers = self._build_expected_task_timers(task)
                     expected_timers.update(task_timers)
             
-            # Process meetings
+            # Add meeting timers
             for meeting in meetings:
-                if meeting.get('status') == 'scheduled' and meeting.get('start_at_utc'):
+                if meeting.get('start_time'):
                     meeting_timers = self._build_expected_meeting_timers(meeting)
                     expected_timers.update(meeting_timers)
             
-            # Compare with current timers (convert list to map like original)
-            current_timer_map = {t['id']: t for t in current_timers if t.get('state') == 'active'}
+            # Compare current vs expected timers
+            current_timer_ids = set(current_timers.keys())
+            expected_timer_ids = set(expected_timers.keys())
             
-            # Find timers to add/update
-            timers_added = 0
-            timers_updated = 0
-            timers_cancelled = 0
+            # Add new timers
+            for timer_id in expected_timer_ids - current_timer_ids:
+                timer_data = expected_timers[timer_id]
+                await self._add_timer_to_system(timer_data, config_spreadsheet_id)
             
-            for timer_id, expected_timer in expected_timers.items():
-                if timer_id not in current_timer_map:
-                    # New timer - add it
-                    await self._add_timer_to_system(expected_timer, config_spreadsheet_id)
-                    timers_added += 1
-                else:
-                    # Check if timer needs updating
-                    current_timer = current_timer_map[timer_id]
-                    if self._timer_needs_update(current_timer, expected_timer):
-                        await self._update_timer_in_system(expected_timer, config_spreadsheet_id)
-                        timers_updated += 1
+            # Update existing timers that need changes
+            for timer_id in current_timer_ids & expected_timer_ids:
+                current_timer = current_timers[timer_id]
+                expected_timer = expected_timers[timer_id]
+                
+                if self._timer_needs_update(current_timer, expected_timer):
+                    await self._update_timer_in_system(expected_timer, config_spreadsheet_id)
             
-            # Find timers to cancel
-            for timer_id, current_timer in current_timer_map.items():
-                if timer_id not in expected_timers:
-                    # Timer no longer needed - cancel it
-                    await self._cancel_timer_in_system(timer_id, config_spreadsheet_id)
-                    timers_cancelled += 1
-            
-            print(f"✅ Reconciled timers: {timers_added} added, {timers_updated} updated, {timers_cancelled} cancelled")
+            # Cancel timers that are no longer needed
+            for timer_id in current_timer_ids - expected_timer_ids:
+                await self._cancel_timer_in_system(timer_id, config_spreadsheet_id)
                 
         except Exception as e:
             print(f"❌ Error updating timers from data: {e}")

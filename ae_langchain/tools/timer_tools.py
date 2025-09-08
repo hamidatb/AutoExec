@@ -207,6 +207,14 @@ def list_active_timers() -> str:
                 now_local = now_utc.astimezone(local_tz)
                 time_until = fire_local - now_local
                 
+                # Debug logging with UTC indicators
+                print(f"🔍 [TIMER DEBUG] Timer {timer.get('id', 'unknown')}:")
+                print(f"🔍 [TIMER DEBUG]   Fire time (UTC): {fire_datetime}")
+                print(f"🔍 [TIMER DEBUG]   Fire time (Local): {fire_local}")
+                print(f"🔍 [TIMER DEBUG]   Current time (UTC): {now_utc}")
+                print(f"🔍 [TIMER DEBUG]   Current time (Local): {now_local}")
+                print(f"🔍 [TIMER DEBUG]   Time until: {time_until}")
+                
                 if time_until.total_seconds() > 0:
                     hours_until = time_until.total_seconds() / 3600
                     if hours_until < 1:
