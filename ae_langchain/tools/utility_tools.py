@@ -201,6 +201,42 @@ def find_user_by_name(name: str, guild_config: dict) -> str:
     return result
 
 
+def convert_names_to_mentions(mention_string: str, guild_config: dict) -> str:
+    """
+    Convert a string of names to Discord mentions.
+    
+    Args:
+        mention_string: String containing names (e.g., "Andrew, Sanika" or "@everyone")
+        guild_config: Guild configuration containing exec members
+        
+    Returns:
+        String with Discord mentions (e.g., "<@123456789> <@987654321>" or "@everyone")
+    """
+    if not mention_string or mention_string.lower() == '@everyone':
+        return '@everyone'
+    
+    # Split by comma and process each name
+    names = [name.strip() for name in mention_string.split(',')]
+    mentions = []
+    
+    for name in names:
+        if name.lower() == '@everyone':
+            mentions.append('@everyone')
+        elif name.startswith('<@') and name.endswith('>'):
+            # Already a Discord mention, keep as is
+            mentions.append(name)
+        else:
+            # Convert name to mention
+            mention = find_user_by_name(name, guild_config)
+            if mention.startswith('NEED_MENTION_FOR_'):
+                # If we can't find the user, keep the original name
+                mentions.append(name)
+            else:
+                mentions.append(mention)
+    
+    return ' '.join(mentions)
+
+
 def create_task_timers(task_data: dict, guild_config: dict) -> int:
     """Create timers for a task and return the count."""
     from discordbot.discord_client import BOT_INSTANCE
@@ -262,6 +298,9 @@ def create_meeting_timers(meeting_data: dict, guild_config: dict, mention: str =
         meeting_id = meeting_data.get('meeting_id', 'unknown')
         guild_id = meeting_data.get('guild_id', '')
         
+        # Convert names to Discord mentions
+        converted_mention = convert_names_to_mentions(mention, guild_config)
+        
         # Create timer types
         timer_types = [
             ('meeting_reminder_2h', start_at - timedelta(hours=2)),
@@ -285,7 +324,7 @@ def create_meeting_timers(meeting_data: dict, guild_config: dict, mention: str =
                 'channel_id': meeting_data.get('channel_id', ''),
                 'state': 'active',
                 'title': meeting_data.get('title', 'Unknown Meeting'),
-                'mention': mention  # Use the provided mention parameter
+                'mention': converted_mention  # Use the converted mention
             }
             
             success = BOT_INSTANCE.sheets_manager.add_timer(config_spreadsheet_id, timer_data)

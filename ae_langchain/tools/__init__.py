@@ -74,6 +74,7 @@ from .utility_tools import (
     parse_duration,
     parse_meeting_time,
     find_user_by_name,
+    convert_names_to_mentions,
     create_task_timers,
     create_meeting_timers
 )
@@ -142,6 +143,7 @@ __all__ = [
     'parse_duration',
     'parse_meeting_time',
     'find_user_by_name',
+    'convert_names_to_mentions',
     'create_task_timers',
     'create_meeting_timers'
 ]
