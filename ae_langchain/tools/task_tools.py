@@ -318,11 +318,12 @@ def parse_meeting_minutes_action_items(minutes_doc_url: str) -> str:
         if not tasks_sheet_id:
             return "❌ No tasks spreadsheet configured. Please run `/setup` first."
         
-        # Parse the meeting minutes document
-        from googledrive.minutes_parser import parse_meeting_minutes
+        # Parse the meeting minutes document using MinutesParser (like original)
+        from googledrive.minutes_parser import MinutesParser
         
         try:
-            action_items = parse_meeting_minutes(minutes_doc_url)
+            minutes_parser = MinutesParser()
+            action_items = minutes_parser.parse_minutes_doc(minutes_doc_url)
         except Exception as parse_error:
             return f"❌ **Error parsing meeting minutes:** {str(parse_error)}\n\nPlease ensure the document URL is correct and accessible."
         
@@ -335,47 +336,52 @@ def parse_meeting_minutes_action_items(minutes_doc_url: str) -> str:
         created_tasks = []
         failed_tasks = []
         
+        # Get exec members for Discord ID mapping (like original)
+        exec_members = guild_config.get('exec_members', [])
+        people_mapping = {}
+        for member in exec_members:
+            if 'discord_id' in member and 'name' in member:
+                people_mapping[member['name']] = member['discord_id']
+        
+        # Calculate default deadline (2 weeks from now, like original)
+        default_deadline = (datetime.now(timezone.utc) + timedelta(weeks=2)).replace(hour=23, minute=59, second=0, microsecond=0).isoformat()
+        
         for item in action_items:
             try:
-                # Extract task details
-                task_title = item.get('task', '').strip()
-                assignee = item.get('assignee', '').strip()
-                due_date_str = item.get('due_date', '').strip()
+                # Extract task details (using original field names)
+                person = item.get('person', 'Unknown')
+                task = item.get('task', 'No task specified')
+                deadline = item.get('deadline', default_deadline)
+                completed = item.get('completed', False)
+                role = item.get('role', '')
                 
-                if not task_title:
+                if not task or task.strip() == '':
                     continue
                 
-                # Parse due date or use default
-                if due_date_str:
-                    due_datetime = parse_due_date(due_date_str)
-                    if not due_datetime:
-                        due_datetime = default_deadline
-                else:
-                    due_datetime = default_deadline
-                
-                # Find assignee Discord ID
-                if assignee:
-                    assignee_discord_id = find_user_by_name(assignee, guild_config)
-                    if not assignee_discord_id or assignee_discord_id.startswith("NEED_MENTION_FOR_"):
-                        # Skip tasks with unknown assignees
-                        failed_tasks.append(f"❌ {task_title} (assignee '{assignee}' not found)")
-                        continue
-                else:
-                    # No assignee specified - skip
-                    failed_tasks.append(f"❌ {task_title} (no assignee specified)")
+                # Skip if already completed (like original)
+                if completed:
                     continue
                 
-                # Create task data
+                # Map person name to Discord ID (like original)
+                discord_id = people_mapping.get(person, '')
+                
+                # Use the deadline from parsed action items, or default if not set
+                task_deadline = deadline if deadline else default_deadline
+                
+                # Format Discord ID for proper mention format (like original)
+                formatted_discord_id = f"<@{discord_id}>" if discord_id else ""
+                
+                # Create task data (like original)
                 task_data = {
-                    'title': task_title,
-                    'owner_discord_id': assignee_discord_id,
-                    'owner_name': assignee,
-                    'due_at': due_datetime.isoformat(),
+                    'title': task,
+                    'owner_discord_id': formatted_discord_id,
+                    'owner_name': person,
+                    'due_at': task_deadline,
                     'status': 'open',
                     'priority': 'medium',
                     'source_doc': minutes_doc_url,
-                    'channel_id': guild_config.get('task_reminders_channel_id', ''),
-                    'notes': f"Created from meeting minutes: {minutes_doc_url}",
+                    'channel_id': context.get('channel_id', ''),
+                    'notes': f"Role: {role} | From meeting minutes",
                     'created_by': context.get('user_id', ''),
                     'guild_id': guild_id
                 }
@@ -385,28 +391,29 @@ def parse_meeting_minutes_action_items(minutes_doc_url: str) -> str:
                 
                 if success:
                     task_data['task_id'] = task_id
-                    # Create timers for the task
-                    create_task_timers(task_data, guild_config)
-                    created_tasks.append(f"✅ {task_title} → {assignee}")
+                    created_tasks.append(f"✅ {person}: {task}")
+                    
+                    # Schedule reminders for the task if it has a specific deadline (like original)
+                    config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+                    if config_spreadsheet_id and task_data.get('due_at'):
+                        timer_count = create_task_timers(task_data, guild_config)
                 else:
-                    failed_tasks.append(f"❌ {task_title} (failed to create)")
+                    failed_tasks.append(f"❌ {person}: {task}")
                     
             except Exception as task_error:
-                failed_tasks.append(f"❌ {task_title} (error: {str(task_error)})")
+                failed_tasks.append(f"❌ {person}: {task} (error: {str(task_error)})")
         
-        # Format response
-        response = f"📄 **Meeting Minutes Processed**\n\n"
-        response += f"**Action Items Found:** {len(action_items)}\n"
-        response += f"**Tasks Created:** {len(created_tasks)}\n"
-        response += f"**Failed:** {len(failed_tasks)}\n\n"
+        # Format response (like original)
+        response = "📋 **Action Items from Meeting Minutes**\n\n"
         
+        # Add summary (like original)
         if created_tasks:
-            response += "**✅ Successfully Created:**\n"
+            response += f"🎉 **Successfully created {len(created_tasks)} tasks in Google Sheets!**\n\n"
             for task in created_tasks:
                 response += f"• {task}\n"
         
         if failed_tasks:
-            response += "\n**❌ Failed to Create:**\n"
+            response += f"\n⚠️ **Failed to create {len(failed_tasks)} tasks:**\n"
             for task in failed_tasks:
                 response += f"• {task}\n"
         
