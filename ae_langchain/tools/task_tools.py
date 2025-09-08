@@ -506,9 +506,8 @@ def send_tasks_by_person(limit: int = 10) -> str:
             status = task.get('status', 'open').lower()
             due_at = task.get('due_at', '')
             
-            if status == 'completed':
-                completed_tasks.append(task)
-            else:
+            # Only include tasks with 'open' status
+            if status == 'open':
                 # Check if task is overdue
                 try:
                     if due_at:
@@ -521,6 +520,8 @@ def send_tasks_by_person(limit: int = 10) -> str:
                         upcoming_tasks.append(task)
                 except:
                     upcoming_tasks.append(task)
+            elif status == 'completed':
+                completed_tasks.append(task)
         
         # Sort upcoming tasks by due date
         upcoming_tasks.sort(key=lambda x: x.get('due_at', ''))
@@ -718,8 +719,32 @@ def complete_task(task_id: str) -> str:
         guild_id = context.get('guild_id')
         user_id = context.get('user_id')
         
+        # Handle DM context - check if user is admin of any configured servers (like original)
         if not guild_id:
-            return "❌ No Discord context found. Please use this command in a Discord server."
+            if not user_id:
+                return "❌ No Discord context found. Please use this command in a Discord server or DM."
+            
+            # Check if user is admin of any servers
+            user_guilds = get_user_admin_servers(user_id)
+            if len(user_guilds) == 0:
+                return "❌ You are not an admin of any configured servers. Please run `/setup` first."
+            elif len(user_guilds) == 1:
+                guild_id = user_guilds[0]['guild_id']
+            else:
+                guild_list = "\n".join([f"• **{guild['club_name']}** (Server: {guild['guild_name']})" for guild in user_guilds])
+                return f"""❓ **Multiple Servers Detected**
+
+You are an admin of **{len(user_guilds)}** servers. Please specify which server you're referring to:
+
+{guild_list}
+
+**How to specify:**
+• Mention the club name: "For [Club Name], complete task [ID]"
+• Mention the server name: "In [Server Name], mark task [ID] as done"
+
+**Example:** "For Computer Science Club, complete task abc123"
+
+Which server would you like me to help you with?"""
         
         # Get guild configuration
         all_guilds = BOT_INSTANCE.setup_manager.status_manager.get_all_guilds()
@@ -735,44 +760,75 @@ def complete_task(task_id: str) -> str:
         if not tasks_sheet_id:
             return "❌ No tasks spreadsheet configured. Please run `/setup` first."
         
-        # Get the task to verify it exists
-        task = BOT_INSTANCE.sheets_manager.get_task_by_id(tasks_sheet_id, task_id)
-        if not task:
-            return f"❌ No task found with ID: {task_id}"
+        # Find the task by ID (like original implementation)
+        all_tasks = BOT_INSTANCE.sheets_manager.get_all_tasks(tasks_sheet_id)
+        target_task = None
+        
+        for task in all_tasks:
+            if task.get('task_id') == task_id:
+                target_task = task
+                break
+        
+        if not target_task:
+            return f"❌ **Task Not Found**\n\nNo task found with ID `{task_id}`.\n\n**To find tasks:** Use the search_tasks_by_title tool to search for tasks by name.\n**Example:** \"Search for task budget review\""
         
         # Check if task is already completed
-        if task.get('status', '').lower() == 'completed':
-            return f"✅ Task '{task.get('title', 'Untitled')}' is already completed."
+        current_status = target_task.get('status', 'open').lower()
+        if current_status == 'done':
+            return f"✅ **Task Already Completed**\n\n**Task:** {target_task.get('title', 'Untitled Task')}\n**Status:** Already marked as done\n**Task ID:** `{task_id}`\n\nThis task was already completed!"
         
-        # Mark task as completed
-        success = BOT_INSTANCE.sheets_manager.complete_task(tasks_sheet_id, task_id, user_id)
+        # Get task details for confirmation
+        task_title = target_task.get('title', 'Untitled Task')
+        owner_name = target_task.get('owner_name', 'Unknown')
+        due_at = target_task.get('due_at', '')
+        priority = target_task.get('priority', 'medium')
+        notes = target_task.get('notes', '')
+        
+        # Update task status to 'done' in Google Sheets (like original)
+        success = BOT_INSTANCE.sheets_manager.update_task_status(tasks_sheet_id, task_id, 'done')
+        
+        # Cancel all pending reminders for this task (like original)
+        cancelled_count = 0
+        config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
+        if success and config_spreadsheet_id:
+            try:
+                # Get all timers for this task
+                task_timers = BOT_INSTANCE.sheets_manager.get_timers_by_ref(config_spreadsheet_id, 'task', task_id)
+                
+                # Cancel all active timers for this task
+                for timer in task_timers:
+                    if timer.get('state') == 'active':
+                        timer_id = timer.get('id')
+                        if timer_id:
+                            cancel_success = BOT_INSTANCE.sheets_manager.update_timer_state(config_spreadsheet_id, timer_id, 'cancelled')
+                            if cancel_success:
+                                cancelled_count += 1
+                                print(f"Cancelled timer {timer_id} for task {task_id}")
+                
+                print(f"Cancelled {cancelled_count} reminders for task {task_id}")
+            except Exception as e:
+                print(f"Error cancelling task reminders: {e}")
+                # Don't fail the whole operation if reminder cancellation fails
         
         if success:
-            # Clear associated timers
-            config_spreadsheet_id = guild_config.get('config_spreadsheet_id')
-            if config_spreadsheet_id:
-                # Get all timers for this task
-                timers = BOT_INSTANCE.sheets_manager.get_timers(config_spreadsheet_id)
-                task_timers = [t for t in timers if t.get('ref_id') == task_id and t.get('state') == 'active']
-                
-                cleared_count = 0
-                for timer in task_timers:
-                    timer_id = timer.get('timer_id')
-                    if timer_id:
-                        if BOT_INSTANCE.sheets_manager.clear_timer(config_spreadsheet_id, timer_id):
-                            cleared_count += 1
-            
+            # Format response (like original)
             response = f"✅ **Task Completed Successfully!**\n\n"
-            response += f"**Task:** {task.get('title', 'Untitled')}\n"
+            response += f"**Task:** {task_title}\n"
+            response += f"**Owner:** {owner_name}\n"
+            response += f"**Priority:** {priority.title()}\n"
+            if due_at:
+                response += f"**Due Date:** {due_at}\n"
+            if notes:
+                response += f"**Notes:** {notes}\n"
             response += f"**Completed by:** <@{user_id}>\n"
             response += f"**Completed at:** {datetime.now().strftime('%B %d, %Y at %I:%M %p')}\n"
             
-            if config_spreadsheet_id and 'cleared_count' in locals():
-                response += f"**Timers cleared:** {cleared_count} reminder(s)\n"
+            if cancelled_count > 0:
+                response += f"**Reminders cancelled:** {cancelled_count} reminder(s)\n"
             
             return response
         else:
-            return f"❌ Failed to complete task '{task.get('title', 'Untitled')}'. Please try again."
+            return f"❌ **Failed to Complete Task**\n\nCould not update task status in Google Sheets. Please try again."
         
     except Exception as e:
         print(f"Error completing task: {e}")
