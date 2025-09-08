@@ -75,28 +75,26 @@ class SetupManager:
         Returns:
             bool: True if fully set up, False otherwise
         """
+        print(f"🔍 [SETUP CHECK] is_fully_setup called with guild_id={guild_id}, user_id={user_id}")
+        
         try:
             if guild_id:
-                # Check guild-specific setup
-                config = self.bot.club_configs.get(guild_id)
-                if not config:
-                    return False
-                
-                # Check if all required fields are present
-                required_fields = [
-                    'club_name', 'timezone', 'admin_user_id',
-                    'task_reminders_channel_id', 'meeting_reminders_channel_id',
-                    'escalation_channel_id', 'general_announcements_channel_id',
-                    'free_speak_channel_id'
-                ]
-                
-                return all(config.get(field) for field in required_fields)
+                # Use the same approach as the original client - check directly from setup manager
+                result = self.setup_manager.is_setup_complete(guild_id)
+                print(f"🔍 [SETUP CHECK] Guild {guild_id} setup complete: {result}")
+                return result
             
             elif user_id:
-                # Check user-specific setup
-                return self._get_user_setup_status_direct(user_id) == "completed"
+                # Check if user is admin of any guild
+                result = self._is_user_admin_of_any_guild(user_id)
+                print(f"🔍 [SETUP CHECK] User {user_id} admin of any guild: {result}")
+                return result
             
-            return False
+            # Check if any guild has completed setup
+            all_guilds = self.setup_manager.status_manager.get_all_guilds()
+            result = any(guild_config.get('setup_complete', False) for guild_config in all_guilds.values())
+            print(f"🔍 [SETUP CHECK] Any guild setup complete: {result}")
+            return result
             
         except Exception as e:
             print(f"❌ Error checking setup status: {e}")

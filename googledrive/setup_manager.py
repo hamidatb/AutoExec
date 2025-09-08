@@ -1067,7 +1067,7 @@ class SetupManager:
             
             # Log successful setup
             try:
-                await self.sheets_manager.log_action(
+                self.sheets_manager.log_action(
                     current_state['config_spreadsheet_id'],
                     'setup_completed',
                     user_id,
@@ -1223,7 +1223,7 @@ class SetupManager:
             
             # Log successful setup
             try:
-                await self.sheets_manager.log_action(
+                self.sheets_manager.log_action(
                     current_state['config_spreadsheet_id'],
                     'setup_completed',
                     user_id,
