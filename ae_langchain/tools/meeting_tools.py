@@ -268,8 +268,19 @@ def get_meeting_reminder_info():
                             if start_time_str:
                                 try:
                                     start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
-                                    now = datetime.now(timezone.utc)
-                                    time_until = start_time - now
+                                    
+                                    # Get the guild's timezone for accurate time calculation
+                                    import pytz
+                                    guild_timezone = guild_config.get('timezone', 'America/Edmonton')
+                                    local_tz = pytz.timezone(guild_timezone)
+                                    
+                                    # Get current time in the guild's timezone
+                                    now_utc = datetime.now(timezone.utc)
+                                    now_local = now_utc.astimezone(local_tz)
+                                    
+                                    # Convert start_time to local timezone for comparison
+                                    start_time_local = start_time.astimezone(local_tz)
+                                    time_until = start_time_local - now_local
                                     
                                     if time_until.total_seconds() > 0:
                                         hours_until = time_until.total_seconds() / 3600
@@ -354,7 +365,11 @@ def schedule_meeting(meeting_title: str, start_time: str, location: str = "", me
                     if start_datetime.year < now.year or (start_datetime.year == now.year and start_datetime < now):
                         return f"❌ **Invalid Date:** The scheduled date ({start_datetime.strftime('%B %d, %Y')}) is in the past.\n\n**Current date:** {now.strftime('%B %d, %Y')}\n\n**Please use a future date.**\n\n**Examples:**\n• Tomorrow: `{datetime.now().strftime('%Y-%m-%d')} 14:00`\n• Next week: `{(datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')} 14:00`"
                     
-                    start_datetime = start_datetime.replace(tzinfo=timezone.utc)
+                    # Convert local time to UTC using guild timezone
+                    import pytz
+                    guild_timezone = guild_config.get('timezone', 'America/Edmonton')
+                    local_tz = pytz.timezone(guild_timezone)
+                    start_datetime = local_tz.localize(start_datetime).astimezone(timezone.utc)
                 except ValueError:
                     return "❌ Invalid start time format. Please use YYYY-MM-DD HH:MM format."
                 
@@ -693,7 +708,11 @@ def update_meeting(meeting_identifier: str, new_title: str = "", new_start_time:
         if new_start_time:
             try:
                 start_datetime = datetime.strptime(new_start_time, "%Y-%m-%d %H:%M")
-                start_datetime = start_datetime.replace(tzinfo=timezone.utc)
+                # Convert local time to UTC using guild timezone
+                import pytz
+                guild_timezone = guild_config.get('timezone', 'America/Edmonton')
+                local_tz = pytz.timezone(guild_timezone)
+                start_datetime = local_tz.localize(start_datetime).astimezone(timezone.utc)
                 update_data['start_at_utc'] = start_datetime.isoformat()
                 update_data['start_at_local'] = start_datetime.strftime("%B %d, %Y at %I:%M %p")
             except ValueError:
@@ -837,14 +856,19 @@ def create_meeting_with_timer(meeting_title: str, start_time: str, end_time: str
         # Parse the start time
         try:
             start_datetime = datetime.strptime(start_time, "%Y-%m-%d %H:%M")
-            start_datetime = start_datetime.replace(tzinfo=timezone.utc)
+            # Convert local time to UTC using guild timezone
+            import pytz
+            guild_timezone = guild_config.get('timezone', 'America/Edmonton')
+            local_tz = pytz.timezone(guild_timezone)
+            start_datetime = local_tz.localize(start_datetime).astimezone(timezone.utc)
         except ValueError:
             return f"❌ Could not parse start time: '{start_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         
         # Parse the end time
         try:
             end_datetime = datetime.strptime(end_time, "%Y-%m-%d %H:%M")
-            end_datetime = end_datetime.replace(tzinfo=timezone.utc)
+            # Convert local time to UTC using guild timezone
+            end_datetime = local_tz.localize(end_datetime).astimezone(timezone.utc)
         except ValueError:
             return f"❌ Could not parse end time: '{end_time}'. Please use format 'YYYY-MM-DD HH:MM'"
         

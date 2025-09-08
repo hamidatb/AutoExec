@@ -187,12 +187,42 @@ def list_active_timers() -> str:
             ref_id = timer.get('ref_id', 'unknown')
             guild_id = timer.get('guild_id', '')
             
-            # Parse fire time
+            # Parse fire time and calculate time until
             try:
                 fire_datetime = datetime.fromisoformat(fire_at.replace('Z', '+00:00'))
-                fire_str = fire_datetime.strftime('%B %d, %Y at %I:%M %p')
-            except:
+                
+                # Get the guild's timezone for accurate time calculation
+                import pytz
+                from datetime import timezone
+                guild_config = configured_guilds.get(guild_id, {})
+                guild_timezone = guild_config.get('timezone', 'America/Edmonton')
+                local_tz = pytz.timezone(guild_timezone)
+                
+                # Convert to local time for display
+                fire_local = fire_datetime.astimezone(local_tz)
+                fire_str = fire_local.strftime('%B %d, %Y at %I:%M %p')
+                
+                # Calculate time until reminder
+                now_utc = datetime.now(timezone.utc)
+                now_local = now_utc.astimezone(local_tz)
+                time_until = fire_local - now_local
+                
+                if time_until.total_seconds() > 0:
+                    hours_until = time_until.total_seconds() / 3600
+                    if hours_until < 1:
+                        minutes_until = int(time_until.total_seconds() / 60)
+                        time_until_str = f"in {minutes_until} minutes"
+                    elif hours_until < 24:
+                        time_until_str = f"in {hours_until:.1f} hours"
+                    else:
+                        days_until = hours_until / 24
+                        time_until_str = f"in {days_until:.1f} days"
+                else:
+                    time_until_str = "OVERDUE"
+                    
+            except Exception as e:
                 fire_str = fire_at
+                time_until_str = "Unknown"
             
             # Get the title and mention from the timer data
             title = timer.get('title', 'Unknown')
@@ -204,6 +234,7 @@ def list_active_timers() -> str:
             response += f"**{type_display}**\n"
             response += f"• {ref_type.title()}: {title}\n"
             response += f"• Fire at: {fire_str}\n"
+            response += f"• Time until: {time_until_str}\n"
             if mention:
                 response += f"• Mention: {mention}\n"
             response += "\n"
