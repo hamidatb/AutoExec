@@ -128,8 +128,14 @@ class ClubExecBot(discord.Client):
             
         # For public channels, respond when the bot is mentioned OR in free-speak channel
         if self.user in message.mentions or self._is_free_speak_channel(message.channel):
-            # Check if the guild is set up before allowing LangChain responses
+            # Debug logging
             guild_id = str(message.guild.id) if message.guild else None
+            is_free_speak = self._is_free_speak_channel(message.channel)
+            is_mentioned = self.user in message.mentions
+            is_setup = self.setup_manager_bot.is_fully_setup(guild_id=guild_id) if guild_id else False
+            print(f"🔍 [CHANNEL DEBUG] Guild: {guild_id}, Free-speak: {is_free_speak}, Mentioned: {is_mentioned}, Setup: {is_setup}")
+            
+            # Check if the guild is set up before allowing LangChain responses
             if guild_id and not self.setup_manager_bot.is_fully_setup(guild_id=guild_id):
                 await message.channel.send(
                     "❌ **Setup Required**\n\n"
@@ -163,14 +169,22 @@ class ClubExecBot(discord.Client):
             guild_id = str(channel.guild.id)
             config = self.club_configs.get(guild_id)
             
+            print(f"🔍 [FREE-SPEAK DEBUG] Guild: {guild_id}, Channel: {channel.id}, Config exists: {config is not None}")
+            
             if not config:
+                print(f"🔍 [FREE-SPEAK DEBUG] No config found for guild {guild_id}")
                 return False
             
-            free_speak_channel_id = config.get('free_speak_channel')
+            free_speak_channel_id = config.get('free_speak_channel_id')
+            print(f"🔍 [FREE-SPEAK DEBUG] Free-speak channel ID from config: {free_speak_channel_id}")
+            
             if not free_speak_channel_id:
+                print(f"🔍 [FREE-SPEAK DEBUG] No free-speak channel ID in config")
                 return False
             
-            return str(channel.id) == str(free_speak_channel_id)
+            is_match = str(channel.id) == str(free_speak_channel_id)
+            print(f"🔍 [FREE-SPEAK DEBUG] Channel match: {is_match} (current: {channel.id}, expected: {free_speak_channel_id})")
+            return is_match
         except Exception as e:
             print(f"❌ Error checking free-speak channel: {e}")
             return False
