@@ -71,7 +71,8 @@ class SetupManager:
         try:
             # Initialize setup state for this user
             self.setup_states[user_id] = {
-                'step': 'guild_id' if not guild_id else 'club_name',
+                'step': 'access_code',  # Always start with access code validation
+                'access_code_validated': False,
                 'club_name': None,
                 'admin_discord_id': None,
                 'timezone': 'America/Edmonton',  # Default timezone
@@ -91,28 +92,15 @@ class SetupManager:
             if not guild_id:
                 message = "🎉 **Welcome to the Club Exec Task Manager Bot!** 🎉\n\n"
                 message += "I'll help you set up task management for your club. Let's get started!\n\n"
-                message += "**IMPORTANT**: Before we begin, make sure you have:\n"
-                message += "1. Created Google Drive folders for your club's documents\n"
-                message += "2. Shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**\n"
-                message += "3. Given the service account 'Editor' permissions\n\n"
-                message += "**Note**: No OAuth setup required - just share the folders and you're ready to go!\n\n"
-                message += "**Step 1: Server ID**\n"
-                message += "First, I need to know which Discord server you want to set up the bot for.\n\n"
-                message += "**How to get your Server ID:**\n"
-                message += "1. Right-click on your server name in Discord\n"
-                message += "2. Select 'Copy Server ID'\n"
-                message += "3. Paste the ID here\n\n"
-                message += "**Note:** You must be an admin of the server to set up the bot."
+                message += "**Step 1: Access Code**\n"
+                message += "To begin setup, I need a valid access code.\n\n"
+                message += "Please provide your access code:"
             else:
                 message = "🎉 **Welcome to the Club Exec Task Manager Bot!** 🎉\n\n"
                 message += f"I'll help you set up task management for **{guild_name}**. Let's get started!\n\n"
-                message += "**IMPORTANT**: Before we begin, make sure you have:\n"
-                message += "1. Created Google Drive folders for your club's documents\n"
-                message += "2. Shared these folders with the AutoExec service account: **autoexec-pubsub@active-alchemy-453323-f0.iam.gserviceaccount.com**\n"
-                message += "3. Given the service account 'Editor' permissions\n\n"
-                message += "**Note**: No OAuth setup required - just share the folders and you're ready to go!\n\n"
-                message += "**Step 1: Club Information**\n"
-                message += "What is the name of your club or group?"
+                message += "**Step 1: Access Code**\n"
+                message += "To begin setup, I need a valid access code.\n\n"
+                message += "Please provide your access code:"
             
             return message
             
@@ -147,7 +135,9 @@ class SetupManager:
             current_step = current_state['step']
             print(f"🔍 [SETUP] Current step: {current_step}")
             
-            if current_step == 'guild_id':
+            if current_step == 'access_code':
+                return await self._handle_access_code(user_id, message_content)
+            elif current_step == 'guild_id':
                 return await self._handle_guild_id(user_id, message_content)
             elif current_step == 'club_name':
                 return await self._handle_club_name(user_id, message_content)
@@ -169,6 +159,8 @@ class SetupManager:
                 return await self._handle_meeting_reminders_channel(user_id, message_content)
             elif current_step == 'escalation_channel':
                 return await self._handle_escalation_channel(user_id, message_content)
+            elif current_step == 'general_announcements_channel':
+                return await self._handle_general_announcements_channel(user_id, message_content)
             elif current_step == 'free_speak_channel':
                 return await self._handle_free_speak_channel(user_id, message_content)
             else:
@@ -178,6 +170,55 @@ class SetupManager:
         except Exception as e:
             print(f"❌ [SETUP ERROR] Error handling setup response: {e}")
             return "❌ An error occurred during setup. Please try again."
+    
+    async def _handle_access_code(self, user_id: str, access_code: str) -> str:
+        """
+        Handles access code validation during setup.
+        
+        Args:
+            user_id: Discord ID of the user
+            access_code: Access code provided by user
+            
+        Returns:
+            Next setup message or error message
+        """
+        try:
+            from config.config import Config
+            
+            access_code = access_code.strip()
+            
+            # Validate the access code
+            if not Config.validate_access_code(access_code):
+                return "❌ **Invalid Access Code**\n\nThe access code you provided is not valid.\n\nPlease check your access code and try again, or contact an administrator if you don't have one.\n\n**You can also type `/cancel` to stop the setup process.**"
+            
+            # Mark access code as validated and move to next step
+            self.setup_states[user_id]['access_code_validated'] = True
+            
+            # Determine next step based on whether guild_id is already set
+            if self.setup_states[user_id]['guild_id']:
+                # Guild ID already set, move to club name
+                self.setup_states[user_id]['step'] = 'club_name'
+                message = "✅ **Access Code Validated!**\n\n"
+                message += "**Step 2: Club Information**\n"
+                message += "What is the name of your club or organization?\n\n"
+                message += "This will be used to name your Google Sheets and identify your club in the system."
+            else:
+                # Need to get guild ID first
+                self.setup_states[user_id]['step'] = 'guild_id'
+                message = "✅ **Access Code Validated!**\n\n"
+                message += "**Step 2: Server ID**\n"
+                message += "Now I need to know which Discord server you want to set up the bot for.\n\n"
+                message += "**How to get your Server ID:**\n"
+                message += "1. Right-click on your server name in Discord\n"
+                message += "2. Select 'Copy Server ID'\n"
+                message += "3. Paste the ID here\n\n"
+                message += "**Note:** You must be an admin of the server to set up the bot."
+            
+            return message
+            
+        except Exception as e:
+            print(f"❌ [SETUP ERROR] Error handling access code: {e}")
+            return "❌ Error processing access code. Please try again."
     
     async def _handle_guild_id(self, user_id: str, guild_id: str) -> str:
         """
@@ -206,7 +247,7 @@ class SetupManager:
             self.setup_states[user_id]['step'] = 'club_name'
             
             message = f"✅ **Server ID Set: `{guild_id}`**\n\n"
-            message += "**Step 2: Club Information**\n"
+            message += "**Step 3: Club Information**\n"
             message += "What is the name of your club or organization?\n\n"
             message += "This will be used to name your Google Sheets and identify your club in the system."
             
@@ -1481,6 +1522,53 @@ class SetupManager:
         except Exception as e:
             print(f"Error getting configuration summary: {e}")
             return None
+
+    def format_configuration_summary(self, guild_id: str, club_config: Dict[str, Any]) -> str:
+        """
+        Formats the configuration summary into a readable string for Discord.
+        
+        Args:
+            guild_id: The Discord guild/server ID
+            club_config: Current club configuration dictionary
+            
+        Returns:
+            Formatted configuration summary string
+        """
+        try:
+            message = f"📋 **Configuration for Server {guild_id}**\n\n"
+            message += f"**Club Information:**\n"
+            message += f"• **Club Name:** {club_config.get('club_name', 'Unknown')}\n"
+            message += f"• **Admin:** <@{club_config.get('admin_user_id', 'Unknown')}>\n"
+            message += f"• **Timezone:** {club_config.get('timezone', 'America/Edmonton')}\n"
+            message += f"• **Setup Complete:** {'✅ Yes' if club_config.get('setup_complete', False) else '❌ No'}\n"
+            
+            if club_config.get('completed_at'):
+                message += f"• **Completed:** {club_config.get('completed_at')}\n"
+            
+            message += f"\n**Executive Members:** {len(club_config.get('exec_members', []))} members\n"
+            
+            message += f"\n**Channel Configuration:**\n"
+            message += f"• Task reminders: <#{club_config.get('task_reminders_channel_id', 'Not set')}>\n"
+            message += f"• Meeting reminders: <#{club_config.get('meeting_reminders_channel_id', 'Not set')}>\n"
+            message += f"• Escalations: <#{club_config.get('escalation_channel_id', 'Not set')}>\n"
+            message += f"• General announcements: <#{club_config.get('general_announcements_channel_id', 'Not set')}>\n"
+            
+            if club_config.get('free_speak_channel_id'):
+                message += f"• Free-speak channel: <#{club_config.get('free_speak_channel_id')}>\n"
+            else:
+                message += "• Free-speak channel: Not configured\n"
+            
+            message += f"\n**Google Drive Integration:**\n"
+            message += f"• Config folder: {club_config.get('config_folder_id', 'Not set')}\n"
+            message += f"• Monthly folder: {club_config.get('monthly_folder_id', 'Not set')}\n"
+            message += f"• Meeting minutes folder: {club_config.get('meeting_minutes_folder_id', 'Not set')}\n"
+            message += f"• Config spreadsheet: {club_config.get('config_spreadsheet_id', 'Not set')}\n"
+            
+            return message
+            
+        except Exception as e:
+            print(f"Error formatting configuration summary: {e}")
+            return f"❌ Error formatting configuration for server {guild_id}"
 
     async def verify_folder_access_for_update(self, folder_id: str) -> tuple[bool, str]:
         """

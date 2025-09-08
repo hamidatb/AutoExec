@@ -85,8 +85,8 @@ class SetupManager:
                 # Check if all required fields are present
                 required_fields = [
                     'club_name', 'timezone', 'admin_user_id',
-                    'task_reminder_channel', 'meeting_reminder_channel',
-                    'escalation_channel', 'general_announcements_channel'
+                    'task_reminders_channel_id', 'meeting_reminders_channel_id',
+                    'escalation_channel_id', 'general_announcements_channel_id'
                 ]
                 
                 return all(config.get(field) for field in required_fields)

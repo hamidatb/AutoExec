@@ -258,7 +258,7 @@ class MessageHandlers:
             # Check if user is in setup process
             if self.setup_manager.is_in_setup(str(message.author.id)):
                 # Handle setup step
-                response = self.setup_manager.handle_setup_step(
+                response = await self.setup_manager.handle_setup_response(
                     str(message.author.id), 
                     message.content
                 )
@@ -270,17 +270,30 @@ class MessageHandlers:
             # Check if message contains setup-related keywords
             setup_keywords = ['setup', 'configure', 'config', 'start', 'begin']
             if any(keyword in message.content.lower() for keyword in setup_keywords):
-                # Start setup process
-                guild_id = None  # DM context
-                guild_name = None
-                response = await self.setup_manager.start_setup(
-                    str(message.author.id), 
-                    message.author.name, 
-                    guild_id, 
-                    guild_name
-                )
-                await message.channel.send(response)
-                return True
+                # Only start setup if user is not already fully set up
+                if not self.bot.setup_manager_bot.is_fully_setup(user_id=str(message.author.id)):
+                    # Start setup process
+                    guild_id = None  # DM context
+                    guild_name = None
+                    response = await self.setup_manager.start_setup(
+                        str(message.author.id), 
+                        message.author.name, 
+                        guild_id, 
+                        guild_name
+                    )
+                    await message.channel.send(response)
+                    return True
+                else:
+                    # User is already set up, don't start setup again
+                    await message.channel.send(
+                        "✅ **Already Set Up!**\n\n"
+                        "You're already fully set up and ready to use all bot features!\n\n"
+                        "**Available commands:**\n"
+                        "• Ask me about meetings, tasks, or announcements\n"
+                        "• Use `/help` to see all available commands\n"
+                        "• I can help with club management and organization"
+                    )
+                    return True
                 
         except Exception as e:
             print(f"❌ Error in DM setup handling: {e}")

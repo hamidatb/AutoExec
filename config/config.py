@@ -42,6 +42,9 @@ class Config:
     MEETING_REMINDER_INTERVAL = int(os.getenv("MEETING_REMINDER_INTERVAL", 300))  # 5 minutes in seconds
     TASK_ESCALATION_DELAY = int(os.getenv("TASK_ESCALATION_DELAY", 172800))  # 48 hours in seconds
     
+    # Access Control Configuration
+    VALID_ACCESS_CODES = os.getenv("VALID_ACCESS_CODES", "").split(",") if os.getenv("VALID_ACCESS_CODES") else []
+    
     # Meeting Reminder Times (in hours before meeting)
     MEETING_REMINDER_2H = int(os.getenv("MEETING_REMINDER_2H", 2))
     MEETING_REMINDER_1H = int(os.getenv("MEETING_REMINDER_1H", 1))
@@ -67,6 +70,28 @@ class Config:
             raise ValueError(f"Missing required configuration: {', '.join(missing_configs)}")
             
         print("✅ Configuration validation passed!")
+    
+    @staticmethod
+    def validate_access_code(access_code: str) -> bool:
+        """
+        Validate if the provided access code is valid.
+        
+        Args:
+            access_code: The access code to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if not access_code or not access_code.strip():
+            return False
+        
+        # Clean the access code (remove whitespace, convert to lowercase)
+        clean_code = access_code.strip().lower()
+        
+        # Check against valid codes (also cleaned)
+        valid_codes = [code.strip().lower() for code in Config.VALID_ACCESS_CODES if code.strip()]
+        
+        return clean_code in valid_codes
         
     @staticmethod
     def get_timezone():

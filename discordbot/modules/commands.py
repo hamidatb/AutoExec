@@ -133,7 +133,7 @@ class SlashCommands:
             
             # Handle the configuration action
             if action.lower() == "view":
-                response = self.bot.setup_manager.get_configuration_summary(guild_id, club_config)
+                response = self.bot.setup_manager.format_configuration_summary(guild_id, club_config)
             elif action.lower() == "update":
                 if not setting or not value:
                     await interaction.response.send_message(
