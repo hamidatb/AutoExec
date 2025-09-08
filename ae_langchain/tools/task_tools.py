@@ -4,7 +4,7 @@ Contains all task-related functions including creation, management, timers, and 
 """
 
 from langchain.tools import tool
-from .context_manager import get_discord_context, get_user_admin_servers
+from .context_manager import get_discord_context, get_user_admin_servers, get_meetings_sheet_id
 from .utility_tools import parse_due_date, find_user_by_name, create_task_timers
 
 
@@ -823,62 +823,57 @@ def summarize_last_meeting(summary_type: str = "full") -> str:
         if not meetings_sheet_id:
             return "❌ No meetings spreadsheet configured. Please run `/setup` first."
         
-        # Get the most recent meeting
-        all_meetings = BOT_INSTANCE.meeting_manager.get_all_meetings(meetings_sheet_id)
+        # Get the most recent meeting across current and previous months (like original)
+        recent_meeting = BOT_INSTANCE.sheets_manager.get_most_recent_meeting_across_months(guild_config)
         
-        if not all_meetings:
-            return "📅 **No Meetings Found**\n\nNo meetings have been scheduled yet."
+        if not recent_meeting:
+            return "❌ **No Meetings Found**\n\nSorry, there are no meetings in your meetings spreadsheet."
         
-        # Sort by start time and get the most recent
-        recent_meetings = sorted(all_meetings, key=lambda x: x.get('start_at_utc', ''), reverse=True)
-        last_meeting = recent_meetings[0]
+        meeting_title = recent_meeting.get('title', 'Unknown Meeting')
+        minutes_link = recent_meeting.get('minutes_link', '')
         
-        title = last_meeting.get('title', 'Untitled Meeting')
-        start_time = last_meeting.get('start_at_local', 'Time TBD')
-        location = last_meeting.get('location', 'Location TBD')
-        meeting_link = last_meeting.get('meeting_link', '')
-        minutes_link = last_meeting.get('minutes_link', '')
+        if not minutes_link or minutes_link.strip() == '':
+            return f"❌ **No Meeting Minutes Attached**\n\nSorry, there are no meeting minutes attached to the last meeting, but the title was: **{meeting_title}**"
         
-        response = f"📅 **Last Meeting Summary**\n\n"
-        response += f"**Meeting:** {title}\n"
-        response += f"**Date:** {start_time}\n"
-        response += f"**Location:** {location}\n"
+        # Get the document content (need to import this function)
+        from googledrive.file_handler import get_document_content_from_url
+        doc_content = get_document_content_from_url(minutes_link)
         
-        if meeting_link:
-            response += f"**Meeting Link:** {meeting_link}\n"
+        if doc_content.startswith("❌"):
+            return f"❌ **Cannot Access Minutes**\n\nSorry, I can't access the minutes document for the last meeting (title: **{meeting_title}**). The document may not be accessible or the link may be invalid.\n\n**Minutes Link:** {minutes_link}"
         
-        if minutes_link:
-            response += f"**Minutes Link:** {minutes_link}\n"
-            
-            # If user wants action items and minutes are available, parse them
-            if summary_type == "action_items" and minutes_link:
-                try:
-                    from googledrive.minutes_parser import parse_meeting_minutes
-                    action_items = parse_meeting_minutes(minutes_link)
-                    
-                    if action_items:
-                        response += f"\n📋 **Action Items ({len(action_items)}):**\n"
-                        for i, item in enumerate(action_items, 1):
-                            task = item.get('task', '').strip()
-                            assignee = item.get('assignee', '').strip()
-                            due_date = item.get('due_date', '').strip()
-                            
-                            response += f"{i}. **{task}**\n"
-                            if assignee:
-                                response += f"   👤 Assigned to: {assignee}\n"
-                            if due_date:
-                                response += f"   ⏰ Due: {due_date}\n"
-                            response += "\n"
-                    else:
-                        response += "\n📋 **No action items found in the minutes.**\n"
-                        
-                except Exception as parse_error:
-                    response += f"\n❌ **Error parsing action items:** {str(parse_error)}\n"
+        # Initialize LLM for summarization
+        from langchain_openai import ChatOpenAI
+        from langchain_core.prompts import ChatPromptTemplate
+        
+        llm = ChatOpenAI(
+            model="gpt-3.5-turbo",
+            temperature=0,
+            max_tokens=1000
+        )
+        
+        # Create appropriate prompt based on summary type
+        if summary_type.lower() == "action_items":
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are a helpful assistant that extracts action items from meeting minutes. Focus only on action items, tasks, and deliverables mentioned in the meeting."),
+                ("user", "Please extract and summarize the action items from this meeting minutes document:\n\n{doc_content}")
+            ])
         else:
-            response += "\n📄 **No meeting minutes available.**\n"
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are a helpful assistant that summarizes meeting minutes. Provide a clear, concise summary of the key points, decisions, and action items from the meeting."),
+                ("user", "Please summarize this meeting minutes document:\n\n{doc_content}")
+            ])
+        
+        # Generate summary
+        chain = prompt | llm
+        summary = chain.invoke({"doc_content": doc_content})
+        
+        # Format the response
+        response = f"📋 **Meeting Summary: {meeting_title}**\n\n"
+        response += f"🔗 **Full Minutes:** {minutes_link}\n\n"
+        response += f"📝 **Summary:**\n{summary.content if hasattr(summary, 'content') else str(summary)}"
         
         return response
         
     except Exception as e:
-        print(f"Error summarizing last meeting: {e}")
-        return f"❌ Error summarizing last meeting: {str(e)}"
+        return f"❌ **Error summarizing meeting:** {str(e)}\n\nPlease try again or check if the meeting minutes are accessible."
