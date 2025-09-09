@@ -2,6 +2,9 @@
 
 Hi there! I'm Hamidat, and I built **AutoExec** to solve a real problem I experienced as a student leader. Managing multiple clubs and organizations was overwhelming - tracking meeting minutes, following up on action items, and ensuring deadlines were met was becoming a full-time job. So I created an AI agent that automates the entire workflow.
 
+<img width="632" height="564" alt="image" src="https://github.com/user-attachments/assets/5366e741-7c36-45a8-9ec8-a1526547d7c1" />
+
+
 ## 🎯 What Problem Does AutoExec Solve?
 
 As a student leader, I found myself constantly:
